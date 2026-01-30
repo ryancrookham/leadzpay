@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useLeads, type Provider } from "@/lib/leads-context";
 import { useConnections } from "@/lib/connection-context";
-import { Connection } from "@/lib/connection-types";
+import { Connection, formatPaymentTiming } from "@/lib/connection-types";
 import {
   calculateMultiCarrierQuotes,
   type QuoteResult,
@@ -118,9 +118,10 @@ interface ExtendedFormData {
 
 export default function SubmitLead() {
   const { addLead, getProvider, getProviderByEmail, addProvider, updateProvider } = useLeads();
-  const { getActiveConnectionForProvider, updateConnectionStats } = useConnections();
-  const [step, setStep] = useState<"provider" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success" | "no_connection">("provider");
+  const { getConnectionsForProvider, updateConnectionStats } = useConnections();
+  const [step, setStep] = useState<"provider" | "select_connection" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success" | "no_connection">("provider");
   const [activeConnection, setActiveConnection] = useState<Connection | null>(null);
+  const [providerConnections, setProviderConnections] = useState<Connection[]>([]);
 
   // Provider info
   const [providerData, setProviderData] = useState({
@@ -134,24 +135,30 @@ export default function SubmitLead() {
   });
   const [currentProvider, setCurrentProvider] = useState<Provider | null>(null);
 
-  // Check for existing provider session and active connection
+  // Check for existing provider session and active connections
   useEffect(() => {
     const savedProviderId = localStorage.getItem("leadzpay_provider_id");
     if (savedProviderId) {
       const provider = getProvider(savedProviderId);
       if (provider) {
         setCurrentProvider(provider);
-        // Check for active connection
-        const connection = getActiveConnectionForProvider(savedProviderId);
-        if (connection) {
-          setActiveConnection(connection);
-          setStep("form");
+        // Check for active connections
+        const allConnections = getConnectionsForProvider(savedProviderId);
+        const activeConnections = allConnections.filter(c => c.status === "active");
+        setProviderConnections(activeConnections);
+
+        if (activeConnections.length > 1) {
+          // Multiple connections - let provider choose
+          setStep("select_connection");
+        } else if (activeConnections.length === 1) {
+          // Single connection - auto-select but still show selection for transparency
+          setStep("select_connection");
         } else {
           setStep("no_connection");
         }
       }
     }
-  }, [getProvider, getActiveConnectionForProvider]);
+  }, [getProvider, getConnectionsForProvider]);
 
   const [formData, setFormData] = useState<ExtendedFormData>({
     customerName: "",
@@ -177,12 +184,10 @@ export default function SubmitLead() {
     occupation: "standard",
   });
   const [quoteType, setQuoteType] = useState<QuoteType>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [allQuotes, setAllQuotes] = useState<QuoteResult[]>([]);
   const [selectedCoverage, setSelectedCoverage] = useState<CoverageOptions["type"]>("full");
   const [selectedDeductible, setSelectedDeductible] = useState<CoverageOptions["deductible"]>(500);
   const [selectedQuote, setSelectedQuote] = useState<QuoteResult | null>(null);
-  const [submittedLead, setSubmittedLead] = useState<{ id: string; payout: number } | null>(null);
   const [showCoverageModal, setShowCoverageModal] = useState(false);
   const [selectedCoverageType, setSelectedCoverageType] = useState<keyof typeof COVERAGE_DETAILS | null>(null);
   const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "ai"; text: string; action?: { type: "quote" | "buy"; data?: QuoteResult } }>>([]);
@@ -406,30 +411,25 @@ export default function SubmitLead() {
     }, 800);
   };
 
-  const handleSubmitLead = async () => {
-    setIsSubmitting(true);
+  const handlePurchase = async () => {
+    setIsPurchasing(true);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    try {
-      // Require active connection
-      if (!activeConnection) {
-        setStep("no_connection");
-        return;
-      }
-
+    // Submit the lead when customer purchases
+    if (activeConnection) {
       const provider = currentProvider || getProvider("provider-1");
-      // Use the payout rate from the connection's agreed terms
       const payout = activeConnection.terms.paymentTerms.ratePerLead;
       const yearMatch = formData.carModel.match(/\b(19|20)\d{2}\b/);
       const carYear = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
 
-      const newLead = addLead({
+      addLead({
         customerName: formData.customerName,
         email: formData.email,
         phone: formData.phone,
         carModel: formData.carModel,
         carYear,
         quoteType: quoteType || "quote",
-        status: "pending",
+        status: "converted", // Already purchased
         providerId: provider?.id || "provider-1",
         providerName: provider?.name || "Demo Provider",
         payout: payout,
@@ -446,19 +446,8 @@ export default function SubmitLead() {
 
       // Update connection stats
       updateConnectionStats(activeConnection.id, payout);
-
-      setSubmittedLead({ id: newLead.id, payout });
-      setStep("success");
-    } catch (error) {
-      console.error("Error submitting lead:", error);
-    } finally {
-      setIsSubmitting(false);
     }
-  };
 
-  const handlePurchase = async () => {
-    setIsPurchasing(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
     setStep("purchase");
     setIsPurchasing(false);
   };
@@ -564,10 +553,36 @@ export default function SubmitLead() {
               <span className="text-[#1e3a5f] font-bold">${selectedQuote?.monthlyPremium}/mo</span>
             </div>
           </div>
-          <p className="text-gray-500 text-sm mb-6">Policy documents have been sent to {formData.email}</p>
-          <Link href="/" className="inline-block bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] px-6 py-3 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-            Back to Home
-          </Link>
+          <p className="text-gray-500 text-sm mb-4">Policy documents have been sent to {formData.email}</p>
+
+          {/* Provider Payout Info */}
+          {activeConnection && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <p className="text-green-700 text-sm mb-1">Your Earnings</p>
+              <p className="text-green-800 text-2xl font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+              <p className="text-green-600 text-xs mt-1">
+                Paid {formatPaymentTiming(activeConnection.terms.paymentTerms.timing).toLowerCase()} via {activeConnection.buyerBusinessName}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                setStep("form");
+                setFormData({ ...formData, customerName: "", email: "", phone: "", carModel: "" });
+                setQuoteType(null);
+                setAllQuotes([]);
+                setSelectedQuote(null);
+              }}
+              className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-3 rounded-lg transition font-semibold shadow-md"
+            >
+              Submit Another Lead
+            </button>
+            <Link href="/" className="bg-gray-50 hover:bg-gray-100 text-gray-800 px-6 py-3 rounded-lg transition border border-gray-200">
+              Back to Home
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -591,10 +606,12 @@ export default function SubmitLead() {
           </div>
           <h2 className="text-3xl font-bold text-gray-800 mb-4">Lead Submitted!</h2>
           <p className="text-gray-600 mb-4">Your information has been saved.</p>
-          <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
-            <p className="text-gray-500 text-sm mb-1">Estimated Payout</p>
-            <p className="text-3xl font-bold text-[#1e3a5f]">${submittedLead?.payout}</p>
-          </div>
+          {activeConnection && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
+              <p className="text-gray-500 text-sm mb-1">Estimated Payout</p>
+              <p className="text-3xl font-bold text-[#1e3a5f]">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+            </div>
+          )}
           <div className="flex gap-4 justify-center">
             <button
               onClick={() => {
@@ -659,6 +676,148 @@ export default function SubmitLead() {
             </Link>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Connection Selection Screen - Choose which buyer to submit lead to
+  if (step === "select_connection") {
+    const handleSelectConnection = (connection: Connection) => {
+      setActiveConnection(connection);
+      setStep("form");
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+        {/* Background circuit lines */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+        </div>
+
+        <nav className="flex items-center justify-between px-8 py-6 relative z-10">
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+          </Link>
+          <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
+        </nav>
+
+        <main className="max-w-3xl mx-auto px-8 py-12 relative z-10">
+          <div className="text-center mb-10">
+            <div className="h-16 w-16 rounded-2xl bg-[#1e3a5f]/20 flex items-center justify-center mx-auto mb-4 shadow-md">
+              <svg className="w-8 h-8 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">Select a Business Partner</h1>
+            <p className="text-gray-600">Choose which partner to send this lead to based on your agreed terms</p>
+            {currentProvider && (
+              <p className="text-[#1e3a5f] text-sm mt-2">
+                Submitting as: {currentProvider.name}
+              </p>
+            )}
+          </div>
+
+          {providerConnections.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500">No active connections found.</p>
+              <Link href="/provider-dashboard" className="text-[#1e3a5f] hover:underline mt-2 inline-block">
+                Go to Dashboard to connect with buyers
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {providerConnections.map((connection) => (
+                <button
+                  key={connection.id}
+                  onClick={() => handleSelectConnection(connection)}
+                  className="w-full bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:border-[#1e3a5f] hover:shadow-md transition-all text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 group-hover:text-[#1e3a5f] transition">
+                        {connection.buyerBusinessName}
+                      </h3>
+                      <p className="text-gray-500 text-sm">
+                        Connected since {new Date(connection.acceptedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                      Active
+                    </div>
+                  </div>
+
+                  {/* Contract Terms */}
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Agreed Terms
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase tracking-wide">Rate Per Lead</p>
+                        <p className="text-[#1e3a5f] text-xl font-bold">${connection.terms.paymentTerms.ratePerLead}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase tracking-wide">Payment</p>
+                        <p className="text-gray-800 font-medium">{formatPaymentTiming(connection.terms.paymentTerms.timing)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase tracking-wide">Lead Types</p>
+                        <p className="text-gray-800 font-medium capitalize">{connection.terms.leadTypes.join(", ")}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase tracking-wide">Exclusivity</p>
+                        <p className="text-gray-800 font-medium">{connection.terms.exclusivity ? "Yes" : "No"}</p>
+                      </div>
+                    </div>
+                    {connection.terms.paymentTerms.bonusRate && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-green-600 text-sm">
+                          <span className="font-semibold">+${connection.terms.paymentTerms.bonusRate} bonus</span> for converted leads
+                        </p>
+                      </div>
+                    )}
+                    {connection.terms.notes && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-gray-600 text-sm italic">&quot;{connection.terms.notes}&quot;</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex gap-6">
+                      <div>
+                        <p className="text-gray-500 text-xs">Leads Sent</p>
+                        <p className="text-gray-800 font-semibold">{connection.stats.totalLeads}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs">Total Earned</p>
+                        <p className="text-gray-800 font-semibold">${connection.stats.totalPaid.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[#1e3a5f] font-medium group-hover:translate-x-1 transition-transform">
+                      Select
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-8 text-center">
+            <Link href="/provider-dashboard" className="text-gray-500 hover:text-[#1e3a5f] transition text-sm">
+              Manage connections in your dashboard →
+            </Link>
+          </div>
+        </main>
       </div>
     );
   }
@@ -1254,11 +1413,14 @@ export default function SubmitLead() {
         providerId = newProvider.id;
       }
 
-      // Check for active connection before allowing lead submission
-      const connection = getActiveConnectionForProvider(providerId);
-      if (connection) {
-        setActiveConnection(connection);
-        setStep("form");
+      // Check for active connections before allowing lead submission
+      const allConnections = getConnectionsForProvider(providerId);
+      const activeConnections = allConnections.filter(c => c.status === "active");
+      setProviderConnections(activeConnections);
+
+      if (activeConnections.length > 0) {
+        // Show connection selection screen
+        setStep("select_connection");
       } else {
         setStep("no_connection");
       }
@@ -1496,10 +1658,24 @@ export default function SubmitLead() {
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-800 mb-4">Submit a Lead</h1>
           <p className="text-gray-600">Enter your customer&apos;s info to get them instant quotes</p>
-          {currentProvider && (
-            <p className="text-[#1e3a5f] text-sm mt-2">
-              You&apos;ll earn ${currentProvider.payoutRate} for this lead via {currentProvider.paymentMethod || "your payment method"}
-            </p>
+          {activeConnection && (
+            <div className="mt-4 bg-[#1e3a5f]/10 border border-[#1e3a5f]/20 rounded-lg p-3 inline-block">
+              <p className="text-[#1e3a5f] text-sm">
+                Sending to: <span className="font-semibold">{activeConnection.buyerBusinessName}</span>
+              </p>
+              <p className="text-[#1e3a5f] text-sm">
+                You&apos;ll earn: <span className="font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</span> per lead
+                {activeConnection.terms.paymentTerms.bonusRate && (
+                  <span className="text-green-600"> (+${activeConnection.terms.paymentTerms.bonusRate} if converted)</span>
+                )}
+              </p>
+              <button
+                onClick={() => setStep("select_connection")}
+                className="text-[#1e3a5f] text-xs underline mt-1 hover:text-[#2a4a6f]"
+              >
+                Change partner
+              </button>
+            </div>
           )}
         </div>
 
