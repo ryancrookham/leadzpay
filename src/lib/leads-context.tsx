@@ -15,6 +15,8 @@ export interface Lead {
   providerName: string;
   receiverId?: string;
   receiverName?: string;
+  connectionId?: string;  // ID of the connection this lead was submitted through
+  buyerId?: string;       // ID of the buyer receiving this lead
   payout: number;
   quote?: InsuranceQuote;
   createdAt: string;

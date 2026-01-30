@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="#1e3a5f">
+  <!-- L shape -->
+  <path d="M15 15 L15 75 L35 75 L35 70 L20 70 L20 15 L15 15 Z"/>
+  <path d="M12 12 L12 78 L38 78 L38 73 L17 73 L17 12 L12 12 Z" fill="none" stroke="#1e3a5f" stroke-width="2"/>
+
+  <!-- P shape -->
+  <path d="M65 15 L65 85 L70 85 L70 55 L78 55 C85 55 90 48 90 40 L90 30 C90 22 85 15 78 15 L65 15 Z M70 20 L76 20 C82 20 85 25 85 30 L85 40 C85 45 82 50 76 50 L70 50 L70 20 Z"/>
+  <path d="M62 12 L62 88 L73 88 L73 58 L80 58 C88 58 93 50 93 40 L93 30 C93 20 88 12 80 12 L62 12 Z" fill="none" stroke="#1e3a5f" stroke-width="2" stroke-opacity="0"/>
+
+  <!-- Lightning bolt in center -->
+  <path d="M52 10 L38 50 L48 50 L35 90 L60 45 L48 45 L58 10 L52 10 Z"/>
+</svg>

@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useLeads, type Provider } from "@/lib/leads-context";
+import { useConnections } from "@/lib/connection-context";
+import { Connection } from "@/lib/connection-types";
 import {
   calculateMultiCarrierQuotes,
   type QuoteResult,
@@ -114,8 +117,10 @@ interface ExtendedFormData {
 }
 
 export default function SubmitLead() {
-  const { addLead, getProvider, getProviderByEmail, addProvider, updateProvider, providers } = useLeads();
-  const [step, setStep] = useState<"provider" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success">("provider");
+  const { addLead, getProvider, getProviderByEmail, addProvider, updateProvider } = useLeads();
+  const { getActiveConnectionForProvider, updateConnectionStats } = useConnections();
+  const [step, setStep] = useState<"provider" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success" | "no_connection">("provider");
+  const [activeConnection, setActiveConnection] = useState<Connection | null>(null);
 
   // Provider info
   const [providerData, setProviderData] = useState({
@@ -128,20 +133,25 @@ export default function SubmitLead() {
     bankAccountLast4: "",
   });
   const [currentProvider, setCurrentProvider] = useState<Provider | null>(null);
-  const [isReturningProvider, setIsReturningProvider] = useState(false);
 
-  // Check for existing provider session
+  // Check for existing provider session and active connection
   useEffect(() => {
     const savedProviderId = localStorage.getItem("leadzpay_provider_id");
     if (savedProviderId) {
       const provider = getProvider(savedProviderId);
       if (provider) {
         setCurrentProvider(provider);
-        setIsReturningProvider(true);
-        setStep("form");
+        // Check for active connection
+        const connection = getActiveConnectionForProvider(savedProviderId);
+        if (connection) {
+          setActiveConnection(connection);
+          setStep("form");
+        } else {
+          setStep("no_connection");
+        }
       }
     }
-  }, [getProvider]);
+  }, [getProvider, getActiveConnectionForProvider]);
 
   const [formData, setFormData] = useState<ExtendedFormData>({
     customerName: "",
@@ -400,8 +410,15 @@ export default function SubmitLead() {
     setIsSubmitting(true);
 
     try {
+      // Require active connection
+      if (!activeConnection) {
+        setStep("no_connection");
+        return;
+      }
+
       const provider = currentProvider || getProvider("provider-1");
-      const payout = provider?.payoutRate || 50;
+      // Use the payout rate from the connection's agreed terms
+      const payout = activeConnection.terms.paymentTerms.ratePerLead;
       const yearMatch = formData.carModel.match(/\b(19|20)\d{2}\b/);
       const carYear = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
 
@@ -415,7 +432,9 @@ export default function SubmitLead() {
         status: "pending",
         providerId: provider?.id || "provider-1",
         providerName: provider?.name || "Demo Provider",
-        payout: 0,
+        payout: payout,
+        connectionId: activeConnection.id,
+        buyerId: activeConnection.buyerId,
         quote: selectedQuote ? {
           monthlyPremium: selectedQuote.monthlyPremium,
           annualPremium: selectedQuote.annualPremium,
@@ -424,6 +443,9 @@ export default function SubmitLead() {
           provider: selectedQuote.companyName,
         } : undefined,
       });
+
+      // Update connection stats
+      updateConnectionStats(activeConnection.id, payout);
 
       setSubmittedLead({ id: newLead.id, payout });
       setStep("success");
@@ -450,35 +472,35 @@ export default function SubmitLead() {
 
     return (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-[#0d2240] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
-          <div className="p-6 border-b border-cyan-500/20 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">{coverage.name}</h2>
-            <button onClick={() => setShowCoverageModal(false)} className="text-slate-400 hover:text-cyan-400 transition">
+        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200 shadow-lg">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-800">{coverage.name}</h2>
+            <button onClick={() => setShowCoverageModal(false)} className="text-gray-500 hover:text-[#1e3a5f] transition">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
           <div className="p-6">
-            <p className="text-slate-300 mb-6">{coverage.summary}</p>
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+            <p className="text-gray-600 mb-6">{coverage.summary}</p>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-[#1e3a5f]" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               What&apos;s Covered
             </h3>
             <div className="space-y-4 mb-6">
               {coverage.coverages.map((item, index) => (
-                <div key={index} className="bg-[#0a1628] rounded-lg p-4 border border-cyan-500/20">
+                <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-medium text-white">{item.name}</h4>
-                    <span className="text-cyan-400 font-mono text-sm">{item.limit}</span>
+                    <h4 className="font-medium text-gray-800">{item.name}</h4>
+                    <span className="text-[#1e3a5f] font-mono text-sm">{item.limit}</span>
                   </div>
-                  <p className="text-slate-400 text-sm">{item.description}</p>
+                  <p className="text-gray-500 text-sm">{item.description}</p>
                 </div>
               ))}
             </div>
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
@@ -486,14 +508,14 @@ export default function SubmitLead() {
             </h3>
             <ul className="space-y-2">
               {coverage.notCovered.map((item, index) => (
-                <li key={index} className="text-slate-400 flex items-center gap-2">
+                <li key={index} className="text-gray-500 flex items-center gap-2">
                   <span className="text-red-400">×</span> {item}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="p-6 border-t border-cyan-500/20">
-            <button onClick={() => setShowCoverageModal(false)} className="w-full bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-3 rounded-lg font-medium transition shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+          <div className="p-6 border-t border-gray-200">
+            <button onClick={() => setShowCoverageModal(false)} className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] py-3 rounded-lg font-medium transition shadow-[0_0_15px_rgba(34,211,238,0.3)]">
               Got It
             </button>
           </div>
@@ -505,45 +527,45 @@ export default function SubmitLead() {
   // Purchase Success Screen
   if (step === "purchase") {
     return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
         </div>
 
-        <div className="bg-[#0d2240] p-12 rounded-2xl text-center max-w-md w-full border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)] relative z-10">
-          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-cyan-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.3)]">
-            <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-white p-12 rounded-2xl text-center max-w-md w-full border border-gray-200 shadow-lg relative z-10">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-[#1e3a5f]/20 flex items-center justify-center shadow-lg">
+            <svg className="w-10 h-10 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-4">Policy Purchased!</h2>
-          <p className="text-slate-300 mb-6">Your {selectedQuote?.coverageType} policy with {selectedQuote?.companyName} is now active.</p>
-          <div className="bg-[#0a1628] rounded-lg p-4 mb-6 text-left border border-cyan-500/20">
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">Policy Purchased!</h2>
+          <p className="text-gray-600 mb-6">Your {selectedQuote?.coverageType} policy with {selectedQuote?.companyName} is now active.</p>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left border border-gray-200">
             <div className="flex justify-between mb-2">
-              <span className="text-slate-400">Policy Holder</span>
-              <span className="text-white">{formData.customerName}</span>
+              <span className="text-gray-500">Policy Holder</span>
+              <span className="text-gray-800">{formData.customerName}</span>
             </div>
             <div className="flex justify-between mb-2">
-              <span className="text-slate-400">Vehicle</span>
-              <span className="text-white">{formData.carModel}</span>
+              <span className="text-gray-500">Vehicle</span>
+              <span className="text-gray-800">{formData.carModel}</span>
             </div>
             <div className="flex justify-between mb-2">
-              <span className="text-slate-400">Insurer</span>
-              <span className="text-white">{selectedQuote?.companyName}</span>
+              <span className="text-gray-500">Insurer</span>
+              <span className="text-gray-800">{selectedQuote?.companyName}</span>
             </div>
             <div className="flex justify-between mb-2">
-              <span className="text-slate-400">Coverage</span>
-              <span className="text-white">{selectedQuote?.coverageType}</span>
+              <span className="text-gray-500">Coverage</span>
+              <span className="text-gray-800">{selectedQuote?.coverageType}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Monthly Premium</span>
-              <span className="text-cyan-400 font-bold">${selectedQuote?.monthlyPremium}/mo</span>
+              <span className="text-gray-500">Monthly Premium</span>
+              <span className="text-[#1e3a5f] font-bold">${selectedQuote?.monthlyPremium}/mo</span>
             </div>
           </div>
-          <p className="text-slate-400 text-sm mb-6">Policy documents have been sent to {formData.email}</p>
-          <Link href="/" className="inline-block bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] px-6 py-3 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+          <p className="text-gray-500 text-sm mb-6">Policy documents have been sent to {formData.email}</p>
+          <Link href="/" className="inline-block bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] px-6 py-3 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]">
             Back to Home
           </Link>
         </div>
@@ -554,24 +576,24 @@ export default function SubmitLead() {
   // Success Screen
   if (step === "success") {
     return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
         </div>
 
-        <div className="bg-[#0d2240] p-12 rounded-2xl text-center max-w-md w-full border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)] relative z-10">
-          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-cyan-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.3)]">
-            <svg className="w-10 h-10 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-white p-12 rounded-2xl text-center max-w-md w-full border border-gray-200 shadow-lg relative z-10">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-[#1e3a5f]/20 flex items-center justify-center shadow-lg">
+            <svg className="w-10 h-10 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-4">Lead Submitted!</h2>
-          <p className="text-slate-300 mb-4">Your information has been saved.</p>
-          <div className="bg-[#0a1628] rounded-lg p-4 mb-6 border border-cyan-500/20">
-            <p className="text-slate-400 text-sm mb-1">Estimated Payout</p>
-            <p className="text-3xl font-bold text-cyan-400">${submittedLead?.payout}</p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">Lead Submitted!</h2>
+          <p className="text-gray-600 mb-4">Your information has been saved.</p>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
+            <p className="text-gray-500 text-sm mb-1">Estimated Payout</p>
+            <p className="text-3xl font-bold text-[#1e3a5f]">${submittedLead?.payout}</p>
           </div>
           <div className="flex gap-4 justify-center">
             <button
@@ -582,12 +604,58 @@ export default function SubmitLead() {
                 setAllQuotes([]);
                 setSelectedQuote(null);
               }}
-              className="bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] px-6 py-3 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]"
+              className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] px-6 py-3 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]"
             >
               Submit Another
             </button>
-            <Link href="/dashboard" className="bg-[#0a1628] hover:bg-[#0a1628]/80 text-white px-6 py-3 rounded-lg transition border border-cyan-500/30">
+            <Link href="/dashboard" className="bg-gray-50 hover:bg-gray-50/80 text-gray-800 px-6 py-3 rounded-lg transition border border-gray-200">
               View Dashboard
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No Connection Screen - Provider needs to connect with a buyer first
+  if (step === "no_connection") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Background circuit lines */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+        </div>
+
+        <div className="bg-white p-12 rounded-2xl text-center max-w-md w-full border border-gray-200 shadow-lg relative z-10">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-amber-500/20 flex items-center justify-center shadow-lg">
+            <svg className="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">Connection Required</h2>
+          <p className="text-gray-600 mb-6">
+            Before you can submit leads and earn money, you need to connect with a lead receiver (insurance agent) who will accept your leads.
+          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
+            <h3 className="font-semibold text-amber-800 mb-2">How it works:</h3>
+            <ol className="text-amber-700 text-sm space-y-2 list-decimal list-inside">
+              <li>Go to your Provider Dashboard</li>
+              <li>Browse available lead receivers</li>
+              <li>Send a connection request</li>
+              <li>Wait for them to set terms</li>
+              <li>Accept the terms to start earning</li>
+            </ol>
+          </div>
+          <div className="flex gap-4 justify-center">
+            <Link
+              href="/provider-dashboard"
+              className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-3 rounded-lg transition font-semibold shadow-md"
+            >
+              Go to Dashboard
+            </Link>
+            <Link href="/" className="bg-gray-50 hover:bg-gray-100 text-gray-800 px-6 py-3 rounded-lg transition border border-gray-200">
+              Back to Home
             </Link>
           </div>
         </div>
@@ -600,44 +668,32 @@ export default function SubmitLead() {
     const cheapest = allQuotes[0];
 
     return (
-      <div className="min-h-screen bg-[#0a1628] flex flex-col relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 flex flex-col relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20 pointer-events-none">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
         </div>
 
         <nav className="flex items-center justify-between px-8 py-4 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-              <svg viewBox="0 0 40 40" className="w-6 h-6">
-                <defs>
-                  <linearGradient id="logoGradChat" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#e0f7fa" />
-                  </linearGradient>
-                </defs>
-                <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradChat)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradChat)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradChat)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white">LeadzPay</span>
+            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
           </Link>
-          <button onClick={() => setStep("questions")} className="text-slate-300 hover:text-cyan-400 transition">Back</button>
+          <button onClick={() => setStep("questions")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
 
         <div className="flex-1 max-w-4xl mx-auto w-full px-4 flex flex-col relative z-10">
           {/* Top Quote Banner */}
           {cheapest && (
-            <div className="bg-gradient-to-r from-cyan-600 to-cyan-500 rounded-xl p-4 mb-4 flex items-center justify-between shadow-[0_0_30px_rgba(34,211,238,0.3)]">
+            <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-xl p-4 mb-4 flex items-center justify-between shadow-lg">
               <div>
-                <p className="text-cyan-100 text-sm">Your Best Rate</p>
-                <p className="text-white text-2xl font-bold">${cheapest.monthlyPremium}/mo with {cheapest.companyName}</p>
+                <p className="text-blue-100 text-sm">Your Best Rate</p>
+                <p className="text-gray-800 text-2xl font-bold">${cheapest.monthlyPremium}/mo with {cheapest.companyName}</p>
               </div>
               <button
                 onClick={handlePurchase}
-                className="bg-white text-cyan-600 px-6 py-3 rounded-lg font-bold hover:bg-cyan-50 transition flex items-center gap-2"
+                className="bg-white text-[#1e3a5f] px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -648,29 +704,29 @@ export default function SubmitLead() {
           )}
 
           {/* Chat Area */}
-          <div className="flex-1 bg-[#0d2240] rounded-2xl border border-cyan-500/20 p-4 overflow-y-auto space-y-4 min-h-[350px] max-h-[450px] shadow-[0_0_20px_rgba(34,211,238,0.05)]">
+          <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-4 overflow-y-auto space-y-4 min-h-[350px] max-h-[450px] shadow-sm">
             {chatMessages.map((msg, index) => (
               <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[85%] ${msg.role === "user" ? "" : ""}`}>
-                  <div className={`rounded-2xl px-4 py-3 ${msg.role === "user" ? "bg-cyan-500 text-white" : "bg-[#0a1628] text-slate-200 border border-cyan-500/20"}`}>
+                  <div className={`rounded-2xl px-4 py-3 ${msg.role === "user" ? "bg-[#1e3a5f] text-white" : "bg-gray-50 text-slate-200 border border-gray-200"}`}>
                     <p className="whitespace-pre-line text-sm">{msg.text}</p>
                   </div>
                   {/* Action buttons for AI messages with purchase CTA */}
                   {msg.action?.type === "buy" && msg.action.data && (
-                    <div className="mt-3 bg-gradient-to-r from-cyan-600/20 to-cyan-500/20 border border-cyan-500/50 rounded-xl p-4 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                    <div className="mt-3 bg-gradient-to-r from-[#1e3a5f]/10 to-[#2a4a6f]/10 border border-[#1e3a5f]/50 rounded-xl p-4 shadow-sm">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <p className="text-cyan-400 font-semibold">{msg.action.data.companyName}</p>
-                          <p className="text-white text-xl font-bold">${msg.action.data.monthlyPremium}/month</p>
+                          <p className="text-[#1e3a5f] font-semibold">{msg.action.data.companyName}</p>
+                          <p className="text-gray-800 text-xl font-bold">${msg.action.data.monthlyPremium}/month</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-slate-400 text-sm">You save</p>
-                          <p className="text-cyan-400 font-bold">{msg.action.data.totalDiscount}%</p>
+                          <p className="text-gray-500 text-sm">You save</p>
+                          <p className="text-[#1e3a5f] font-bold">{msg.action.data.totalDiscount}%</p>
                         </div>
                       </div>
                       <button
                         onClick={handlePurchase}
-                        className="w-full bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-3 rounded-lg font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.3)]"
+                        className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] py-3 rounded-lg font-bold transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.3)]"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -685,29 +741,29 @@ export default function SubmitLead() {
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="bg-[#0d2240]/80 rounded-xl p-4 mt-4 border border-cyan-500/20">
+          <div className="bg-white/80 rounded-xl p-4 mt-4 border border-gray-200">
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button
                 onClick={() => { setChatInput("Yes, lock in this rate!"); handleChatSend(); }}
-                className="bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-3 px-4 rounded-lg font-semibold transition text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]"
+                className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] py-3 px-4 rounded-lg font-semibold transition text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]"
               >
                 Yes, Lock In This Rate!
               </button>
               <button
                 onClick={() => { setChatInput("Show me other options"); handleChatSend(); }}
-                className="bg-[#0a1628] hover:bg-[#0a1628]/80 text-white py-3 px-4 rounded-lg font-semibold transition text-sm border border-cyan-500/30"
+                className="bg-gray-50 hover:bg-gray-50/80 text-gray-800 py-3 px-4 rounded-lg font-semibold transition text-sm border border-gray-200"
               >
                 See Other Options
               </button>
               <button
                 onClick={() => { setChatInput("What discounts do I have?"); handleChatSend(); }}
-                className="bg-[#0a1628] hover:bg-[#0a1628]/80 text-white py-3 px-4 rounded-lg font-semibold transition text-sm border border-cyan-500/30"
+                className="bg-gray-50 hover:bg-gray-50/80 text-gray-800 py-3 px-4 rounded-lg font-semibold transition text-sm border border-gray-200"
               >
                 My Discounts
               </button>
               <button
                 onClick={() => { setChatInput("Can I get a lower price?"); handleChatSend(); }}
-                className="bg-[#0a1628] hover:bg-[#0a1628]/80 text-white py-3 px-4 rounded-lg font-semibold transition text-sm border border-cyan-500/30"
+                className="bg-gray-50 hover:bg-gray-50/80 text-gray-800 py-3 px-4 rounded-lg font-semibold transition text-sm border border-gray-200"
               >
                 Lower Price Options
               </button>
@@ -720,9 +776,9 @@ export default function SubmitLead() {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleChatSend()}
                 placeholder="Ask me anything about your quote..."
-                className="flex-1 px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                className="flex-1 px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition"
               />
-              <button onClick={handleChatSend} className="bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] px-4 py-3 rounded-lg transition shadow-[0_0_10px_rgba(34,211,238,0.2)]">
+              <button onClick={handleChatSend} className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] px-4 py-3 rounded-lg transition shadow-[0_0_10px_rgba(34,211,238,0.2)]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
@@ -734,14 +790,14 @@ export default function SubmitLead() {
           <div className="py-4 flex gap-3">
             <button
               onClick={() => setStep("quote")}
-              className="flex-1 bg-[#0d2240] hover:bg-[#0d2240]/80 text-white py-4 rounded-xl font-semibold transition border border-cyan-500/30"
+              className="flex-1 bg-white hover:bg-white/80 text-gray-800 py-4 rounded-xl font-semibold transition border border-gray-200"
             >
               Compare All 10 Carriers
             </button>
             <button
               onClick={handlePurchase}
               disabled={isPurchasing}
-              className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.3)]"
+              className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] py-4 rounded-xl font-semibold transition flex items-center justify-center gap-2 shadow-md"
             >
               {isPurchasing ? (
                 <>
@@ -769,47 +825,35 @@ export default function SubmitLead() {
   // Quote Comparison Screen
   if (step === "quote") {
     return (
-      <div className="min-h-screen bg-[#0a1628] relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20 pointer-events-none">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
         </div>
 
         <CoverageModal />
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-              <svg viewBox="0 0 40 40" className="w-6 h-6">
-                <defs>
-                  <linearGradient id="logoGradQuote" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#e0f7fa" />
-                  </linearGradient>
-                </defs>
-                <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradQuote)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradQuote)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradQuote)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white">LeadzPay</span>
+            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
           </Link>
-          <button onClick={() => setStep("chatbot")} className="text-slate-300 hover:text-cyan-400 transition">Back</button>
+          <button onClick={() => setStep("chatbot")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
 
         <main className="max-w-6xl mx-auto px-8 py-8 relative z-10">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Insurance Quotes for {formData.customerName}</h1>
-            <p className="text-slate-400">{formData.carModel} in {US_STATES.find(s => s.code === formData.state)?.name}</p>
-            <p className="text-cyan-400 text-sm mt-2">Comparing {allQuotes.length} insurance companies</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Insurance Quotes for {formData.customerName}</h1>
+            <p className="text-gray-500">{formData.carModel} in {US_STATES.find(s => s.code === formData.state)?.name}</p>
+            <p className="text-[#1e3a5f] text-sm mt-2">Comparing {allQuotes.length} insurance companies</p>
           </div>
 
           {/* Coverage & Deductible Selection */}
-          <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 mb-8 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8 shadow-sm">
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-3">Coverage Type</label>
+                <label className="block text-gray-600 text-sm font-medium mb-3">Coverage Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["liability", "collision", "comprehensive", "full"] as const).map((type) => (
                     <button
@@ -817,14 +861,14 @@ export default function SubmitLead() {
                       onClick={() => handleCoverageChange(type)}
                       className={`p-3 rounded-lg text-sm font-medium transition flex items-center justify-between ${
                         selectedCoverage === type
-                          ? "bg-cyan-500 text-[#0a1628] shadow-[0_0_10px_rgba(34,211,238,0.3)]"
-                          : "bg-[#0a1628] text-slate-300 hover:bg-[#0a1628]/80 border border-cyan-500/30"
+                          ? "bg-[#1e3a5f] text-[#0a1628] shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                          : "bg-gray-50 text-gray-600 hover:bg-gray-50/80 border border-gray-200"
                       }`}
                     >
                       <span>{type === "liability" ? "Liability" : type === "collision" ? "Collision" : type === "comprehensive" ? "Comprehensive" : "Full Coverage"}</span>
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedCoverageType(type); setShowCoverageModal(true); }}
-                        className="ml-2 text-slate-400 hover:text-cyan-400"
+                        className="ml-2 text-gray-500 hover:text-[#1e3a5f]"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -835,7 +879,7 @@ export default function SubmitLead() {
                 </div>
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-3">Deductible</label>
+                <label className="block text-gray-600 text-sm font-medium mb-3">Deductible</label>
                 <div className="grid grid-cols-4 gap-2">
                   {([250, 500, 1000, 2000] as const).map((ded) => (
                     <button
@@ -843,8 +887,8 @@ export default function SubmitLead() {
                       onClick={() => handleDeductibleChange(ded)}
                       className={`p-3 rounded-lg text-sm font-medium transition ${
                         selectedDeductible === ded
-                          ? "bg-cyan-500 text-[#0a1628] shadow-[0_0_10px_rgba(34,211,238,0.3)]"
-                          : "bg-[#0a1628] text-slate-300 hover:bg-[#0a1628]/80 border border-cyan-500/30"
+                          ? "bg-[#1e3a5f] text-[#0a1628] shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                          : "bg-gray-50 text-gray-600 hover:bg-gray-50/80 border border-gray-200"
                       }`}
                     >
                       ${ded}
@@ -861,16 +905,16 @@ export default function SubmitLead() {
               <div
                 key={quote.companyId}
                 onClick={() => setSelectedQuote(quote)}
-                className={`bg-[#0d2240] rounded-xl border-2 p-6 cursor-pointer transition-all ${
+                className={`bg-white rounded-xl border-2 p-6 cursor-pointer transition-all ${
                   selectedQuote?.companyId === quote.companyId
-                    ? "border-cyan-500 bg-cyan-500/5 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
-                    : "border-cyan-500/20 hover:border-cyan-500/40"
+                    ? "border-[#1e3a5f] bg-[#1e3a5f]/5 shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                    : "border-gray-200 hover:border-[#1e3a5f]/40"
                 }`}
               >
                 <div className="flex items-center gap-6">
                   {/* Rank Badge */}
                   <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                    index === 0 ? "bg-cyan-500 text-[#0a1628] shadow-[0_0_15px_rgba(34,211,238,0.4)]" : "bg-[#0a1628] text-slate-400 border border-cyan-500/30"
+                    index === 0 ? "bg-[#1e3a5f] text-[#0a1628] shadow-[0_0_15px_rgba(34,211,238,0.4)]" : "bg-gray-50 text-gray-500 border border-gray-200"
                   }`}>
                     #{index + 1}
                   </div>
@@ -878,7 +922,7 @@ export default function SubmitLead() {
                   {/* Company Info */}
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-xl font-bold text-white">{quote.companyName}</h3>
+                      <h3 className="text-xl font-bold text-gray-800">{quote.companyName}</h3>
                       {quote.exclusive && (
                         <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-full">
                           {quote.companyId === "usaa" ? "Military Only" : "Direct Only"}
@@ -893,28 +937,28 @@ export default function SubmitLead() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {quote.discountsApplied.slice(0, 3).map((discount, i) => (
-                        <span key={i} className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded">
+                        <span key={i} className="text-xs bg-[#1e3a5f]/20 text-[#1e3a5f] px-2 py-0.5 rounded">
                           {discount}
                         </span>
                       ))}
                       {quote.discountsApplied.length > 3 && (
-                        <span className="text-xs text-slate-500">+{quote.discountsApplied.length - 3} more</span>
+                        <span className="text-xs text-gray-400">+{quote.discountsApplied.length - 3} more</span>
                       )}
                     </div>
                   </div>
 
                   {/* Price */}
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-white">${quote.monthlyPremium}<span className="text-lg text-slate-400">/mo</span></div>
-                    <div className="text-slate-500 text-sm">${quote.annualPremium}/year</div>
+                    <div className="text-3xl font-bold text-gray-800">${quote.monthlyPremium}<span className="text-lg text-gray-500">/mo</span></div>
+                    <div className="text-gray-400 text-sm">${quote.annualPremium}/year</div>
                     {quote.totalDiscount > 0 && (
-                      <div className="text-cyan-400 text-sm">Saving {quote.totalDiscount}%</div>
+                      <div className="text-[#1e3a5f] text-sm">Saving {quote.totalDiscount}%</div>
                     )}
                   </div>
 
                   {/* Select Indicator */}
                   {selectedQuote?.companyId === quote.companyId && (
-                    <svg className="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-6 h-6 text-[#1e3a5f]" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}
@@ -925,15 +969,15 @@ export default function SubmitLead() {
 
           {/* Selected Quote Details */}
           {selectedQuote && (
-            <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 mb-8 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h3 className="text-lg font-semibold text-white mb-4">{selectedQuote.companyName} Quote Breakdown</h3>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">{selectedQuote.companyName} Quote Breakdown</h3>
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="text-sm font-medium text-cyan-400 mb-2">Discounts Applied ({selectedQuote.totalDiscount}% off)</h4>
+                  <h4 className="text-sm font-medium text-[#1e3a5f] mb-2">Discounts Applied ({selectedQuote.totalDiscount}% off)</h4>
                   <ul className="space-y-1">
                     {selectedQuote.discountsApplied.map((d, i) => (
-                      <li key={i} className="text-slate-300 text-sm flex items-center gap-2">
-                        <svg className="w-4 h-4 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+                      <li key={i} className="text-gray-600 text-sm flex items-center gap-2">
+                        <svg className="w-4 h-4 text-[#1e3a5f]" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
                         {d}
@@ -946,7 +990,7 @@ export default function SubmitLead() {
                     <h4 className="text-sm font-medium text-red-400 mb-2">Rate Adjustments</h4>
                     <ul className="space-y-1">
                       {selectedQuote.surchargesApplied.map((s, i) => (
-                        <li key={i} className="text-slate-300 text-sm flex items-center gap-2">
+                        <li key={i} className="text-gray-600 text-sm flex items-center gap-2">
                           <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
                           </svg>
@@ -967,8 +1011,8 @@ export default function SubmitLead() {
               disabled={!selectedQuote || isPurchasing || selectedQuote.exclusive}
               className={`w-full py-4 rounded-xl text-lg font-semibold transition-all ${
                 selectedQuote && !isPurchasing && !selectedQuote.exclusive
-                  ? "bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] cursor-pointer shadow-[0_0_20px_rgba(34,211,238,0.3)]"
-                  : "bg-[#0d2240] text-slate-400 cursor-not-allowed border border-cyan-500/20"
+                  ? "bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] cursor-pointer shadow-md"
+                  : "bg-white text-gray-500 cursor-not-allowed border border-gray-200"
               }`}
             >
               {isPurchasing ? (
@@ -1002,55 +1046,43 @@ export default function SubmitLead() {
   // Additional Questions Screen
   if (step === "questions") {
     return (
-      <div className="min-h-screen bg-[#0a1628] relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
         </div>
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-              <svg viewBox="0 0 40 40" className="w-6 h-6">
-                <defs>
-                  <linearGradient id="logoGradQ" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#e0f7fa" />
-                  </linearGradient>
-                </defs>
-                <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradQ)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradQ)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradQ)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white">LeadzPay</span>
+            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
           </Link>
-          <button onClick={() => setStep("form")} className="text-slate-300 hover:text-cyan-400 transition">Back</button>
+          <button onClick={() => setStep("form")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
 
         <main className="max-w-3xl mx-auto px-8 py-8 relative z-10">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">A Few More Questions</h1>
-            <p className="text-slate-400">This helps us get you the most accurate quotes from all carriers</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">A Few More Questions</h1>
+            <p className="text-gray-500">This helps us get you the most accurate quotes from all carriers</p>
           </div>
 
           <div className="space-y-6">
             {/* Demographics */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-4">About the Driver</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">About the Driver</h2>
               <div className="grid md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Gender</label>
-                  <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Gender</label>
+                  <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                     <option value="other">Other/Prefer not to say</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Marital Status</label>
-                  <select name="maritalStatus" value={formData.maritalStatus} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Marital Status</label>
+                  <select name="maritalStatus" value={formData.maritalStatus} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="single">Single</option>
                     <option value="married">Married</option>
                     <option value="divorced">Divorced</option>
@@ -1058,8 +1090,8 @@ export default function SubmitLead() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Occupation</label>
-                  <select name="occupation" value={formData.occupation} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Occupation</label>
+                  <select name="occupation" value={formData.occupation} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="standard">Standard</option>
                     <option value="professional">Professional (Doctor, Lawyer, etc.)</option>
                     <option value="military">Military (Active/Veteran)</option>
@@ -1070,16 +1102,16 @@ export default function SubmitLead() {
             </div>
 
             {/* Driving History */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-4">Driving History</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Driving History</h2>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Years Licensed</label>
-                  <input type="number" name="yearsLicensed" value={formData.yearsLicensed} onChange={handleInputChange} min="0" max="70" className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition" />
+                  <label className="block text-gray-600 text-sm mb-2">Years Licensed</label>
+                  <input type="number" name="yearsLicensed" value={formData.yearsLicensed} onChange={handleInputChange} min="0" max="70" className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition" />
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Driving Record (Last 5 Years)</label>
-                  <select name="drivingHistory" value={formData.drivingHistory} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Driving Record (Last 5 Years)</label>
+                  <select name="drivingHistory" value={formData.drivingHistory} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="clean">Clean - No violations or accidents</option>
                     <option value="minor_violations">Minor violations (speeding, etc.)</option>
                     <option value="major_violations">Major violations (reckless driving)</option>
@@ -1088,8 +1120,8 @@ export default function SubmitLead() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Credit Score Range</label>
-                  <select name="creditScore" value={formData.creditScore} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Credit Score Range</label>
+                  <select name="creditScore" value={formData.creditScore} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="excellent">Excellent (750+)</option>
                     <option value="good">Good (700-749)</option>
                     <option value="fair">Fair (650-699)</option>
@@ -1098,36 +1130,36 @@ export default function SubmitLead() {
                 </div>
                 <div className="flex items-center">
                   <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={formData.priorInsurance} onChange={() => handleCheckboxChange("priorInsurance")} className="w-5 h-5 rounded bg-[#0a1628] border-cyan-500/30 accent-cyan-400" />
-                    <span className="text-slate-300">Currently have auto insurance</span>
+                    <input type="checkbox" checked={formData.priorInsurance} onChange={() => handleCheckboxChange("priorInsurance")} className="w-5 h-5 rounded bg-gray-50 border-gray-200 accent-[#1e3a5f]" />
+                    <span className="text-gray-600">Currently have auto insurance</span>
                   </label>
                 </div>
               </div>
             </div>
 
             {/* Vehicle Details */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-4">Vehicle Details</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Vehicle Details</h2>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Vehicle Ownership</label>
-                  <select name="vehicleOwnership" value={formData.vehicleOwnership} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Vehicle Ownership</label>
+                  <select name="vehicleOwnership" value={formData.vehicleOwnership} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="owned">Owned (paid off)</option>
                     <option value="financed">Financed (making payments)</option>
                     <option value="leased">Leased</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Primary Use</label>
-                  <select name="primaryUse" value={formData.primaryUse} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Primary Use</label>
+                  <select name="primaryUse" value={formData.primaryUse} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="commute">Commute to work/school</option>
                     <option value="pleasure">Pleasure/personal use only</option>
                     <option value="business">Business use</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Annual Mileage</label>
-                  <select name="annualMileage" value={formData.annualMileage} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Annual Mileage</label>
+                  <select name="annualMileage" value={formData.annualMileage} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="5000">Under 5,000 miles</option>
                     <option value="7500">5,000 - 7,500 miles</option>
                     <option value="10000">7,500 - 10,000 miles</option>
@@ -1136,8 +1168,8 @@ export default function SubmitLead() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm mb-2">Where is it parked overnight?</label>
-                  <select name="garageType" value={formData.garageType} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition">
+                  <label className="block text-gray-600 text-sm mb-2">Where is it parked overnight?</label>
+                  <select name="garageType" value={formData.garageType} onChange={handleInputChange} className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition">
                     <option value="garage">Private garage</option>
                     <option value="carport">Carport</option>
                     <option value="street">Street parking</option>
@@ -1147,30 +1179,30 @@ export default function SubmitLead() {
               </div>
               <div className="grid md:grid-cols-2 gap-4 mt-4">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={formData.antiTheft} onChange={() => handleCheckboxChange("antiTheft")} className="w-5 h-5 rounded bg-[#0a1628] border-cyan-500/30 accent-cyan-400" />
-                  <span className="text-slate-300">Has anti-theft device</span>
+                  <input type="checkbox" checked={formData.antiTheft} onChange={() => handleCheckboxChange("antiTheft")} className="w-5 h-5 rounded bg-gray-50 border-gray-200 accent-[#1e3a5f]" />
+                  <span className="text-gray-600">Has anti-theft device</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={formData.safetyFeatures} onChange={() => handleCheckboxChange("safetyFeatures")} className="w-5 h-5 rounded bg-[#0a1628] border-cyan-500/30 accent-cyan-400" />
-                  <span className="text-slate-300">Has safety features (ABS, airbags, etc.)</span>
+                  <input type="checkbox" checked={formData.safetyFeatures} onChange={() => handleCheckboxChange("safetyFeatures")} className="w-5 h-5 rounded bg-gray-50 border-gray-200 accent-[#1e3a5f]" />
+                  <span className="text-gray-600">Has safety features (ABS, airbags, etc.)</span>
                 </label>
               </div>
             </div>
 
             {/* Additional Info */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-4">Additional Discounts</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Additional Discounts</h2>
               <div className="grid md:grid-cols-2 gap-4">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={formData.homeOwner} onChange={() => handleCheckboxChange("homeOwner")} className="w-5 h-5 rounded bg-[#0a1628] border-cyan-500/30 accent-cyan-400" />
-                  <span className="text-slate-300">Homeowner (for bundling discount)</span>
+                  <input type="checkbox" checked={formData.homeOwner} onChange={() => handleCheckboxChange("homeOwner")} className="w-5 h-5 rounded bg-gray-50 border-gray-200 accent-[#1e3a5f]" />
+                  <span className="text-gray-600">Homeowner (for bundling discount)</span>
                 </label>
               </div>
             </div>
 
             <button
               onClick={handleContinueFromQuestions}
-              className="w-full py-4 rounded-xl text-lg font-semibold bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] transition shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)]"
+              className="w-full py-4 rounded-xl text-lg font-semibold bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] transition shadow-md hover:shadow-lg"
             >
               Get My Quotes
             </button>
@@ -1185,6 +1217,7 @@ export default function SubmitLead() {
     const handleProviderSubmit = () => {
       // Check if provider exists
       const existingProvider = getProviderByEmail(providerData.email);
+      let providerId: string;
 
       if (existingProvider) {
         // Update existing provider with payment info if changed
@@ -1198,6 +1231,7 @@ export default function SubmitLead() {
         });
         setCurrentProvider(existingProvider);
         localStorage.setItem("leadzpay_provider_id", existingProvider.id);
+        providerId = existingProvider.id;
       } else {
         // Create new provider
         const newProvider = addProvider({
@@ -1217,9 +1251,17 @@ export default function SubmitLead() {
         });
         setCurrentProvider(newProvider);
         localStorage.setItem("leadzpay_provider_id", newProvider.id);
+        providerId = newProvider.id;
       }
 
-      setStep("form");
+      // Check for active connection before allowing lead submission
+      const connection = getActiveConnectionForProvider(providerId);
+      if (connection) {
+        setActiveConnection(connection);
+        setStep("form");
+      } else {
+        setStep("no_connection");
+      }
     };
 
     const isProviderFormValid = providerData.name && providerData.email && providerData.paymentMethod && (
@@ -1229,87 +1271,75 @@ export default function SubmitLead() {
     );
 
     return (
-      <div className="min-h-screen bg-[#0a1628] relative overflow-hidden">
+      <div className="min-h-screen bg-gray-50 relative overflow-hidden">
         {/* Background circuit lines */}
         <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+          <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
         </div>
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-              <svg viewBox="0 0 40 40" className="w-6 h-6">
-                <defs>
-                  <linearGradient id="logoGradProv" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#e0f7fa" />
-                  </linearGradient>
-                </defs>
-                <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradProv)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradProv)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradProv)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white">LeadzPay</span>
+            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
           </Link>
-          <Link href="/" className="text-slate-300 hover:text-cyan-400 transition">Back to Home</Link>
+          <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
         </nav>
 
         <main className="max-w-xl mx-auto px-8 py-12 relative z-10">
           <div className="text-center mb-10">
-            <div className="h-16 w-16 rounded-2xl bg-cyan-500/20 flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(34,211,238,0.3)]">
-              <svg className="w-8 h-8 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="h-16 w-16 rounded-2xl bg-[#1e3a5f]/20 flex items-center justify-center mx-auto mb-4 shadow-md">
+              <svg className="w-8 h-8 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome, Lead Provider!</h1>
-            <p className="text-slate-300">Set up your profile to start earning on every lead you submit</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome, Lead Provider!</h1>
+            <p className="text-gray-600">Set up your profile to start earning on every lead you submit</p>
           </div>
 
           <div className="space-y-6">
             {/* Your Info */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-4">Your Information</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Your Information</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Your Name *</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">Your Name *</label>
                   <input
                     type="text"
                     value={providerData.name}
                     onChange={(e) => setProviderData({ ...providerData, name: e.target.value })}
                     placeholder="Your full name"
-                    className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Your Email *</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">Your Email *</label>
                   <input
                     type="email"
                     value={providerData.email}
                     onChange={(e) => setProviderData({ ...providerData, email: e.target.value })}
                     placeholder="you@example.com"
-                    className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Your Phone (Optional)</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">Your Phone (Optional)</label>
                   <input
                     type="tel"
                     value={providerData.phone}
                     onChange={(e) => setProviderData({ ...providerData, phone: e.target.value })}
                     placeholder="(555) 123-4567"
-                    className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition"
                   />
                 </div>
               </div>
             </div>
 
             {/* Payment Method */}
-            <div className="bg-[#0d2240] p-6 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h2 className="text-lg font-semibold text-white mb-2">How Would You Like to Get Paid?</h2>
-              <p className="text-slate-400 text-sm mb-4">Choose your preferred payment method for lead payouts</p>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">How Would You Like to Get Paid?</h2>
+              <p className="text-gray-500 text-sm mb-4">Choose your preferred payment method for lead payouts</p>
 
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {/* Venmo */}
@@ -1317,12 +1347,12 @@ export default function SubmitLead() {
                   onClick={() => setProviderData({ ...providerData, paymentMethod: "venmo" })}
                   className={`p-4 rounded-xl border-2 text-center transition-all ${
                     providerData.paymentMethod === "venmo"
-                      ? "border-cyan-500 bg-cyan-500/10 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
-                      : "border-cyan-500/30 hover:border-cyan-500/50"
+                      ? "border-[#1e3a5f] bg-[#1e3a5f]/10 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                      : "border-gray-200 hover:border-[#1e3a5f]/30"
                   }`}
                 >
                   <div className="text-2xl mb-1">V</div>
-                  <div className={`font-medium ${providerData.paymentMethod === "venmo" ? "text-cyan-400" : "text-white"}`}>Venmo</div>
+                  <div className={`font-medium ${providerData.paymentMethod === "venmo" ? "text-[#1e3a5f]" : "text-gray-800"}`}>Venmo</div>
                 </button>
 
                 {/* PayPal */}
@@ -1331,11 +1361,11 @@ export default function SubmitLead() {
                   className={`p-4 rounded-xl border-2 text-center transition-all ${
                     providerData.paymentMethod === "paypal"
                       ? "border-indigo-500 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-                      : "border-cyan-500/30 hover:border-cyan-500/50"
+                      : "border-gray-200 hover:border-[#1e3a5f]/30"
                   }`}
                 >
                   <div className="text-2xl mb-1">P</div>
-                  <div className={`font-medium ${providerData.paymentMethod === "paypal" ? "text-indigo-400" : "text-white"}`}>PayPal</div>
+                  <div className={`font-medium ${providerData.paymentMethod === "paypal" ? "text-indigo-400" : "text-gray-800"}`}>PayPal</div>
                 </button>
 
                 {/* Bank */}
@@ -1344,26 +1374,26 @@ export default function SubmitLead() {
                   className={`p-4 rounded-xl border-2 text-center transition-all ${
                     providerData.paymentMethod === "bank"
                       ? "border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(52,211,153,0.2)]"
-                      : "border-cyan-500/30 hover:border-cyan-500/50"
+                      : "border-gray-200 hover:border-[#1e3a5f]/30"
                   }`}
                 >
                   <div className="text-2xl mb-1">$</div>
-                  <div className={`font-medium ${providerData.paymentMethod === "bank" ? "text-emerald-400" : "text-white"}`}>Bank</div>
+                  <div className={`font-medium ${providerData.paymentMethod === "bank" ? "text-emerald-400" : "text-gray-800"}`}>Bank</div>
                 </button>
               </div>
 
               {/* Payment Details */}
               {providerData.paymentMethod === "venmo" && (
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Venmo Username *</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">Venmo Username *</label>
                   <div className="flex items-center">
-                    <span className="text-cyan-400 mr-2">@</span>
+                    <span className="text-[#1e3a5f] mr-2">@</span>
                     <input
                       type="text"
                       value={providerData.venmoUsername}
                       onChange={(e) => setProviderData({ ...providerData, venmoUsername: e.target.value })}
                       placeholder="yourvenmo"
-                      className="flex-1 px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                      className="flex-1 px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition"
                     />
                   </div>
                 </div>
@@ -1371,42 +1401,42 @@ export default function SubmitLead() {
 
               {providerData.paymentMethod === "paypal" && (
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">PayPal Email *</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">PayPal Email *</label>
                   <input
                     type="email"
                     value={providerData.paypalEmail}
                     onChange={(e) => setProviderData({ ...providerData, paypalEmail: e.target.value })}
                     placeholder="paypal@example.com"
-                    className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400 transition"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 transition"
                   />
                 </div>
               )}
 
               {providerData.paymentMethod === "bank" && (
                 <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">Bank Account (Last 4 digits) *</label>
+                  <label className="block text-gray-600 text-sm font-medium mb-2">Bank Account (Last 4 digits) *</label>
                   <input
                     type="text"
                     value={providerData.bankAccountLast4}
                     onChange={(e) => setProviderData({ ...providerData, bankAccountLast4: e.target.value.slice(0, 4) })}
                     placeholder="1234"
                     maxLength={4}
-                    className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 transition"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-400 transition"
                   />
-                  <p className="text-slate-500 text-xs mt-2">Full bank details will be collected securely via Stripe</p>
+                  <p className="text-gray-400 text-xs mt-2">Full bank details will be collected securely via Stripe</p>
                 </div>
               )}
             </div>
 
             {/* Payout Info */}
-            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 shadow-[0_0_20px_rgba(34,211,238,0.1)]">
+            <div className="bg-[#1e3a5f]/10 border border-gray-200 rounded-xl p-4 shadow-[0_0_20px_rgba(34,211,238,0.1)]">
               <div className="flex items-center gap-3">
-                <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                  <p className="text-cyan-400 font-semibold">Earn $50+ per qualified lead</p>
-                  <p className="text-slate-400 text-sm">Payouts are recorded on the ledger and tracked transparently</p>
+                  <p className="text-[#1e3a5f] font-semibold">Earn $50+ per qualified lead</p>
+                  <p className="text-gray-500 text-sm">Payouts are recorded on the ledger and tracked transparently</p>
                 </div>
               </div>
             </div>
@@ -1416,8 +1446,8 @@ export default function SubmitLead() {
               disabled={!isProviderFormValid}
               className={`w-full py-4 rounded-xl text-lg font-semibold transition-all ${
                 isProviderFormValid
-                  ? "bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)]"
-                  : "bg-[#0d2240] text-slate-400 cursor-not-allowed border border-cyan-500/20"
+                  ? "bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] shadow-md hover:shadow-lg"
+                  : "bg-white text-gray-500 cursor-not-allowed border border-gray-200"
               }`}
             >
               Continue to Submit Lead
@@ -1430,35 +1460,23 @@ export default function SubmitLead() {
 
   // Initial Form Screen (Customer Info)
   return (
-    <div className="min-h-screen bg-[#0a1628] relative overflow-hidden">
+    <div className="min-h-screen bg-gray-50 relative overflow-hidden">
       {/* Background circuit lines */}
       <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-        <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-        <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+        <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+        <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-gray-200 to-transparent" />
+        <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
       </div>
 
       <nav className="flex items-center justify-between px-8 py-6 relative z-10">
         <Link href="/" className="flex items-center gap-2">
-          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-            <svg viewBox="0 0 40 40" className="w-6 h-6">
-              <defs>
-                <linearGradient id="logoGradForm" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#ffffff" />
-                  <stop offset="100%" stopColor="#e0f7fa" />
-                </linearGradient>
-              </defs>
-              <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradForm)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradForm)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradForm)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <span className="text-2xl font-bold text-white">LeadzPay</span>
+          <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
+          <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
         </Link>
         <div className="flex items-center gap-4">
           {currentProvider && (
-            <span className="text-slate-400 text-sm">
-              Logged in as: <span className="text-cyan-400">{currentProvider.name}</span>
+            <span className="text-gray-500 text-sm">
+              Logged in as: <span className="text-[#1e3a5f]">{currentProvider.name}</span>
             </span>
           )}
           <button
@@ -1467,7 +1485,7 @@ export default function SubmitLead() {
               setCurrentProvider(null);
               setStep("provider");
             }}
-            className="text-slate-300 hover:text-cyan-400 transition text-sm"
+            className="text-gray-600 hover:text-[#1e3a5f] transition text-sm"
           >
             Switch Account
           </button>
@@ -1476,10 +1494,10 @@ export default function SubmitLead() {
 
       <main className="max-w-2xl mx-auto px-8 py-12 relative z-10">
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-white mb-4">Submit a Lead</h1>
-          <p className="text-slate-300">Enter your customer&apos;s info to get them instant quotes</p>
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">Submit a Lead</h1>
+          <p className="text-gray-600">Enter your customer&apos;s info to get them instant quotes</p>
           {currentProvider && (
-            <p className="text-cyan-400 text-sm mt-2">
+            <p className="text-[#1e3a5f] text-sm mt-2">
               You&apos;ll earn ${currentProvider.payoutRate} for this lead via {currentProvider.paymentMethod || "your payment method"}
             </p>
           )}
@@ -1487,32 +1505,32 @@ export default function SubmitLead() {
 
         <div className="space-y-8">
           {/* Customer Info */}
-          <div className="bg-[#0d2240] p-8 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-            <h2 className="text-xl font-semibold text-white mb-6">Customer Information</h2>
+          <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">Customer Information</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Full Name *</label>
-                <input type="text" name="customerName" value={formData.customerName} onChange={handleInputChange} placeholder="John Smith" className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition" required />
+                <label className="block text-gray-600 text-sm font-medium mb-2">Full Name *</label>
+                <input type="text" name="customerName" value={formData.customerName} onChange={handleInputChange} placeholder="John Smith" className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition" required />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Email *</label>
-                <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="john@example.com" className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition" required />
+                <label className="block text-gray-600 text-sm font-medium mb-2">Email *</label>
+                <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="john@example.com" className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition" required />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Phone *</label>
-                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="(555) 123-4567" className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition" required />
+                <label className="block text-gray-600 text-sm font-medium mb-2">Phone *</label>
+                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="(555) 123-4567" className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition" required />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Age</label>
-                <input type="number" name="age" value={formData.age} onChange={handleInputChange} min="16" max="100" className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:outline-none focus:border-cyan-400 transition" />
+                <label className="block text-gray-600 text-sm font-medium mb-2">Age</label>
+                <input type="number" name="age" value={formData.age} onChange={handleInputChange} min="16" max="100" className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:outline-none focus:border-[#1e3a5f] transition" />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Vehicle *</label>
-                <input type="text" name="carModel" value={formData.carModel} onChange={handleInputChange} placeholder="2024 Toyota Camry" className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition" required />
+                <label className="block text-gray-600 text-sm font-medium mb-2">Vehicle *</label>
+                <input type="text" name="carModel" value={formData.carModel} onChange={handleInputChange} placeholder="2024 Toyota Camry" className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#1e3a5f] transition" required />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">State *</label>
-                <select name="state" value={formData.state} onChange={handleInputChange} className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:outline-none focus:border-cyan-400 transition">
+                <label className="block text-gray-600 text-sm font-medium mb-2">State *</label>
+                <select name="state" value={formData.state} onChange={handleInputChange} className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:outline-none focus:border-[#1e3a5f] transition">
                   {US_STATES.map((state) => (
                     <option key={state.code} value={state.code}>{state.name}</option>
                   ))}
@@ -1522,15 +1540,15 @@ export default function SubmitLead() {
           </div>
 
           {/* Quote Type */}
-          <div className="bg-[#0d2240] p-8 rounded-2xl border border-cyan-500/20 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-            <h2 className="text-xl font-semibold text-white mb-6">What does the customer need?</h2>
+          <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">What does the customer need?</h2>
             <div className="grid gap-4">
               <QuoteTypeButton type="quote" selected={quoteType} onSelect={handleQuoteTypeSelect} title="Get Instant Quotes" description="Compare rates from 10+ insurance companies instantly" color="cyan" />
               <QuoteTypeButton type="switch" selected={quoteType} onSelect={handleQuoteTypeSelect} title="Switch & Save" description="Currently insured but looking for a better deal" color="blue" />
             </div>
           </div>
 
-          <button onClick={handleContinueFromForm} disabled={!isBasicFormValid} className={`w-full py-4 rounded-xl text-lg font-semibold transition-all ${isBasicFormValid ? "bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] shadow-[0_0_20px_rgba(34,211,238,0.3)]" : "bg-[#0d2240] text-slate-400 cursor-not-allowed border border-cyan-500/20"}`}>
+          <button onClick={handleContinueFromForm} disabled={!isBasicFormValid} className={`w-full py-4 rounded-xl text-lg font-semibold transition-all ${isBasicFormValid ? "bg-[#1e3a5f] hover:bg-[#2a4a6f] text-[#0a1628] shadow-md" : "bg-white text-gray-500 cursor-not-allowed border border-gray-200"}`}>
             Continue
           </button>
         </div>
@@ -1544,22 +1562,22 @@ function QuoteTypeButton({ type, selected, onSelect, title, description, color }
 }) {
   const isSelected = selected === type;
   const colors = {
-    cyan: { border: "border-cyan-500", bg: "bg-cyan-500/10", icon: "text-cyan-400", shadow: "shadow-[0_0_15px_rgba(34,211,238,0.2)]" },
+    cyan: { border: "border-[#1e3a5f]", bg: "bg-[#1e3a5f]/10", icon: "text-[#1e3a5f]", shadow: "shadow-[0_0_15px_rgba(34,211,238,0.2)]" },
     blue: { border: "border-blue-500", bg: "bg-blue-500/10", icon: "text-blue-400", shadow: "shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
   }[color];
 
   return (
-    <button type="button" onClick={() => onSelect(type)} className={`p-4 rounded-xl border-2 text-left transition-all ${isSelected ? `${colors.border} ${colors.bg} ${colors.shadow}` : "border-cyan-500/30 hover:border-cyan-500/50"}`}>
+    <button type="button" onClick={() => onSelect(type)} className={`p-4 rounded-xl border-2 text-left transition-all ${isSelected ? `${colors.border} ${colors.bg} ${colors.shadow}` : "border-gray-200 hover:border-[#1e3a5f]/30"}`}>
       <div className="flex items-center gap-4">
-        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isSelected ? colors.bg : "bg-[#0a1628]"}`}>
-          <svg className={`w-5 h-5 ${isSelected ? colors.icon : "text-slate-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isSelected ? colors.bg : "bg-gray-50"}`}>
+          <svg className={`w-5 h-5 ${isSelected ? colors.icon : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {type === "switch" && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />}
             {type === "quote" && <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />}
           </svg>
         </div>
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <p className="text-slate-400 text-sm">{description}</p>
+          <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+          <p className="text-gray-500 text-sm">{description}</p>
         </div>
         {isSelected && <svg className={`w-6 h-6 ${colors.icon}`} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
       </div>

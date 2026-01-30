@@ -1,101 +1,56 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useLeads, type Lead, type Provider } from "@/lib/leads-context";
+import { useAuth, useCurrentBuyer } from "@/lib/auth-context";
+import { useConnections } from "@/lib/connection-context";
+import { isBuyer } from "@/lib/auth-types";
+import { ConnectionRequest, ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 
-type Tab = "dashboard" | "leads" | "providers" | "ledger" | "settings";
+type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
 
 export default function BusinessPortal() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [accessCode, setAccessCode] = useState("");
-  const [error, setError] = useState("");
+  const router = useRouter();
+  const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
+  const currentBuyer = useCurrentBuyer();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const { leads, providers, updateProvider, addProvider } = useLeads();
+  const {
+    getRequestsForBuyer,
+    getConnectionsForBuyer,
+    setTermsForRequest,
+    rejectRequest,
+    updateConnectionTerms,
+    terminateConnection,
+  } = useConnections();
 
-  // Check for existing session
+  // Get connection requests for this buyer
+  const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending") : [];
+  const myConnections = currentUser ? getConnectionsForBuyer(currentUser.id) : [];
+
+  // Redirect to login if not authenticated or not a buyer
   useEffect(() => {
-    const session = localStorage.getItem("leadzpay_business_session");
-    if (session === "authenticated") {
-      setIsAuthenticated(true);
+    if (!isLoading && (!isAuthenticated || !currentUser)) {
+      router.push("/auth/login?role=buyer");
+    } else if (!isLoading && currentUser && !isBuyer(currentUser)) {
+      // If logged in as provider, redirect to provider dashboard
+      router.push("/provider-dashboard");
     }
-  }, []);
-
-  const handleLogin = () => {
-    if (accessCode === "leadzpay2025" || accessCode === "business123") {
-      setIsAuthenticated(true);
-      localStorage.setItem("leadzpay_business_session", "authenticated");
-      setError("");
-    } else {
-      setError("Invalid access code. Please try again.");
-    }
-  };
+  }, [isLoading, isAuthenticated, currentUser, router]);
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem("leadzpay_business_session");
-    setAccessCode("");
+    logout();
+    router.push("/");
   };
 
-  // Login Screen
-  if (!isAuthenticated) {
+  // Show loading while checking auth
+  if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser)) {
     return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background circuit lines */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-          <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
-        </div>
-
-        <div className="bg-[#0d2240] p-8 rounded-2xl border border-cyan-500/20 max-w-md w-full shadow-[0_0_30px_rgba(34,211,238,0.1)] relative z-10">
-          <div className="text-center mb-8">
-            <div className="h-16 w-16 rounded-2xl bg-cyan-500/20 flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(34,211,238,0.3)]">
-              <svg className="w-8 h-8 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-2">Business Portal</h1>
-            <p className="text-slate-400">Enter your access code to continue</p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">Access Code</label>
-              <input
-                type="password"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                placeholder="Enter your business access code"
-                className="w-full px-4 py-3 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleLogin}
-              className="w-full bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-3 rounded-lg font-semibold transition shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)]"
-            >
-              Sign In
-            </button>
-
-            <Link href="/" className="block text-center text-slate-400 hover:text-cyan-400 text-sm transition">
-              Back to Home
-            </Link>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-cyan-500/20">
-            <p className="text-slate-500 text-xs text-center">
-              Demo access code: <span className="text-cyan-400">leadzpay2025</span>
-            </p>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
       </div>
     );
   }
@@ -104,7 +59,6 @@ export default function BusinessPortal() {
   const totalLeads = leads.length;
   const claimedLeads = leads.filter(l => l.status === "claimed").length;
   const totalPayouts = leads.reduce((sum, l) => sum + (l.payout || 0), 0);
-  const totalPoliciesSold = leads.filter(l => l.status === "claimed").length;
   const avgLeadValue = totalLeads > 0 ? totalPayouts / totalLeads : 0;
 
   // Get leads by provider for chart
@@ -127,41 +81,39 @@ export default function BusinessPortal() {
   }));
 
   return (
-    <div className="min-h-screen bg-[#0a1628] relative">
-      {/* Background circuit lines */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none">
-        <div className="absolute top-20 left-10 w-px h-32 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-        <div className="absolute top-40 right-20 w-px h-48 bg-gradient-to-b from-transparent via-cyan-400 to-transparent" />
-        <div className="absolute bottom-32 left-1/4 w-24 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
-        <div className="absolute top-1/2 right-1/3 w-32 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Watermark Logo Background */}
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
+        <Image
+          src="/logo.jpg"
+          alt=""
+          width={600}
+          height={600}
+          className="opacity-[0.02] select-none"
+          priority
+        />
       </div>
 
       {/* Header */}
-      <header className="bg-[#0d2240]/80 border-b border-cyan-500/20 px-8 py-4 backdrop-blur-sm relative z-10">
+      <header className="relative z-10 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.4)]">
-                <svg viewBox="0 0 40 40" className="w-6 h-6">
-                  <defs>
-                    <linearGradient id="logoGradBiz" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#ffffff" />
-                      <stop offset="100%" stopColor="#e0f7fa" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M8 8 L8 28 L18 28" fill="none" stroke="url(#logoGradBiz)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M22 8 L16 20 L22 20 L18 32" fill="none" stroke="url(#logoGradBiz)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M26 28 L26 8 L32 8 Q36 8 36 14 Q36 20 32 20 L26 20" fill="none" stroke="url(#logoGradBiz)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <span className="text-2xl font-bold text-white">LeadzPay</span>
+              <Image
+                src="/logo.jpg"
+                alt="LeadzPay Logo"
+                width={40}
+                height={40}
+                className="h-10 w-10 object-contain"
+              />
+              <span className="text-2xl font-bold text-[#1e3a5f]">LeadzPay</span>
             </Link>
-            <span className="text-cyan-500/50">|</span>
-            <span className="text-cyan-400 font-medium">Business Portal</span>
+            <span className="text-gray-300">|</span>
+            <span className="text-[#1e3a5f] font-medium">{currentBuyer?.businessName || "Business Portal"}</span>
           </div>
           <button
             onClick={handleLogout}
-            className="text-slate-400 hover:text-cyan-400 transition flex items-center gap-2"
+            className="text-gray-500 hover:text-[#1e3a5f] transition flex items-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -171,20 +123,25 @@ export default function BusinessPortal() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-8 py-8 relative z-10">
+      <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "leads", "providers", "ledger", "settings"] as Tab[]).map((tab) => (
+          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-cyan-500 text-[#0a1628] shadow-[0_0_15px_rgba(34,211,238,0.3)]"
-                  : "bg-[#0d2240] text-slate-400 hover:text-cyan-400 hover:bg-[#0d2240]/80 border border-cyan-500/20"
+                  ? "bg-[#1e3a5f] text-white shadow-md"
+                  : "bg-white text-gray-600 hover:text-[#1e3a5f] hover:bg-gray-100 border border-gray-200"
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "requests" && pendingRequests.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                  {pendingRequests.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -194,7 +151,7 @@ export default function BusinessPortal() {
           <div className="space-y-8">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard title="Total Leads" value={totalLeads.toString()} color="cyan" />
+              <StatCard title="Total Leads" value={totalLeads.toString()} color="navy" />
               <StatCard title="Policies Sold" value={claimedLeads.toString()} color="emerald" />
               <StatCard title="Total Payouts" value={`$${totalPayouts.toLocaleString()}`} color="blue" />
               <StatCard title="Avg Lead Value" value={`$${avgLeadValue.toFixed(0)}`} color="amber" />
@@ -203,39 +160,39 @@ export default function BusinessPortal() {
             {/* Charts Row */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* Leads by Day Chart */}
-              <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-                <h3 className="text-lg font-semibold text-white mb-4">Leads This Week</h3>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Leads This Week</h3>
                 <div className="flex items-end justify-between h-48 gap-2">
                   {leadsByDay.map((day, i) => (
                     <div key={i} className="flex-1 flex flex-col items-center">
                       <div className="flex-1 w-full flex items-end">
                         <div
-                          className="w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-t-lg transition-all shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                          className="w-full bg-[#1e3a5f] rounded-t-lg transition-all"
                           style={{ height: `${Math.max(day.count * 20, 8)}%` }}
                         />
                       </div>
-                      <span className="text-slate-400 text-xs mt-2">{day.day}</span>
-                      <span className="text-white text-sm font-medium">{day.count}</span>
+                      <span className="text-gray-500 text-xs mt-2">{day.day}</span>
+                      <span className="text-[#1e3a5f] text-sm font-medium">{day.count}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Top Providers Chart */}
-              <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-                <h3 className="text-lg font-semibold text-white mb-4">Top Providers</h3>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Top Providers</h3>
                 <div className="space-y-4">
                   {leadsByProvider.slice(0, 5).map((provider, i) => (
                     <div key={provider.id} className="flex items-center gap-4">
-                      <span className="text-cyan-400/50 w-6">{i + 1}.</span>
+                      <span className="text-gray-400 w-6">{i + 1}.</span>
                       <div className="flex-1">
                         <div className="flex justify-between mb-1">
-                          <span className="text-white font-medium">{provider.name}</span>
-                          <span className="text-slate-400">{provider.leadCount} leads</span>
+                          <span className="text-gray-800 font-medium">{provider.name}</span>
+                          <span className="text-gray-500">{provider.leadCount} leads</span>
                         </div>
-                        <div className="h-2 bg-[#0a1628] rounded-full overflow-hidden">
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.4)]"
+                            className="h-full bg-[#1e3a5f] rounded-full"
                             style={{ width: `${(provider.leadCount / Math.max(...leadsByProvider.map(p => p.leadCount), 1)) * 100}%` }}
                           />
                         </div>
@@ -243,19 +200,19 @@ export default function BusinessPortal() {
                     </div>
                   ))}
                   {leadsByProvider.length === 0 && (
-                    <p className="text-slate-500 text-center py-8">No providers yet</p>
+                    <p className="text-gray-400 text-center py-8">No providers yet</p>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Recent Leads */}
-            <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-              <h3 className="text-lg font-semibold text-white mb-4">Recent Leads</h3>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Recent Leads</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="text-left text-slate-400 border-b border-cyan-500/20">
+                    <tr className="text-left text-gray-500 border-b border-gray-200">
                       <th className="pb-3 font-medium">Customer</th>
                       <th className="pb-3 font-medium">Vehicle</th>
                       <th className="pb-3 font-medium">Provider</th>
@@ -270,7 +227,7 @@ export default function BusinessPortal() {
                     ))}
                     {leads.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="text-center text-slate-500 py-8">
+                        <td colSpan={6} className="text-center text-gray-400 py-8">
                           No leads yet
                         </td>
                       </tr>
@@ -282,16 +239,29 @@ export default function BusinessPortal() {
           </div>
         )}
 
+        {/* Requests Tab */}
+        {activeTab === "requests" && (
+          <RequestsTab
+            buyerId={currentUser.id}
+            pendingRequests={pendingRequests}
+            myConnections={myConnections}
+            setTermsForRequest={setTermsForRequest}
+            rejectRequest={rejectRequest}
+            updateConnectionTerms={updateConnectionTerms}
+            terminateConnection={terminateConnection}
+          />
+        )}
+
         {/* Leads Tab */}
         {activeTab === "leads" && (
-          <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">All Leads ({leads.length})</h3>
+              <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({leads.length})</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="text-left text-slate-400 border-b border-cyan-500/20">
+                  <tr className="text-left text-gray-500 border-b border-gray-200">
                     <th className="pb-3 font-medium">Date</th>
                     <th className="pb-3 font-medium">Customer</th>
                     <th className="pb-3 font-medium">Contact</th>
@@ -304,24 +274,24 @@ export default function BusinessPortal() {
                 </thead>
                 <tbody>
                   {leads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-cyan-500/10">
-                      <td className="py-4 text-slate-400 text-sm">
+                    <tr key={lead.id} className="border-b border-gray-100">
+                      <td className="py-4 text-gray-500 text-sm">
                         {new Date(lead.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="py-4 text-white font-medium">{lead.customerName}</td>
-                      <td className="py-4 text-slate-400 text-sm">
+                      <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
+                      <td className="py-4 text-gray-500 text-sm">
                         <div>{lead.email}</div>
                         <div>{lead.phone}</div>
                       </td>
-                      <td className="py-4 text-slate-300">{lead.carModel}</td>
-                      <td className="py-4 text-slate-300">{lead.providerName}</td>
-                      <td className="py-4 text-cyan-400">
+                      <td className="py-4 text-gray-600">{lead.carModel}</td>
+                      <td className="py-4 text-gray-600">{lead.providerName}</td>
+                      <td className="py-4 text-[#1e3a5f] font-medium">
                         {lead.quote ? `$${lead.quote.monthlyPremium}/mo` : "-"}
                       </td>
                       <td className="py-4">
                         <StatusBadge status={lead.status} />
                       </td>
-                      <td className="py-4 text-white font-medium">${lead.payout || 0}</td>
+                      <td className="py-4 text-gray-800 font-medium">${lead.payout || 0}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -340,44 +310,14 @@ export default function BusinessPortal() {
           <LedgerTab leads={leads} providers={providers} />
         )}
 
+        {/* Rolodex Tab */}
+        {activeTab === "rolodex" && (
+          <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} />
+        )}
+
         {/* Settings Tab */}
         {activeTab === "settings" && (
-          <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 max-w-2xl shadow-[0_0_20px_rgba(34,211,238,0.05)]">
-            <h3 className="text-lg font-semibold text-white mb-6">Business Settings</h3>
-            <div className="space-y-6">
-              <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Default Lead Payout Rate</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-cyan-400">$</span>
-                  <input
-                    type="number"
-                    defaultValue={50}
-                    className="w-32 px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition"
-                  />
-                  <span className="text-slate-400">per lead</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Business Name</label>
-                <input
-                  type="text"
-                  defaultValue="My Insurance Agency"
-                  className="w-full px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Notification Email</label>
-                <input
-                  type="email"
-                  placeholder="business@example.com"
-                  className="w-full px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition"
-                />
-              </div>
-              <button className="bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] px-6 py-2 rounded-lg transition font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-                Save Settings
-              </button>
-            </div>
-          </div>
+          <SettingsTab currentBuyer={currentBuyer} />
         )}
       </div>
     </div>
@@ -386,22 +326,15 @@ export default function BusinessPortal() {
 
 function StatCard({ title, value, color }: { title: string; value: string; color: string }) {
   const colors: Record<string, string> = {
-    cyan: "text-cyan-400",
-    emerald: "text-emerald-400",
-    blue: "text-blue-400",
-    amber: "text-amber-400",
-  };
-
-  const glowColors: Record<string, string> = {
-    cyan: "shadow-[0_0_20px_rgba(34,211,238,0.1)]",
-    emerald: "shadow-[0_0_20px_rgba(52,211,153,0.1)]",
-    blue: "shadow-[0_0_20px_rgba(59,130,246,0.1)]",
-    amber: "shadow-[0_0_20px_rgba(251,191,36,0.1)]",
+    navy: "text-[#1e3a5f]",
+    emerald: "text-emerald-600",
+    blue: "text-blue-600",
+    amber: "text-amber-600",
   };
 
   return (
-    <div className={`bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 ${glowColors[color]}`}>
-      <p className="text-slate-400 text-sm mb-1">{title}</p>
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <p className="text-gray-500 text-sm mb-1">{title}</p>
       <p className={`text-3xl font-bold ${colors[color]}`}>{value}</p>
     </div>
   );
@@ -409,9 +342,9 @@ function StatCard({ title, value, color }: { title: string; value: string; color
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-amber-500/20 text-amber-400",
-    claimed: "bg-emerald-500/20 text-emerald-400",
-    expired: "bg-red-500/20 text-red-400",
+    pending: "bg-amber-100 text-amber-700",
+    claimed: "bg-emerald-100 text-emerald-700",
+    expired: "bg-red-100 text-red-700",
   };
 
   return (
@@ -423,17 +356,17 @@ function StatusBadge({ status }: { status: string }) {
 
 function LeadRow({ lead }: { lead: Lead }) {
   return (
-    <tr className="border-b border-cyan-500/10">
-      <td className="py-4 text-white font-medium">{lead.customerName}</td>
-      <td className="py-4 text-slate-300">{lead.carModel}</td>
-      <td className="py-4 text-slate-300">{lead.providerName}</td>
-      <td className="py-4 text-cyan-400">
+    <tr className="border-b border-gray-100">
+      <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
+      <td className="py-4 text-gray-600">{lead.carModel}</td>
+      <td className="py-4 text-gray-600">{lead.providerName}</td>
+      <td className="py-4 text-[#1e3a5f] font-medium">
         {lead.quote ? `$${lead.quote.monthlyPremium}/mo` : "-"}
       </td>
       <td className="py-4">
         <StatusBadge status={lead.status} />
       </td>
-      <td className="py-4 text-white font-medium">${lead.payout || 0}</td>
+      <td className="py-4 text-gray-800 font-medium">${lead.payout || 0}</td>
     </tr>
   );
 }
@@ -450,6 +383,11 @@ function ProvidersTab({
   addProvider: (provider: Omit<Provider, "id">) => Provider;
 }) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [newRate, setNewRate] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [newProviderName, setNewProviderName] = useState("");
   const [newProviderEmail, setNewProviderEmail] = useState("");
   const [newProviderRate, setNewProviderRate] = useState("50");
@@ -473,13 +411,95 @@ function ProvidersTab({
     }
   };
 
+  const openRateModal = (provider: Provider) => {
+    setSelectedProvider(provider);
+    setNewRate(provider.payoutRate.toString());
+    setShowRateModal(true);
+  };
+
+  const handleRateChange = async () => {
+    if (!selectedProvider || !newRate) return;
+
+    const newRateNum = parseInt(newRate);
+    if (newRateNum === selectedProvider.payoutRate) {
+      setShowRateModal(false);
+      return;
+    }
+
+    setIsUpdating(true);
+
+    try {
+      // Send email notification
+      const response = await fetch("/api/notify-rate-change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerName: selectedProvider.name,
+          providerEmail: selectedProvider.email,
+          oldRate: selectedProvider.payoutRate,
+          newRate: newRateNum,
+        }),
+      });
+
+      const data = await response.json();
+
+      // Update the provider rate
+      updateProvider(selectedProvider.id, { payoutRate: newRateNum });
+
+      setShowRateModal(false);
+      setNotification({
+        type: "success",
+        message: `Rate updated to $${newRateNum}/lead. ${data.notifications?.provider?.simulated ? "Email notification simulated." : "Email sent to " + selectedProvider.email}`,
+      });
+
+      // Clear notification after 5 seconds
+      setTimeout(() => setNotification(null), 5000);
+    } catch (error) {
+      console.error("Rate change error:", error);
+      setNotification({
+        type: "error",
+        message: "Failed to update rate. Please try again.",
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-xl border shadow-lg ${
+          notification.type === "success"
+            ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+            : "bg-red-50 border-red-200 text-red-700"
+        }`}>
+          <div className="flex items-center gap-3">
+            {notification.type === "success" ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <p className="text-sm">{notification.message}</p>
+            <button onClick={() => setNotification(null)} className="ml-2 hover:opacity-70">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Manage Providers ({providers.length})</h3>
+        <h3 className="text-lg font-semibold text-[#1e3a5f]">Manage Providers ({providers.length})</h3>
         <button
           onClick={() => setShowAddModal(true)}
-          className="bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] px-4 py-2 rounded-lg transition flex items-center gap-2 font-semibold shadow-[0_0_15px_rgba(34,211,238,0.3)]"
+          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-semibold shadow-md"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -488,50 +508,152 @@ function ProvidersTab({
         </button>
       </div>
 
+      {/* Rate Change Modal */}
+      {showRateModal && selectedProvider && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-gray-200 shadow-xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-12 w-12 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-[#1e3a5f]">Change Payout Rate</h3>
+                <p className="text-gray-500 text-sm">{selectedProvider.name}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Current Rate</span>
+                  <span className="text-gray-800 font-bold text-lg">${selectedProvider.payoutRate}/lead</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">New Rate (per lead)</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[#1e3a5f] text-xl">$</span>
+                  <input
+                    type="number"
+                    value={newRate}
+                    onChange={(e) => setNewRate(e.target.value)}
+                    min="0"
+                    className="flex-1 px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xl font-bold focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+              </div>
+
+              {parseInt(newRate) !== selectedProvider.payoutRate && (
+                <div className={`p-3 rounded-lg border ${
+                  parseInt(newRate) > selectedProvider.payoutRate
+                    ? "bg-emerald-50 border-emerald-200"
+                    : "bg-amber-50 border-amber-200"
+                }`}>
+                  <p className={`text-sm ${
+                    parseInt(newRate) > selectedProvider.payoutRate
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                  }`}>
+                    {parseInt(newRate) > selectedProvider.payoutRate
+                      ? `Rate increase of $${parseInt(newRate) - selectedProvider.payoutRate} per lead`
+                      : `Rate decrease of $${selectedProvider.payoutRate - parseInt(newRate)} per lead`
+                    }
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <div>
+                    <p className="text-blue-700 text-sm font-medium">Email Notification</p>
+                    <p className="text-blue-600 text-xs mt-1">
+                      Both {selectedProvider.name} and you will receive an email notification about this rate change.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowRateModal(false)}
+                  disabled={isUpdating}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg transition border border-gray-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRateChange}
+                  disabled={isUpdating || !newRate || parseInt(newRate) === selectedProvider.payoutRate}
+                  className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isUpdating ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Updating...
+                    </>
+                  ) : (
+                    "Confirm & Notify"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Provider Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0d2240] rounded-2xl max-w-md w-full p-6 border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
-            <h3 className="text-xl font-bold text-white mb-4">Add New Provider</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-gray-200 shadow-xl">
+            <h3 className="text-xl font-bold text-[#1e3a5f] mb-4">Add New Provider</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-slate-300 text-sm mb-2">Provider Name</label>
+                <label className="block text-gray-700 text-sm mb-2">Provider Name</label>
                 <input
                   type="text"
                   value={newProviderName}
                   onChange={(e) => setNewProviderName(e.target.value)}
                   placeholder="John Smith"
-                  className="w-full px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
                 />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm mb-2">Email</label>
+                <label className="block text-gray-700 text-sm mb-2">Email</label>
                 <input
                   type="email"
                   value={newProviderEmail}
                   onChange={(e) => setNewProviderEmail(e.target.value)}
                   placeholder="john@example.com"
-                  className="w-full px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
                 />
               </div>
               <div>
-                <label className="block text-slate-300 text-sm mb-2">Payout Rate (per lead)</label>
+                <label className="block text-gray-700 text-sm mb-2">Payout Rate (per lead)</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-cyan-400">$</span>
+                  <span className="text-[#1e3a5f]">$</span>
                   <input
                     type="number"
                     value={newProviderRate}
                     onChange={(e) => setNewProviderRate(e.target.value)}
-                    className="w-32 px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition"
+                    className="w-32 px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-slate-300 text-sm mb-2">Payment Method</label>
+                <label className="block text-gray-700 text-sm mb-2">Payment Method</label>
                 <select
                   value={newProviderPayment}
                   onChange={(e) => setNewProviderPayment(e.target.value as "venmo" | "paypal" | "bank")}
-                  className="w-full px-4 py-2 rounded-lg bg-[#0a1628] border border-cyan-500/30 text-white focus:border-cyan-400 focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition"
                 >
                   <option value="venmo">Venmo</option>
                   <option value="paypal">PayPal</option>
@@ -541,13 +663,13 @@ function ProvidersTab({
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-[#0a1628] hover:bg-[#0a1628]/80 text-white py-2 rounded-lg transition border border-cyan-500/30"
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg transition border border-gray-200"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAddProvider}
-                  className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-[#0a1628] py-2 rounded-lg transition font-semibold"
+                  className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-2 rounded-lg transition font-semibold"
                 >
                   Add Provider
                 </button>
@@ -564,26 +686,26 @@ function ProvidersTab({
           const totalPayout = providerLeads.reduce((sum, l) => sum + (l.payout || 0), 0);
 
           return (
-            <div key={provider.id} className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_15px_rgba(34,211,238,0.05)]">
+            <div key={provider.id} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-cyan-500/20 flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.2)]">
-                    <span className="text-cyan-400 font-bold text-lg">
+                  <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">
                       {provider.name.charAt(0)}
                     </span>
                   </div>
                   <div>
-                    <h4 className="text-white font-semibold text-lg">{provider.name}</h4>
-                    <p className="text-slate-400 text-sm">{provider.email}</p>
+                    <h4 className="text-gray-800 font-semibold text-lg">{provider.name}</h4>
+                    <p className="text-gray-500 text-sm">{provider.email}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-0.5 rounded-full text-xs ${
                         provider.status === "active"
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-red-500/20 text-red-400"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-red-100 text-red-700"
                       }`}>
                         {provider.status}
                       </span>
-                      <span className="text-slate-500 text-xs">
+                      <span className="text-gray-400 text-xs">
                         Payment: {provider.paymentMethod || "Not set"}
                       </span>
                     </div>
@@ -591,28 +713,28 @@ function ProvidersTab({
                 </div>
 
                 <div className="text-right">
-                  <div className="text-slate-400 text-sm">Payout Rate</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-cyan-400">$</span>
-                    <input
-                      type="number"
-                      value={provider.payoutRate}
-                      onChange={(e) => updateProvider(provider.id, { payoutRate: parseInt(e.target.value) || 0 })}
-                      className="w-20 px-2 py-1 rounded bg-[#0a1628] border border-cyan-500/30 text-white text-right focus:border-cyan-400 focus:outline-none transition"
-                    />
-                    <span className="text-slate-400">/lead</span>
-                  </div>
+                  <div className="text-gray-500 text-sm mb-1">Payout Rate</div>
+                  <button
+                    onClick={() => openRateModal(provider)}
+                    className="group flex items-center gap-2 bg-gray-50 hover:bg-[#1e3a5f]/5 border border-gray-200 hover:border-[#1e3a5f]/30 px-4 py-2 rounded-lg transition"
+                  >
+                    <span className="text-[#1e3a5f] font-bold text-lg">${provider.payoutRate}</span>
+                    <span className="text-gray-500 text-sm">/lead</span>
+                    <svg className="w-4 h-4 text-gray-400 group-hover:text-[#1e3a5f] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-cyan-500/20">
+              <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-gray-200">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Leads</p>
-                  <p className="text-white text-xl font-bold">{providerLeads.length}</p>
+                  <p className="text-gray-500 text-sm">Total Leads</p>
+                  <p className="text-gray-800 text-xl font-bold">{providerLeads.length}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">Total Earned</p>
-                  <p className="text-cyan-400 text-xl font-bold">${totalPayout}</p>
+                  <p className="text-gray-500 text-sm">Total Earned</p>
+                  <p className="text-[#1e3a5f] text-xl font-bold">${totalPayout}</p>
                 </div>
                 <div className="flex items-end justify-end gap-2">
                   <button
@@ -621,8 +743,8 @@ function ProvidersTab({
                     })}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                       provider.status === "active"
-                        ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                        : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                        ? "bg-red-100 text-red-700 hover:bg-red-200"
+                        : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
                     }`}
                   >
                     {provider.status === "active" ? "Deactivate" : "Activate"}
@@ -634,8 +756,8 @@ function ProvidersTab({
         })}
 
         {providers.length === 0 && (
-          <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-12 text-center">
-            <p className="text-slate-500">No providers yet. Add your first provider above.</p>
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <p className="text-gray-400">No providers yet. Add your first provider above.</p>
           </div>
         )}
       </div>
@@ -668,25 +790,25 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_15px_rgba(34,211,238,0.05)]">
-          <p className="text-slate-400 text-sm mb-1">Total Transactions</p>
-          <p className="text-3xl font-bold text-white">{transactions.length}</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-gray-500 text-sm mb-1">Total Transactions</p>
+          <p className="text-3xl font-bold text-gray-800">{transactions.length}</p>
         </div>
-        <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_15px_rgba(52,211,153,0.1)]">
-          <p className="text-slate-400 text-sm mb-1">Total Paid Out</p>
-          <p className="text-3xl font-bold text-emerald-400">${totalPaid.toLocaleString()}</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-gray-500 text-sm mb-1">Total Paid Out</p>
+          <p className="text-3xl font-bold text-emerald-600">${totalPaid.toLocaleString()}</p>
         </div>
-        <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_15px_rgba(251,191,36,0.1)]">
-          <p className="text-slate-400 text-sm mb-1">Pending Payouts</p>
-          <p className="text-3xl font-bold text-amber-400">${totalPending.toLocaleString()}</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <p className="text-gray-500 text-sm mb-1">Pending Payouts</p>
+          <p className="text-3xl font-bold text-amber-600">${totalPending.toLocaleString()}</p>
         </div>
       </div>
 
       {/* Ledger Table */}
-      <div className="bg-[#0d2240] rounded-xl border border-cyan-500/20 p-6 shadow-[0_0_20px_rgba(34,211,238,0.05)]">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-white">Transaction Ledger</h3>
-          <button className="text-cyan-400 hover:text-cyan-300 text-sm flex items-center gap-1">
+          <h3 className="text-lg font-semibold text-[#1e3a5f]">Transaction Ledger</h3>
+          <button className="text-[#1e3a5f] hover:text-[#2a4a6f] text-sm flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
@@ -697,7 +819,7 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="text-left text-slate-400 border-b border-cyan-500/20">
+              <tr className="text-left text-gray-500 border-b border-gray-200">
                 <th className="pb-3 font-medium">Date</th>
                 <th className="pb-3 font-medium">Provider</th>
                 <th className="pb-3 font-medium">Customer</th>
@@ -709,31 +831,31 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
             </thead>
             <tbody>
               {transactions.map((tx) => (
-                <tr key={tx.id} className="border-b border-cyan-500/10">
-                  <td className="py-4 text-slate-400 text-sm">
+                <tr key={tx.id} className="border-b border-gray-100">
+                  <td className="py-4 text-gray-500 text-sm">
                     {new Date(tx.date).toLocaleDateString()} {new Date(tx.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </td>
-                  <td className="py-4 text-white font-medium">{tx.provider}</td>
-                  <td className="py-4 text-slate-300">{tx.customer}</td>
-                  <td className="py-4 text-slate-300 text-sm">{tx.vehicle}</td>
+                  <td className="py-4 text-gray-800 font-medium">{tx.provider}</td>
+                  <td className="py-4 text-gray-600">{tx.customer}</td>
+                  <td className="py-4 text-gray-600 text-sm">{tx.vehicle}</td>
                   <td className="py-4">
                     <PaymentMethodBadge method={tx.paymentMethod} />
                   </td>
                   <td className="py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       tx.status === "completed"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-amber-500/20 text-amber-400"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
                     }`}>
                       {tx.status}
                     </span>
                   </td>
-                  <td className="py-4 text-cyan-400 font-bold text-right">${tx.amount}</td>
+                  <td className="py-4 text-[#1e3a5f] font-bold text-right">${tx.amount}</td>
                 </tr>
               ))}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-slate-500 py-12">
+                  <td colSpan={7} className="text-center text-gray-400 py-12">
                     No transactions yet
                   </td>
                 </tr>
@@ -748,10 +870,10 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
 
 function PaymentMethodBadge({ method }: { method: string }) {
   const styles: Record<string, { bg: string; text: string; icon: string }> = {
-    venmo: { bg: "bg-cyan-500/20", text: "text-cyan-400", icon: "V" },
-    paypal: { bg: "bg-indigo-500/20", text: "text-indigo-400", icon: "P" },
-    bank: { bg: "bg-emerald-500/20", text: "text-emerald-400", icon: "B" },
-    pending: { bg: "bg-slate-500/20", text: "text-slate-400", icon: "?" },
+    venmo: { bg: "bg-blue-100", text: "text-blue-700", icon: "V" },
+    paypal: { bg: "bg-indigo-100", text: "text-indigo-700", icon: "P" },
+    bank: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "B" },
+    pending: { bg: "bg-gray-100", text: "text-gray-500", icon: "?" },
   };
 
   const style = styles[method] || styles.pending;
@@ -761,5 +883,885 @@ function PaymentMethodBadge({ method }: { method: string }) {
       <span className="font-bold">{style.icon}</span>
       {method.charAt(0).toUpperCase() + method.slice(1)}
     </span>
+  );
+}
+
+// Rolodex Tab - View connected providers as baseball cards
+function RolodexTab({
+  providers,
+  leads,
+  currentBuyer
+}: {
+  providers: Provider[];
+  leads: Lead[];
+  currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
+}) {
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter providers based on search
+  const filteredProviders = providers.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Calculate stats for each provider
+  const providersWithStats = filteredProviders.map(provider => {
+    const providerLeads = leads.filter(l => l.providerId === provider.id);
+    const claimedLeads = providerLeads.filter(l => l.status === "claimed");
+    return {
+      ...provider,
+      totalLeads: providerLeads.length,
+      totalEarnings: providerLeads.reduce((sum, l) => sum + (l.payout || 0), 0),
+      conversionRate: providerLeads.length > 0
+        ? Math.round((claimedLeads.length / providerLeads.length) * 100)
+        : 0,
+      lastLeadDate: providerLeads.length > 0
+        ? new Date(providerLeads[0].createdAt).toLocaleDateString()
+        : "Never",
+    };
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-[#1e3a5f]">Your Rolodex</h3>
+          <p className="text-gray-500 text-sm">View and manage your connected lead providers</p>
+        </div>
+        <div className="relative w-full sm:w-auto">
+          <input
+            type="text"
+            placeholder="Search providers..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#1e3a5f] transition"
+          />
+          <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Provider Cards Grid */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {providersWithStats.map((provider) => (
+          <div
+            key={provider.id}
+            onClick={() => setSelectedProvider(provider)}
+            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#1e3a5f]/30 transition cursor-pointer group"
+          >
+            {/* Card Header */}
+            <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-xl font-bold">{provider.name.charAt(0)}</span>
+                </div>
+                <div>
+                  <h4 className="font-semibold">{provider.name}</h4>
+                  <p className="text-white/70 text-sm">@{provider.email.split("@")[0]}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#1e3a5f]">{provider.totalLeads}</p>
+                  <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-emerald-600">${provider.totalEarnings}</p>
+                  <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
+                <div className="flex items-center gap-1 text-gray-500">
+                  <span className="font-medium text-[#1e3a5f]">${provider.payoutRate}</span>
+                  <span>/lead</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-xs ${
+                  provider.status === "active"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}>
+                  {provider.status}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredProviders.length === 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <p className="text-gray-400">
+            {searchQuery ? "No providers match your search" : "No providers in your rolodex yet"}
+          </p>
+        </div>
+      )}
+
+      {/* Provider Detail Modal */}
+      {selectedProvider && (
+        <ProviderDetailModal
+          provider={selectedProvider}
+          leads={leads.filter(l => l.providerId === selectedProvider.id)}
+          onClose={() => setSelectedProvider(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Provider Detail Modal - Full baseball card view
+function ProviderDetailModal({
+  provider,
+  leads,
+  onClose
+}: {
+  provider: Provider;
+  leads: Lead[];
+  onClose: () => void;
+}) {
+  const [activeView, setActiveView] = useState<"card" | "ledger">("card");
+  const claimedLeads = leads.filter(l => l.status === "claimed");
+  const conversionRate = leads.length > 0 ? Math.round((claimedLeads.length / leads.length) * 100) : 0;
+  const totalPaid = leads.reduce((sum, l) => sum + (l.payout || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-6 text-white relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-white/70 hover:text-white transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div className="flex items-center gap-4">
+            <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center">
+              <span className="text-3xl font-bold">{provider.name.charAt(0)}</span>
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold">{provider.name}</h3>
+              <p className="text-white/70">{provider.email}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs ${
+                  provider.status === "active"
+                    ? "bg-emerald-500/20 text-emerald-200"
+                    : "bg-red-500/20 text-red-200"
+                }`}>
+                  {provider.status}
+                </span>
+                {provider.paymentMethod && (
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-white/10 text-white/80">
+                    {provider.paymentMethod}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setActiveView("card")}
+            className={`flex-1 py-3 font-medium transition ${
+              activeView === "card"
+                ? "text-[#1e3a5f] border-b-2 border-[#1e3a5f]"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Stats Card
+          </button>
+          <button
+            onClick={() => setActiveView("ledger")}
+            className={`flex-1 py-3 font-medium transition ${
+              activeView === "ledger"
+                ? "text-[#1e3a5f] border-b-2 border-[#1e3a5f]"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Payment Ledger
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 max-h-[50vh] overflow-y-auto">
+          {activeView === "card" ? (
+            <div className="space-y-6">
+              {/* Career Stats */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Career Stats</h4>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-[#1e3a5f]">{leads.length}</p>
+                    <p className="text-gray-500 text-sm">Total Leads</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-emerald-600">${totalPaid}</p>
+                    <p className="text-gray-500 text-sm">Total Paid</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-blue-600">{conversionRate}%</p>
+                    <p className="text-gray-500 text-sm">Conversion</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-amber-600">${provider.payoutRate}</p>
+                    <p className="text-gray-500 text-sm">Per Lead</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agreement Info */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Agreement</h4>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-gray-800 font-medium">Current Payout Rate</p>
+                      <p className="text-gray-500 text-sm">Payment: {provider.paymentMethod || "Not set"}</p>
+                    </div>
+                    <p className="text-2xl font-bold text-[#1e3a5f]">${provider.payoutRate}/lead</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Transaction History</h4>
+                <p className="text-sm text-gray-500">{leads.length} transactions</p>
+              </div>
+
+              {leads.length > 0 ? (
+                <div className="space-y-2">
+                  {leads.map((lead) => (
+                    <div key={lead.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-gray-800 font-medium">{lead.customerName}</p>
+                        <p className="text-gray-500 text-sm">{new Date(lead.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[#1e3a5f] font-bold">${lead.payout || 0}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          lead.status === "claimed"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {lead.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-400 py-8">No transactions yet</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Settings Tab
+function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null }) {
+  const { updateUser } = useAuth();
+  const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
+  const [phone, setPhone] = useState(currentBuyer?.phone || "");
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    if (currentBuyer) {
+      updateUser({ businessName, phone });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl shadow-sm">
+      <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Business Settings</h3>
+
+      {saved && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          Settings saved successfully!
+        </div>
+      )}
+
+      <div className="space-y-6">
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
+          <input
+            type="email"
+            value={currentBuyer?.email || ""}
+            disabled
+            className="w-full px-4 py-2 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 cursor-not-allowed"
+          />
+          <p className="text-gray-400 text-xs mt-1">Email cannot be changed</p>
+        </div>
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-2">Username</label>
+          <input
+            type="text"
+            value={currentBuyer?.username || ""}
+            disabled
+            className="w-full px-4 py-2 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-2">Business Name</label>
+          <input
+            type="text"
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-2">Phone Number</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+          />
+        </div>
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-2">Business Type</label>
+          <input
+            type="text"
+            value={currentBuyer?.businessType?.replace("_", " ") || ""}
+            disabled
+            className="w-full px-4 py-2 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 cursor-not-allowed capitalize"
+          />
+        </div>
+        <button
+          onClick={handleSave}
+          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md"
+        >
+          Save Settings
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Requests Tab - Manage connection requests from providers
+function RequestsTab({
+  buyerId,
+  pendingRequests,
+  myConnections,
+  setTermsForRequest,
+  rejectRequest,
+  updateConnectionTerms,
+  terminateConnection,
+}: {
+  buyerId: string;
+  pendingRequests: ConnectionRequest[];
+  myConnections: import("@/lib/connection-types").Connection[];
+  setTermsForRequest: (requestId: string, terms: ContractTerms) => void;
+  rejectRequest: (requestId: string) => void;
+  updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
+  terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
+}) {
+  const [selectedRequest, setSelectedRequest] = useState<ConnectionRequest | null>(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<import("@/lib/connection-types").Connection | null>(null);
+  const [showEditTermsModal, setShowEditTermsModal] = useState(false);
+
+  // Terms form state
+  const [ratePerLead, setRatePerLead] = useState(50);
+  const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [minimumPayout, setMinimumPayout] = useState<number | undefined>(undefined);
+  const [leadTypes, setLeadTypes] = useState(["auto"]);
+  const [exclusivity, setExclusivity] = useState(false);
+  const [terminationDays, setTerminationDays] = useState(7);
+  const [notes, setNotes] = useState("");
+
+  const openTermsModal = (request: ConnectionRequest) => {
+    setSelectedRequest(request);
+    // Reset form to defaults
+    setRatePerLead(50);
+    setPaymentTiming("per_lead");
+    setMinimumPayout(undefined);
+    setLeadTypes(["auto"]);
+    setExclusivity(false);
+    setTerminationDays(7);
+    setNotes("");
+    setShowTermsModal(true);
+  };
+
+  const handleSetTerms = () => {
+    if (!selectedRequest) return;
+
+    const terms: ContractTerms = {
+      paymentTerms: {
+        ratePerLead,
+        timing: paymentTiming,
+        minimumPayoutThreshold: minimumPayout,
+      },
+      leadTypes,
+      exclusivity,
+      terminationNoticeDays: terminationDays,
+      notes: notes || undefined,
+    };
+
+    setTermsForRequest(selectedRequest.id, terms);
+    setShowTermsModal(false);
+    setSelectedRequest(null);
+  };
+
+  const handleReject = (requestId: string) => {
+    if (confirm("Are you sure you want to reject this connection request?")) {
+      rejectRequest(requestId);
+    }
+  };
+
+  const openEditTermsModal = (connection: import("@/lib/connection-types").Connection) => {
+    setSelectedConnection(connection);
+    setRatePerLead(connection.terms.paymentTerms.ratePerLead);
+    setPaymentTiming(connection.terms.paymentTerms.timing);
+    setMinimumPayout(connection.terms.paymentTerms.minimumPayoutThreshold);
+    setLeadTypes(connection.terms.leadTypes);
+    setExclusivity(connection.terms.exclusivity);
+    setTerminationDays(connection.terms.terminationNoticeDays);
+    setNotes(connection.terms.notes || "");
+    setShowEditTermsModal(true);
+  };
+
+  const handleUpdateTerms = () => {
+    if (!selectedConnection) return;
+
+    const terms: ContractTerms = {
+      paymentTerms: {
+        ratePerLead,
+        timing: paymentTiming,
+        minimumPayoutThreshold: minimumPayout,
+      },
+      leadTypes,
+      exclusivity,
+      terminationNoticeDays: terminationDays,
+      notes: notes || undefined,
+    };
+
+    updateConnectionTerms(selectedConnection.id, terms);
+    setShowEditTermsModal(false);
+    setSelectedConnection(null);
+  };
+
+  const handleTerminate = (connectionId: string, providerName: string) => {
+    if (confirm(`Are you sure you want to terminate your connection with ${providerName}? They will no longer be able to submit leads.`)) {
+      terminateConnection(connectionId, "buyer", "Terminated by business");
+    }
+  };
+
+  const activeConnections = myConnections.filter(c => c.status === "active");
+  const terminatedConnections = myConnections.filter(c => c.status === "terminated");
+
+  return (
+    <div className="space-y-6">
+      {/* Pending Requests */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-6">
+          <h3 className="text-lg font-semibold text-[#1e3a5f]">Pending Requests</h3>
+          {pendingRequests.length > 0 && (
+            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+              {pendingRequests.length} new
+            </span>
+          )}
+        </div>
+
+        {pendingRequests.length > 0 ? (
+          <div className="space-y-4">
+            {pendingRequests.map((request) => (
+              <div key={request.id} className="border border-gray-200 rounded-xl p-4 hover:border-[#1e3a5f]/30 transition">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+                      <span className="text-xl font-bold text-white">{request.providerName.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{request.providerName}</p>
+                      <p className="text-gray-500 text-sm">{request.providerEmail}</p>
+                      <p className="text-gray-400 text-xs mt-1">
+                        Requested {new Date(request.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openTermsModal(request)}
+                      className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
+                    >
+                      Set Terms
+                    </button>
+                    <button
+                      onClick={() => handleReject(request.id)}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition text-sm"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+                {request.message && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-gray-600 text-sm italic">&quot;{request.message}&quot;</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-gray-400 py-8">No pending connection requests</p>
+        )}
+      </div>
+
+      {/* Active Connections */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Active Connections ({activeConnections.length})</h3>
+
+        {activeConnections.length > 0 ? (
+          <div className="space-y-4">
+            {activeConnections.map((connection) => (
+              <div key={connection.id} className="border border-gray-200 rounded-xl p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <span className="text-xl font-bold text-emerald-600">{connection.providerName.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{connection.providerName}</p>
+                      <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[#1e3a5f] font-medium">${connection.terms.paymentTerms.ratePerLead}/lead</span>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.terms.paymentTerms.timing)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() => openEditTermsModal(connection)}
+                        className="text-[#1e3a5f] hover:bg-[#1e3a5f]/10 px-3 py-1 rounded-lg font-medium transition text-sm"
+                      >
+                        Edit Terms
+                      </button>
+                      <button
+                        onClick={() => handleTerminate(connection.id, connection.providerName)}
+                        className="text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg font-medium transition text-sm"
+                      >
+                        Terminate
+                      </button>
+                    </div>
+                    <p className="text-gray-400 text-xs">
+                      Connected since {new Date(connection.acceptedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div>
+                    <p className="text-gray-500 text-sm">Total Leads</p>
+                    <p className="text-xl font-bold text-[#1e3a5f]">{connection.stats.totalLeads}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 text-sm">Total Paid</p>
+                    <p className="text-xl font-bold text-emerald-600">${connection.stats.totalPaid}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-gray-400 py-8">No active connections yet</p>
+        )}
+      </div>
+
+      {/* Terminated Connections */}
+      {terminatedConnections.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-gray-500 mb-6">Past Connections</h3>
+          <div className="space-y-3">
+            {terminatedConnections.map((connection) => (
+              <div key={connection.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg opacity-60">
+                <div>
+                  <p className="font-medium text-gray-600">{connection.providerName}</p>
+                  <p className="text-gray-400 text-sm">Terminated {connection.terminatedAt ? new Date(connection.terminatedAt).toLocaleDateString() : ""}</p>
+                </div>
+                <span className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded-full">Terminated</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Set Terms Modal */}
+      {showTermsModal && selectedRequest && (
+        <TermsModal
+          title={`Set Terms for ${selectedRequest.providerName}`}
+          ratePerLead={ratePerLead}
+          setRatePerLead={setRatePerLead}
+          paymentTiming={paymentTiming}
+          setPaymentTiming={setPaymentTiming}
+          minimumPayout={minimumPayout}
+          setMinimumPayout={setMinimumPayout}
+          leadTypes={leadTypes}
+          setLeadTypes={setLeadTypes}
+          exclusivity={exclusivity}
+          setExclusivity={setExclusivity}
+          terminationDays={terminationDays}
+          setTerminationDays={setTerminationDays}
+          notes={notes}
+          setNotes={setNotes}
+          onSave={handleSetTerms}
+          onCancel={() => { setShowTermsModal(false); setSelectedRequest(null); }}
+          saveButtonText="Send Terms to Provider"
+        />
+      )}
+
+      {/* Edit Terms Modal */}
+      {showEditTermsModal && selectedConnection && (
+        <TermsModal
+          title={`Edit Terms for ${selectedConnection.providerName}`}
+          ratePerLead={ratePerLead}
+          setRatePerLead={setRatePerLead}
+          paymentTiming={paymentTiming}
+          setPaymentTiming={setPaymentTiming}
+          minimumPayout={minimumPayout}
+          setMinimumPayout={setMinimumPayout}
+          leadTypes={leadTypes}
+          setLeadTypes={setLeadTypes}
+          exclusivity={exclusivity}
+          setExclusivity={setExclusivity}
+          terminationDays={terminationDays}
+          setTerminationDays={setTerminationDays}
+          notes={notes}
+          setNotes={setNotes}
+          onSave={handleUpdateTerms}
+          onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
+          saveButtonText="Update Terms"
+        />
+      )}
+    </div>
+  );
+}
+
+// Terms Modal Component
+function TermsModal({
+  title,
+  ratePerLead,
+  setRatePerLead,
+  paymentTiming,
+  setPaymentTiming,
+  minimumPayout,
+  setMinimumPayout,
+  leadTypes,
+  setLeadTypes,
+  exclusivity,
+  setExclusivity,
+  terminationDays,
+  setTerminationDays,
+  notes,
+  setNotes,
+  onSave,
+  onCancel,
+  saveButtonText,
+}: {
+  title: string;
+  ratePerLead: number;
+  setRatePerLead: (v: number) => void;
+  paymentTiming: "per_lead" | "weekly" | "biweekly" | "monthly";
+  setPaymentTiming: (v: "per_lead" | "weekly" | "biweekly" | "monthly") => void;
+  minimumPayout: number | undefined;
+  setMinimumPayout: (v: number | undefined) => void;
+  leadTypes: string[];
+  setLeadTypes: (v: string[]) => void;
+  exclusivity: boolean;
+  setExclusivity: (v: boolean) => void;
+  terminationDays: number;
+  setTerminationDays: (v: number) => void;
+  notes: string;
+  setNotes: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saveButtonText: string;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div
+        className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-xl font-bold text-[#1e3a5f]">{title}</h3>
+          <p className="text-gray-500 text-sm mt-1">Set the terms for this provider relationship. They must accept these terms before they can submit leads.</p>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Rate Per Lead */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
+            <div className="flex items-center gap-2">
+              <span className="text-[#1e3a5f] text-xl">$</span>
+              <input
+                type="number"
+                value={ratePerLead}
+                onChange={(e) => setRatePerLead(parseInt(e.target.value) || 0)}
+                min="1"
+                className="w-32 px-4 py-2 border border-gray-200 rounded-lg text-xl font-bold text-[#1e3a5f] focus:border-[#1e3a5f] focus:outline-none transition"
+              />
+              <span className="text-gray-500">per qualified lead</span>
+            </div>
+          </div>
+
+          {/* Payment Timing */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">Payment Schedule</label>
+            <select
+              value={paymentTiming}
+              onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition bg-white"
+            >
+              <option value="per_lead">Per Lead (Immediate)</option>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+
+          {/* Minimum Payout */}
+          {paymentTiming !== "per_lead" && (
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Minimum Payout Threshold <span className="text-gray-400">(optional)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={minimumPayout || ""}
+                  onChange={(e) => setMinimumPayout(e.target.value ? parseInt(e.target.value) : undefined)}
+                  placeholder="No minimum"
+                  className="w-32 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                />
+              </div>
+              <p className="text-gray-400 text-xs mt-1">Provider won&apos;t receive payout until this threshold is met</p>
+            </div>
+          )}
+
+          {/* Lead Types */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">Accepted Lead Types</label>
+            <div className="flex flex-wrap gap-2">
+              {["auto", "home", "life", "health", "commercial"].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    if (leadTypes.includes(type)) {
+                      setLeadTypes(leadTypes.filter(t => t !== type));
+                    } else {
+                      setLeadTypes([...leadTypes, type]);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition capitalize ${
+                    leadTypes.includes(type)
+                      ? "bg-[#1e3a5f] text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Exclusivity */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-gray-700 text-sm font-medium">Exclusive Partnership</label>
+              <p className="text-gray-400 text-xs">Provider can only submit leads to you</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setExclusivity(!exclusivity)}
+              className={`relative w-12 h-6 rounded-full transition ${
+                exclusivity ? "bg-[#1e3a5f]" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition ${
+                  exclusivity ? "left-7" : "left-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Termination Notice */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">Termination Notice Period</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={terminationDays}
+                onChange={(e) => setTerminationDays(parseInt(e.target.value) || 1)}
+                min="1"
+                className="w-20 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+              />
+              <span className="text-gray-500">days notice required</span>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">
+              Additional Notes <span className="text-gray-400">(optional)</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Any specific requirements or expectations..."
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-gray-200 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-medium transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg font-semibold transition"
+          >
+            {saveButtonText}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
