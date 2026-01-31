@@ -10,13 +10,22 @@ import { useConnections } from "@/lib/connection-context";
 import { isBuyer } from "@/lib/auth-types";
 import { ConnectionRequest, ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 
-type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "analytics" | "settings";
+type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
 
 export default function BusinessPortal() {
   const router = useRouter();
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
   const currentBuyer = useCurrentBuyer();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+
+  // Excel upload state for Dashboard analytics
+  const [uploadedCrmData, setUploadedCrmData] = useState<UploadedRecord[]>([]);
+  const [crmAnalytics, setCrmAnalytics] = useState<AnalyticsData | null>(null);
+  const [isUploadingCrm, setIsUploadingCrm] = useState(false);
+  const [crmUploadError, setCrmUploadError] = useState<string | null>(null);
+  const [crmFileName, setCrmFileName] = useState<string | null>(null);
+  const [isDraggingCrm, setIsDraggingCrm] = useState(false);
+
   const { leads, providers, updateProvider, addProvider } = useLeads();
   const {
     getRequestsForBuyer,
@@ -44,6 +53,99 @@ export default function BusinessPortal() {
   const handleLogout = () => {
     logout();
     router.push("/");
+  };
+
+  // Calculate CRM analytics from uploaded data
+  const calculateCrmAnalytics = (data: UploadedRecord[]): AnalyticsData => {
+    const totalCustomers = data.length;
+    const boundPolicies = data.filter(r => r.policyStatus === "bound" || r.policyStatus === "renewed").length;
+    const renewedPolicies = data.filter(r => r.policyStatus === "renewed").length;
+    const lapsedPolicies = data.filter(r => r.policyStatus === "lapsed" || r.policyStatus === "cancelled").length;
+    const eligibleForRenewal = renewedPolicies + lapsedPolicies;
+    const retentionRate = eligibleForRenewal > 0 ? (renewedPolicies / eligibleForRenewal) * 100 : 0;
+    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
+    const avgPremium = boundPolicies > 0 ? totalPremium / boundPolicies : 0;
+
+    const providerMap = new Map<string, { leads: number; bound: number; revenue: number }>();
+    data.forEach(record => {
+      const existing = providerMap.get(record.providerName) || { leads: 0, bound: 0, revenue: 0 };
+      existing.leads++;
+      if (record.policyStatus === "bound" || record.policyStatus === "renewed") {
+        existing.bound++;
+        existing.revenue += record.premium || 0;
+      }
+      providerMap.set(record.providerName, existing);
+    });
+
+    const providerStats = Array.from(providerMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        leads: stats.leads,
+        bound: stats.bound,
+        closingRate: stats.leads > 0 ? (stats.bound / stats.leads) * 100 : 0,
+        revenue: stats.revenue,
+      }))
+      .sort((a, b) => b.leads - a.leads);
+
+    return { totalCustomers, boundPolicies, renewedPolicies, lapsedPolicies, retentionRate, totalPremium, avgPremium, providerStats };
+  };
+
+  // Parse Excel/CSV file for CRM data
+  const parseCrmFile = async (file: File) => {
+    setIsUploadingCrm(true);
+    setCrmUploadError(null);
+    setCrmFileName(file.name);
+
+    try {
+      const XLSX = await import("xlsx");
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+
+      const records: UploadedRecord[] = jsonData.map((row) => {
+        const providerName = (row["Provider Name"] || row["Provider"] || row["Salesperson"] || row["Agent"] || row["provider_name"] || "Unknown") as string;
+        const customerName = (row["Customer Name"] || row["Customer"] || row["Name"] || row["customer_name"] || "Unknown") as string;
+        const customerEmail = (row["Email"] || row["Customer Email"] || row["email"] || "") as string;
+        const rawStatus = ((row["Status"] || row["Policy Status"] || row["status"] || row["policy_status"] || "lead") as string).toLowerCase();
+        let policyStatus: UploadedRecord["policyStatus"] = "lead";
+        if (rawStatus.includes("bound") || rawStatus.includes("sold") || rawStatus.includes("active")) policyStatus = "bound";
+        else if (rawStatus.includes("renew")) policyStatus = "renewed";
+        else if (rawStatus.includes("lapse") || rawStatus.includes("cancel")) policyStatus = "lapsed";
+        else if (rawStatus.includes("quote")) policyStatus = "quoted";
+        const rawPremium = row["Premium"] || row["Annual Premium"] || row["premium"] || row["Amount"] || 0;
+        const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
+        const rawDate = row["Date"] || row["Created"] || row["date"] || row["created_at"] || new Date().toISOString();
+        const date = String(rawDate);
+        const carrier = (row["Carrier"] || row["Insurance Company"] || row["carrier"] || "") as string;
+        return { providerName, customerName, customerEmail, policyStatus, premium, date, carrier };
+      });
+
+      setUploadedCrmData(records);
+      setCrmAnalytics(calculateCrmAnalytics(records));
+    } catch (error) {
+      console.error("File parse error:", error);
+      setCrmUploadError("Failed to parse file. Please ensure it's a valid Excel (.xlsx) or CSV file.");
+    } finally {
+      setIsUploadingCrm(false);
+    }
+  };
+
+  const handleCrmFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) parseCrmFile(file);
+  };
+
+  const handleCrmDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingCrm(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv"))) {
+      parseCrmFile(file);
+    } else {
+      setCrmUploadError("Please upload an Excel (.xlsx, .xls) or CSV file.");
+    }
   };
 
   // Show loading while checking auth
@@ -126,7 +228,7 @@ export default function BusinessPortal() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "analytics", "settings"] as Tab[]).map((tab) => (
+          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -236,6 +338,152 @@ export default function BusinessPortal() {
                 </table>
               </div>
             </div>
+
+            {/* CRM Data Upload Section */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[#1e3a5f]">Import CRM Data</h3>
+                  <p className="text-gray-500 text-sm">Upload monthly data from EZLynx for advanced analytics</p>
+                </div>
+              </div>
+
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingCrm(true); }}
+                onDragLeave={() => setIsDraggingCrm(false)}
+                onDrop={handleCrmDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
+                  isDraggingCrm ? "border-[#1e3a5f] bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                }`}
+              >
+                {isUploadingCrm ? (
+                  <div className="space-y-3">
+                    <div className="animate-spin h-10 w-10 border-4 border-[#1e3a5f] border-t-transparent rounded-full mx-auto"></div>
+                    <p className="text-[#1e3a5f] font-medium">Processing file...</p>
+                  </div>
+                ) : crmFileName && !crmUploadError ? (
+                  <div className="space-y-3">
+                    <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-emerald-600 font-medium">{crmFileName}</p>
+                    <p className="text-gray-500 text-sm">{uploadedCrmData.length} records imported</p>
+                    <label className="inline-block cursor-pointer">
+                      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleCrmFileChange} className="hidden" />
+                      <span className="text-[#1e3a5f] hover:underline text-sm">Upload different file</span>
+                    </label>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleCrmFileChange} className="hidden" />
+                    <div className="space-y-3">
+                      <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+                        <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-600 font-medium">Drag & drop your Excel or CSV file here</p>
+                      <p className="text-gray-400 text-sm">or click to browse • Supported: .xlsx, .xls, .csv</p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {crmUploadError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-600 text-sm">{crmUploadError}</p>
+                </div>
+              )}
+
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <p className="text-gray-600 text-sm font-medium mb-2">Expected columns:</p>
+                <div className="flex flex-wrap gap-2">
+                  {["Provider Name", "Customer Name", "Status", "Date"].map(col => (
+                    <span key={col} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600">{col}</span>
+                  ))}
+                </div>
+                <p className="text-gray-400 text-xs mt-2">Status values: lead, quoted, bound, renewed, lapsed, cancelled</p>
+              </div>
+            </div>
+
+            {/* CRM Analytics (shown after upload) */}
+            {crmAnalytics && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-[#1e3a5f]">CRM Analytics</h3>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Retention Rate</p>
+                    <p className="text-3xl font-bold text-emerald-600">{crmAnalytics.retentionRate.toFixed(1)}%</p>
+                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.renewedPolicies} renewed / {crmAnalytics.renewedPolicies + crmAnalytics.lapsedPolicies} eligible</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Total Policies</p>
+                    <p className="text-3xl font-bold text-[#1e3a5f]">{crmAnalytics.boundPolicies}</p>
+                    <p className="text-gray-400 text-xs mt-1">Bound + Renewed</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Records Imported</p>
+                    <p className="text-3xl font-bold text-blue-600">{crmAnalytics.totalCustomers}</p>
+                    <p className="text-gray-400 text-xs mt-1">From uploaded file</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Closing Rate</p>
+                    <p className="text-3xl font-bold text-amber-600">{crmAnalytics.totalCustomers > 0 ? ((crmAnalytics.boundPolicies / crmAnalytics.totalCustomers) * 100).toFixed(1) : 0}%</p>
+                    <p className="text-gray-400 text-xs mt-1">Leads → Policies</p>
+                  </div>
+                </div>
+
+                {/* Provider Performance Table */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Provider Performance</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-gray-200">
+                          <th className="pb-3 font-medium">Rank</th>
+                          <th className="pb-3 font-medium">Provider</th>
+                          <th className="pb-3 font-medium">Leads</th>
+                          <th className="pb-3 font-medium">Bound</th>
+                          <th className="pb-3 font-medium">Closing Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {crmAnalytics.providerStats.slice(0, 10).map((provider, i) => (
+                          <tr key={provider.name} className="border-b border-gray-100">
+                            <td className="py-4">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                i === 0 ? "bg-yellow-100 text-yellow-700" :
+                                i === 1 ? "bg-gray-100 text-gray-700" :
+                                i === 2 ? "bg-amber-100 text-amber-700" :
+                                "bg-gray-50 text-gray-500"
+                              }`}>
+                                {i + 1}
+                              </span>
+                            </td>
+                            <td className="py-4 font-medium text-gray-800">{provider.name}</td>
+                            <td className="py-4 text-gray-600">{provider.leads}</td>
+                            <td className="py-4 text-gray-600">{provider.bound}</td>
+                            <td className="py-4">
+                              <span className={`font-medium ${provider.closingRate >= 30 ? "text-emerald-600" : provider.closingRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                                {provider.closingRate.toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -314,11 +562,6 @@ export default function BusinessPortal() {
         {/* Rolodex Tab */}
         {activeTab === "rolodex" && (
           <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} />
-        )}
-
-        {/* Analytics Tab */}
-        {activeTab === "analytics" && (
-          <AnalyticsTab leads={leads} providers={providers} myConnections={myConnections} />
         )}
 
         {/* Settings Tab */}
