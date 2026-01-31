@@ -12,7 +12,8 @@ import {
   Connection,
   ConnectionRequest,
   ContractTerms,
-  getDefaultContractTerms,
+  getWeekStartDate,
+  getMonthStartDate,
 } from "./connection-types";
 
 const STORAGE_KEYS = {
@@ -46,6 +47,7 @@ interface ConnectionContextType {
   connections: Connection[];
   getConnectionsForBuyer: (buyerId: string) => Connection[];
   getConnectionsForProvider: (providerId: string) => Connection[];
+  getConnectionsByProviderEmail: (email: string) => Connection[];
   getActiveConnectionForProvider: (providerId: string) => Connection | null;
   terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
   updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
@@ -60,16 +62,41 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [requests, setRequests] = useState<ConnectionRequest[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
 
-  // Load from localStorage on mount
+  // Demo companies to filter out (these were accidentally created during testing)
+  const DEMO_COMPANIES_TO_REMOVE = [
+    "ABC Insurance Agency",
+    "Premier Auto Insurance",
+    "SafeGuard Insurance Co.",
+  ];
+
+  // Load from localStorage on mount and filter out demo data
   useEffect(() => {
     const savedRequests = localStorage.getItem(STORAGE_KEYS.REQUESTS);
     const savedConnections = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
 
     if (savedRequests) {
-      setRequests(JSON.parse(savedRequests));
+      const parsed = JSON.parse(savedRequests);
+      // Filter out demo companies
+      const filtered = parsed.filter((r: ConnectionRequest) =>
+        !DEMO_COMPANIES_TO_REMOVE.includes(r.buyerBusinessName)
+      );
+      setRequests(filtered);
+      // Also clean up localStorage
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(filtered));
+      }
     }
     if (savedConnections) {
-      setConnections(JSON.parse(savedConnections));
+      const parsed = JSON.parse(savedConnections);
+      // Filter out demo companies
+      const filtered = parsed.filter((c: Connection) =>
+        !DEMO_COMPANIES_TO_REMOVE.includes(c.buyerBusinessName)
+      );
+      setConnections(filtered);
+      // Also clean up localStorage
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(filtered));
+      }
     }
   }, []);
 
@@ -193,6 +220,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         stats: {
           totalLeads: 0,
           totalPaid: 0,
+          leadsThisWeek: 0,
+          leadsThisMonth: 0,
+          weekStartDate: getWeekStartDate(),
+          monthStartDate: getMonthStartDate(),
         },
       };
 
@@ -247,6 +278,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     [connections]
   );
 
+  // Get connections by provider email (for cross-system compatibility)
+  const getConnectionsByProviderEmail = useCallback(
+    (email: string) => {
+      return connections.filter((c) => c.providerEmail.toLowerCase() === email.toLowerCase());
+    },
+    [connections]
+  );
+
   // Get active connection for provider
   const getActiveConnectionForProvider = useCallback(
     (providerId: string): Connection | null => {
@@ -297,20 +336,31 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // Update connection stats when lead is submitted
   const updateConnectionStats = useCallback(
     (connectionId: string, leadPayout: number) => {
+      const currentWeekStart = getWeekStartDate();
+      const currentMonthStart = getMonthStartDate();
+
       setConnections((prev) =>
-        prev.map((c) =>
-          c.id === connectionId
-            ? {
-                ...c,
-                stats: {
-                  totalLeads: c.stats.totalLeads + 1,
-                  totalPaid: c.stats.totalPaid + leadPayout,
-                  lastLeadAt: new Date().toISOString(),
-                  lastPaymentAt: new Date().toISOString(),
-                },
-              }
-            : c
-        )
+        prev.map((c) => {
+          if (c.id !== connectionId) return c;
+
+          // Check if we need to reset weekly/monthly counters
+          const resetWeekly = c.stats.weekStartDate !== currentWeekStart;
+          const resetMonthly = c.stats.monthStartDate !== currentMonthStart;
+
+          return {
+            ...c,
+            stats: {
+              totalLeads: c.stats.totalLeads + 1,
+              totalPaid: c.stats.totalPaid + leadPayout,
+              lastLeadAt: new Date().toISOString(),
+              lastPaymentAt: new Date().toISOString(),
+              leadsThisWeek: resetWeekly ? 1 : c.stats.leadsThisWeek + 1,
+              leadsThisMonth: resetMonthly ? 1 : c.stats.leadsThisMonth + 1,
+              weekStartDate: currentWeekStart,
+              monthStartDate: currentMonthStart,
+            },
+          };
+        })
       );
     },
     []
@@ -330,6 +380,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         connections,
         getConnectionsForBuyer,
         getConnectionsForProvider,
+        getConnectionsByProviderEmail,
         getActiveConnectionForProvider,
         terminateConnection,
         updateConnectionTerms,

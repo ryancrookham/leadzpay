@@ -6,8 +6,30 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { LeadBuyer } from "@/lib/auth-types";
+import { DISCLAIMERS } from "@/lib/payment-types";
 
 type RegistrationRole = "buyer" | "provider";
+
+// US States for licensing
+const US_STATES = [
+  { value: "AL", label: "Alabama" }, { value: "AK", label: "Alaska" }, { value: "AZ", label: "Arizona" },
+  { value: "AR", label: "Arkansas" }, { value: "CA", label: "California" }, { value: "CO", label: "Colorado" },
+  { value: "CT", label: "Connecticut" }, { value: "DE", label: "Delaware" }, { value: "FL", label: "Florida" },
+  { value: "GA", label: "Georgia" }, { value: "HI", label: "Hawaii" }, { value: "ID", label: "Idaho" },
+  { value: "IL", label: "Illinois" }, { value: "IN", label: "Indiana" }, { value: "IA", label: "Iowa" },
+  { value: "KS", label: "Kansas" }, { value: "KY", label: "Kentucky" }, { value: "LA", label: "Louisiana" },
+  { value: "ME", label: "Maine" }, { value: "MD", label: "Maryland" }, { value: "MA", label: "Massachusetts" },
+  { value: "MI", label: "Michigan" }, { value: "MN", label: "Minnesota" }, { value: "MS", label: "Mississippi" },
+  { value: "MO", label: "Missouri" }, { value: "MT", label: "Montana" }, { value: "NE", label: "Nebraska" },
+  { value: "NV", label: "Nevada" }, { value: "NH", label: "New Hampshire" }, { value: "NJ", label: "New Jersey" },
+  { value: "NM", label: "New Mexico" }, { value: "NY", label: "New York" }, { value: "NC", label: "North Carolina" },
+  { value: "ND", label: "North Dakota" }, { value: "OH", label: "Ohio" }, { value: "OK", label: "Oklahoma" },
+  { value: "OR", label: "Oregon" }, { value: "PA", label: "Pennsylvania" }, { value: "RI", label: "Rhode Island" },
+  { value: "SC", label: "South Carolina" }, { value: "SD", label: "South Dakota" }, { value: "TN", label: "Tennessee" },
+  { value: "TX", label: "Texas" }, { value: "UT", label: "Utah" }, { value: "VT", label: "Vermont" },
+  { value: "VA", label: "Virginia" }, { value: "WA", label: "Washington" }, { value: "WV", label: "West Virginia" },
+  { value: "WI", label: "Wisconsin" }, { value: "WY", label: "Wyoming" }, { value: "DC", label: "Washington DC" },
+];
 
 function RegisterContent() {
   const router = useRouter();
@@ -27,6 +49,9 @@ function RegisterContent() {
   const [businessName, setBusinessName] = useState("");
   const [businessType, setBusinessType] = useState<LeadBuyer["businessType"]>("insurance_agency");
   const [buyerPhone, setBuyerPhone] = useState("");
+  const [licensedStates, setLicensedStates] = useState<string[]>([]);
+  const [nationalProducerNumber, setNationalProducerNumber] = useState("");
+  const [complianceAcknowledged, setComplianceAcknowledged] = useState(false);
 
   // Provider-specific fields
   const [displayName, setDisplayName] = useState("");
@@ -57,6 +82,18 @@ function RegisterContent() {
       return;
     }
 
+    // Validate buyer-specific requirements
+    if (activeRole === "buyer") {
+      if (licensedStates.length === 0) {
+        setError("Please select at least one state where you are licensed");
+        return;
+      }
+      if (!complianceAcknowledged) {
+        setError("Please acknowledge the per-lead payment terms");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     let result;
@@ -69,6 +106,9 @@ function RegisterContent() {
         businessName,
         businessType,
         phone: buyerPhone,
+        licensedStates,
+        nationalProducerNumber: nationalProducerNumber || undefined,
+        complianceAcknowledged,
       });
     } else {
       result = await registerProvider({
@@ -242,6 +282,81 @@ function RegisterContent() {
                     disabled={isSubmitting}
                   />
                 </div>
+              </div>
+
+              {/* Licensed States - Required for Insurance */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Licensed States <span className="text-red-500">*</span>
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Select all states where you hold valid insurance licenses. You will only receive leads from these states.
+                </p>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {US_STATES.map((state) => (
+                      <label key={state.value} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded">
+                        <input
+                          type="checkbox"
+                          checked={licensedStates.includes(state.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setLicensedStates([...licensedStates, state.value]);
+                            } else {
+                              setLicensedStates(licensedStates.filter(s => s !== state.value));
+                            }
+                          }}
+                          disabled={isSubmitting}
+                          className="w-4 h-4 text-[#1e3a5f] rounded"
+                        />
+                        <span className="text-sm text-gray-700">{state.value}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {licensedStates.length > 0 && (
+                  <p className="text-xs text-emerald-600 mt-2">
+                    Selected: {licensedStates.join(", ")} ({licensedStates.length} state{licensedStates.length > 1 ? "s" : ""})
+                  </p>
+                )}
+              </div>
+
+              {/* National Producer Number (Optional) */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  National Producer Number (NPN) <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={nationalProducerNumber}
+                  onChange={(e) => setNationalProducerNumber(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="e.g., 12345678"
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Your NPN can be found on your state insurance license or at nipr.com
+                </p>
+              </div>
+
+              {/* Compliance Acknowledgment */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <h4 className="font-medium text-amber-800 mb-2">Per-Lead Payment Agreement</h4>
+                <p className="text-xs text-amber-700 mb-3">
+                  {DISCLAIMERS.perLeadPaymentNotice}
+                </p>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={complianceAcknowledged}
+                    onChange={(e) => setComplianceAcknowledged(e.target.checked)}
+                    disabled={isSubmitting}
+                    className="w-5 h-5 mt-0.5 text-[#1e3a5f] rounded"
+                  />
+                  <span className="text-sm text-amber-800">
+                    I understand and agree that lead providers are paid <strong>per qualified lead submitted</strong>, not per customer conversion or policy sale. I acknowledge this payment structure ensures fair market competition.
+                  </span>
+                </label>
               </div>
             </>
           ) : (

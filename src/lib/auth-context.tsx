@@ -256,6 +256,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           businessName: data.businessName,
           businessType: data.businessType,
           phone: data.phone,
+          // Licensing compliance fields
+          licensedStates: data.licensedStates || [],
+          nationalProducerNumber: data.nationalProducerNumber,
+          licenseVerified: false, // Pending verification
+          complianceAcknowledgedAt: data.complianceAcknowledged ? now : undefined,
           stats: {
             ...getDefaultBuyerStats(),
             memberSince: now,

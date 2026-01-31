@@ -118,7 +118,7 @@ interface ExtendedFormData {
 
 export default function SubmitLead() {
   const { addLead, getProvider, getProviderByEmail, addProvider, updateProvider } = useLeads();
-  const { getConnectionsForProvider, updateConnectionStats } = useConnections();
+  const { getConnectionsByProviderEmail, updateConnectionStats } = useConnections();
   const [step, setStep] = useState<"provider" | "select_connection" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success" | "no_connection">("provider");
   const [activeConnection, setActiveConnection] = useState<Connection | null>(null);
   const [providerConnections, setProviderConnections] = useState<Connection[]>([]);
@@ -140,25 +140,23 @@ export default function SubmitLead() {
     const savedProviderId = localStorage.getItem("leadzpay_provider_id");
     if (savedProviderId) {
       const provider = getProvider(savedProviderId);
-      if (provider) {
+      if (provider && provider.email) {
         setCurrentProvider(provider);
-        // Check for active connections
-        const allConnections = getConnectionsForProvider(savedProviderId);
-        const activeConnections = allConnections.filter(c => c.status === "active");
+        // Check for active connections using email (consistent across auth & leads systems)
+        const allConnections = getConnectionsByProviderEmail(provider.email);
+        const activeConnections = allConnections.filter((c: Connection) => c.status === "active");
         setProviderConnections(activeConnections);
 
-        if (activeConnections.length > 1) {
-          // Multiple connections - let provider choose
-          setStep("select_connection");
-        } else if (activeConnections.length === 1) {
-          // Single connection - auto-select but still show selection for transparency
+        if (activeConnections.length > 0) {
+          // Has connections - show selection screen to choose which partner
           setStep("select_connection");
         } else {
+          // No connections - show connection required message
           setStep("no_connection");
         }
       }
     }
-  }, [getProvider, getConnectionsForProvider]);
+  }, [getProvider, getConnectionsByProviderEmail]);
 
   const [formData, setFormData] = useState<ExtendedFormData>({
     customerName: "",
@@ -430,8 +428,8 @@ export default function SubmitLead() {
         carYear,
         quoteType: quoteType || "quote",
         status: "converted", // Already purchased
-        providerId: provider?.id || "provider-1",
-        providerName: provider?.name || "Demo Provider",
+        providerId: provider?.id || currentProvider?.id || "",
+        providerName: provider?.name || currentProvider?.name || "",
         payout: payout,
         connectionId: activeConnection.id,
         buyerId: activeConnection.buyerId,
@@ -634,7 +632,7 @@ export default function SubmitLead() {
     );
   }
 
-  // No Connection Screen - Provider needs to connect with a buyer first
+  // No Connection Screen - Provider needs to establish a connection first
   if (step === "no_connection") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative overflow-hidden">
@@ -645,25 +643,15 @@ export default function SubmitLead() {
         </div>
 
         <div className="bg-white p-12 rounded-2xl text-center max-w-md w-full border border-gray-200 shadow-lg relative z-10">
-          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-amber-500/20 flex items-center justify-center shadow-lg">
-            <svg className="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-[#1e3a5f]/20 flex items-center justify-center shadow-lg">
+            <svg className="w-10 h-10 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">Connection Required</h2>
-          <p className="text-gray-600 mb-6">
-            Before you can submit leads and earn money, you need to connect with a lead receiver (insurance agent) who will accept your leads.
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">No Active Connections</h2>
+          <p className="text-gray-600 mb-8">
+            You need an active connection with Options Insurance before you can submit leads. Go to your dashboard to set up a connection.
           </p>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
-            <h3 className="font-semibold text-amber-800 mb-2">How it works:</h3>
-            <ol className="text-amber-700 text-sm space-y-2 list-decimal list-inside">
-              <li>Go to your Provider Dashboard</li>
-              <li>Browse available lead receivers</li>
-              <li>Send a connection request</li>
-              <li>Wait for them to set terms</li>
-              <li>Accept the terms to start earning</li>
-            </ol>
-          </div>
           <div className="flex gap-4 justify-center">
             <Link
               href="/provider-dashboard"
@@ -774,13 +762,6 @@ export default function SubmitLead() {
                         <p className="text-gray-800 font-medium">{connection.terms.exclusivity ? "Yes" : "No"}</p>
                       </div>
                     </div>
-                    {connection.terms.paymentTerms.bonusRate && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <p className="text-green-600 text-sm">
-                          <span className="font-semibold">+${connection.terms.paymentTerms.bonusRate} bonus</span> for converted leads
-                        </p>
-                      </div>
-                    )}
                     {connection.terms.notes && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <p className="text-gray-600 text-sm italic">&quot;{connection.terms.notes}&quot;</p>
@@ -1413,9 +1394,9 @@ export default function SubmitLead() {
         providerId = newProvider.id;
       }
 
-      // Check for active connections before allowing lead submission
-      const allConnections = getConnectionsForProvider(providerId);
-      const activeConnections = allConnections.filter(c => c.status === "active");
+      // Check for active connections using email (consistent across auth & leads systems)
+      const allConnections = getConnectionsByProviderEmail(providerData.email);
+      const activeConnections = allConnections.filter((c: Connection) => c.status === "active");
       setProviderConnections(activeConnections);
 
       if (activeConnections.length > 0) {
@@ -1664,10 +1645,7 @@ export default function SubmitLead() {
                 Sending to: <span className="font-semibold">{activeConnection.buyerBusinessName}</span>
               </p>
               <p className="text-[#1e3a5f] text-sm">
-                You&apos;ll earn: <span className="font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</span> per lead
-                {activeConnection.terms.paymentTerms.bonusRate && (
-                  <span className="text-green-600"> (+${activeConnection.terms.paymentTerms.bonusRate} if converted)</span>
-                )}
+                You&apos;ll earn: <span className="font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</span> per qualified lead
               </p>
               <button
                 onClick={() => setStep("select_connection")}

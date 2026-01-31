@@ -10,7 +10,7 @@ import { useConnections } from "@/lib/connection-context";
 import { isBuyer } from "@/lib/auth-types";
 import { ConnectionRequest, ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 
-type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
+type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "analytics" | "settings";
 
 export default function BusinessPortal() {
   const router = useRouter();
@@ -126,7 +126,7 @@ export default function BusinessPortal() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings"] as Tab[]).map((tab) => (
+          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "analytics", "settings"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -249,6 +249,7 @@ export default function BusinessPortal() {
             rejectRequest={rejectRequest}
             updateConnectionTerms={updateConnectionTerms}
             terminateConnection={terminateConnection}
+            licensedStates={currentBuyer?.licensedStates || []}
           />
         )}
 
@@ -313,6 +314,11 @@ export default function BusinessPortal() {
         {/* Rolodex Tab */}
         {activeTab === "rolodex" && (
           <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} />
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === "analytics" && (
+          <AnalyticsTab leads={leads} providers={providers} myConnections={myConnections} />
         )}
 
         {/* Settings Tab */}
@@ -1180,6 +1186,474 @@ function ProviderDetailModal({
   );
 }
 
+// Analytics Tab - Excel Upload & Data Visualization
+interface UploadedRecord {
+  providerName: string;
+  providerId?: string;
+  customerName: string;
+  customerEmail?: string;
+  policyStatus: "lead" | "quoted" | "bound" | "renewed" | "lapsed" | "cancelled";
+  premium?: number;
+  date: string;
+  carrier?: string;
+}
+
+interface AnalyticsData {
+  totalCustomers: number;
+  boundPolicies: number;
+  renewedPolicies: number;
+  lapsedPolicies: number;
+  retentionRate: number;
+  totalPremium: number;
+  avgPremium: number;
+  providerStats: {
+    name: string;
+    leads: number;
+    bound: number;
+    closingRate: number;
+    revenue: number;
+  }[];
+}
+
+function AnalyticsTab({
+  leads,
+  providers,
+  myConnections,
+}: {
+  leads: Lead[];
+  providers: Provider[];
+  myConnections: import("@/lib/connection-types").Connection[];
+}) {
+  const [uploadedData, setUploadedData] = useState<UploadedRecord[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Calculate analytics from uploaded data
+  const calculateAnalytics = (data: UploadedRecord[]): AnalyticsData => {
+    const totalCustomers = data.length;
+    const boundPolicies = data.filter(r => r.policyStatus === "bound" || r.policyStatus === "renewed").length;
+    const renewedPolicies = data.filter(r => r.policyStatus === "renewed").length;
+    const lapsedPolicies = data.filter(r => r.policyStatus === "lapsed" || r.policyStatus === "cancelled").length;
+
+    // Retention = renewed / (renewed + lapsed)
+    const eligibleForRenewal = renewedPolicies + lapsedPolicies;
+    const retentionRate = eligibleForRenewal > 0 ? (renewedPolicies / eligibleForRenewal) * 100 : 0;
+
+    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
+    const avgPremium = boundPolicies > 0 ? totalPremium / boundPolicies : 0;
+
+    // Group by provider
+    const providerMap = new Map<string, { leads: number; bound: number; revenue: number }>();
+    data.forEach(record => {
+      const existing = providerMap.get(record.providerName) || { leads: 0, bound: 0, revenue: 0 };
+      existing.leads++;
+      if (record.policyStatus === "bound" || record.policyStatus === "renewed") {
+        existing.bound++;
+        existing.revenue += record.premium || 0;
+      }
+      providerMap.set(record.providerName, existing);
+    });
+
+    const providerStats = Array.from(providerMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        leads: stats.leads,
+        bound: stats.bound,
+        closingRate: stats.leads > 0 ? (stats.bound / stats.leads) * 100 : 0,
+        revenue: stats.revenue,
+      }))
+      .sort((a, b) => b.leads - a.leads);
+
+    return {
+      totalCustomers,
+      boundPolicies,
+      renewedPolicies,
+      lapsedPolicies,
+      retentionRate,
+      totalPremium,
+      avgPremium,
+      providerStats,
+    };
+  };
+
+  // Parse Excel/CSV file
+  const parseFile = async (file: File) => {
+    setIsUploading(true);
+    setUploadError(null);
+    setFileName(file.name);
+
+    try {
+      const XLSX = await import("xlsx");
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+
+      // Map columns to our format (flexible mapping)
+      const records: UploadedRecord[] = jsonData.map((row) => {
+        // Try to find provider name in various column names
+        const providerName = (row["Provider Name"] || row["Provider"] || row["Salesperson"] || row["Agent"] || row["provider_name"] || "Unknown") as string;
+        const customerName = (row["Customer Name"] || row["Customer"] || row["Name"] || row["customer_name"] || "Unknown") as string;
+        const customerEmail = (row["Email"] || row["Customer Email"] || row["email"] || "") as string;
+
+        // Parse status
+        const rawStatus = ((row["Status"] || row["Policy Status"] || row["status"] || row["policy_status"] || "lead") as string).toLowerCase();
+        let policyStatus: UploadedRecord["policyStatus"] = "lead";
+        if (rawStatus.includes("bound") || rawStatus.includes("sold") || rawStatus.includes("active")) policyStatus = "bound";
+        else if (rawStatus.includes("renew")) policyStatus = "renewed";
+        else if (rawStatus.includes("lapse") || rawStatus.includes("cancel")) policyStatus = "lapsed";
+        else if (rawStatus.includes("quote")) policyStatus = "quoted";
+
+        // Parse premium
+        const rawPremium = row["Premium"] || row["Annual Premium"] || row["premium"] || row["Amount"] || 0;
+        const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
+
+        // Parse date
+        const rawDate = row["Date"] || row["Created"] || row["date"] || row["created_at"] || new Date().toISOString();
+        const date = String(rawDate);
+
+        const carrier = (row["Carrier"] || row["Insurance Company"] || row["carrier"] || "") as string;
+
+        return {
+          providerName,
+          customerName,
+          customerEmail,
+          policyStatus,
+          premium,
+          date,
+          carrier,
+        };
+      });
+
+      setUploadedData(records);
+      setAnalytics(calculateAnalytics(records));
+    } catch (error) {
+      console.error("File parse error:", error);
+      setUploadError("Failed to parse file. Please ensure it's a valid Excel (.xlsx) or CSV file with the required columns.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle file input change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      parseFile(file);
+    }
+  };
+
+  // Handle drag and drop
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv"))) {
+      parseFile(file);
+    } else {
+      setUploadError("Please upload an Excel (.xlsx, .xls) or CSV file.");
+    }
+  };
+
+  // Calculate real-time analytics from existing leads data
+  const realTimeAnalytics = {
+    totalLeads: leads.length,
+    pendingLeads: leads.filter(l => l.status === "pending").length,
+    claimedLeads: leads.filter(l => l.status === "claimed").length,
+    totalPayout: leads.reduce((sum, l) => sum + (l.payout || 0), 0),
+  };
+
+  // Get provider rankings from real leads
+  const providerRankings = providers
+    .map(p => ({
+      name: p.name,
+      leads: leads.filter(l => l.providerId === p.id).length,
+      payout: leads.filter(l => l.providerId === p.id).reduce((sum, l) => sum + (l.payout || 0), 0),
+    }))
+    .sort((a, b) => b.leads - a.leads);
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-[#1e3a5f]">Analytics Dashboard</h2>
+          <p className="text-gray-500 mt-1">Upload your CRM data for advanced insights</p>
+        </div>
+      </div>
+
+      {/* Real-Time Stats from LeadzPay Data */}
+      <div>
+        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Real-Time Lead Stats</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <p className="text-gray-500 text-sm">Total Leads</p>
+            <p className="text-3xl font-bold text-[#1e3a5f]">{realTimeAnalytics.totalLeads}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <p className="text-gray-500 text-sm">Pending</p>
+            <p className="text-3xl font-bold text-amber-600">{realTimeAnalytics.pendingLeads}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <p className="text-gray-500 text-sm">Claimed</p>
+            <p className="text-3xl font-bold text-emerald-600">{realTimeAnalytics.claimedLeads}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <p className="text-gray-500 text-sm">Total Payouts</p>
+            <p className="text-3xl font-bold text-blue-600">${realTimeAnalytics.totalPayout.toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Sellers Leaderboard */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Top Lead Sellers</h3>
+        {providerRankings.length > 0 ? (
+          <div className="space-y-3">
+            {providerRankings.slice(0, 10).map((provider, i) => (
+              <div key={provider.name} className="flex items-center gap-4">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${
+                  i === 0 ? "bg-yellow-500" : i === 1 ? "bg-gray-400" : i === 2 ? "bg-amber-600" : "bg-gray-300"
+                }`}>
+                  {i + 1}
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-medium text-gray-800">{provider.name}</span>
+                    <span className="text-sm text-gray-500">{provider.leads} leads • ${provider.payout}</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#1e3a5f] rounded-full transition-all"
+                      style={{ width: `${providerRankings[0]?.leads ? (provider.leads / providerRankings[0].leads) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center py-8">No provider data yet</p>
+        )}
+      </div>
+
+      {/* Excel Upload Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-[#1e3a5f]">Upload CRM Data</h3>
+            <p className="text-gray-500 text-sm">Import your monthly/bi-weekly data for advanced analytics</p>
+          </div>
+        </div>
+
+        {/* File Drop Zone */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
+            isDragging ? "border-[#1e3a5f] bg-blue-50" : "border-gray-300 hover:border-gray-400"
+          }`}
+        >
+          {isUploading ? (
+            <div className="space-y-3">
+              <div className="animate-spin h-10 w-10 border-4 border-[#1e3a5f] border-t-transparent rounded-full mx-auto"></div>
+              <p className="text-[#1e3a5f] font-medium">Processing file...</p>
+            </div>
+          ) : fileName && !uploadError ? (
+            <div className="space-y-3">
+              <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p className="text-emerald-600 font-medium">{fileName}</p>
+              <p className="text-gray-500 text-sm">{uploadedData.length} records imported</p>
+              <label className="inline-block cursor-pointer">
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} className="hidden" />
+                <span className="text-[#1e3a5f] hover:underline text-sm">Upload different file</span>
+              </label>
+            </div>
+          ) : (
+            <label className="cursor-pointer block">
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} className="hidden" />
+              <div className="space-y-3">
+                <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+                  <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 font-medium">Drag & drop your Excel or CSV file here</p>
+                <p className="text-gray-400 text-sm">or click to browse</p>
+                <p className="text-gray-400 text-xs mt-2">Supported: .xlsx, .xls, .csv</p>
+              </div>
+            </label>
+          )}
+        </div>
+
+        {uploadError && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 text-sm">{uploadError}</p>
+          </div>
+        )}
+
+        {/* Expected Columns Info */}
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <p className="text-gray-600 text-sm font-medium mb-2">Expected columns:</p>
+          <div className="flex flex-wrap gap-2">
+            {["Provider Name", "Customer Name", "Status", "Premium", "Date", "Carrier"].map(col => (
+              <span key={col} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600">{col}</span>
+            ))}
+          </div>
+          <p className="text-gray-400 text-xs mt-2">Status values: lead, quoted, bound, renewed, lapsed, cancelled</p>
+        </div>
+      </div>
+
+      {/* Uploaded Data Analytics */}
+      {analytics && (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-[#1e3a5f]">CRM Data Analytics</h3>
+
+          {/* Key Metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <p className="text-gray-500 text-sm">Retention Rate</p>
+              <p className="text-3xl font-bold text-emerald-600">{analytics.retentionRate.toFixed(1)}%</p>
+              <p className="text-gray-400 text-xs mt-1">{analytics.renewedPolicies} renewed / {analytics.renewedPolicies + analytics.lapsedPolicies} eligible</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <p className="text-gray-500 text-sm">Total Policies</p>
+              <p className="text-3xl font-bold text-[#1e3a5f]">{analytics.boundPolicies}</p>
+              <p className="text-gray-400 text-xs mt-1">Bound + Renewed</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <p className="text-gray-500 text-sm">Total Premium</p>
+              <p className="text-3xl font-bold text-blue-600">${analytics.totalPremium.toLocaleString()}</p>
+              <p className="text-gray-400 text-xs mt-1">Annual revenue</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <p className="text-gray-500 text-sm">Avg Premium</p>
+              <p className="text-3xl font-bold text-amber-600">${analytics.avgPremium.toFixed(0)}</p>
+              <p className="text-gray-400 text-xs mt-1">Per policy</p>
+            </div>
+          </div>
+
+          {/* Provider Performance from Uploaded Data */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Provider Performance (from CRM data)</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-200">
+                    <th className="pb-3 font-medium">Rank</th>
+                    <th className="pb-3 font-medium">Provider</th>
+                    <th className="pb-3 font-medium">Leads</th>
+                    <th className="pb-3 font-medium">Bound</th>
+                    <th className="pb-3 font-medium">Closing Rate</th>
+                    <th className="pb-3 font-medium">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.providerStats.map((provider, i) => (
+                    <tr key={provider.name} className="border-b border-gray-100">
+                      <td className="py-4">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                          i === 0 ? "bg-yellow-100 text-yellow-700" :
+                          i === 1 ? "bg-gray-100 text-gray-700" :
+                          i === 2 ? "bg-amber-100 text-amber-700" :
+                          "bg-gray-50 text-gray-500"
+                        }`}>
+                          {i + 1}
+                        </span>
+                      </td>
+                      <td className="py-4 font-medium text-gray-800">{provider.name}</td>
+                      <td className="py-4 text-gray-600">{provider.leads}</td>
+                      <td className="py-4 text-gray-600">{provider.bound}</td>
+                      <td className="py-4">
+                        <span className={`font-medium ${provider.closingRate >= 30 ? "text-emerald-600" : provider.closingRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                          {provider.closingRate.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-4 text-[#1e3a5f] font-medium">${provider.revenue.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Retention Breakdown Chart */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Policy Status Breakdown</h4>
+            <div className="flex items-center gap-8">
+              {/* Simple donut visualization */}
+              <div className="relative w-40 h-40">
+                <svg viewBox="0 0 36 36" className="w-full h-full">
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="#e5e7eb"
+                    strokeWidth="3"
+                  />
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="3"
+                    strokeDasharray={`${analytics.retentionRate}, 100`}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-[#1e3a5f]">{analytics.retentionRate.toFixed(0)}%</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <span className="text-gray-600">Renewed</span>
+                  </div>
+                  <span className="font-medium text-gray-800">{analytics.renewedPolicies}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <span className="text-gray-600">Bound (New)</span>
+                  </div>
+                  <span className="font-medium text-gray-800">{analytics.boundPolicies - analytics.renewedPolicies}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                    <span className="text-gray-600">Lapsed/Cancelled</span>
+                  </div>
+                  <span className="font-medium text-gray-800">{analytics.lapsedPolicies}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-gray-300"></span>
+                    <span className="text-gray-600">Other (Lead/Quoted)</span>
+                  </div>
+                  <span className="font-medium text-gray-800">{analytics.totalCustomers - analytics.boundPolicies - analytics.lapsedPolicies}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Settings Tab
 function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null }) {
   const { updateUser } = useAuth();
@@ -1275,6 +1749,7 @@ function RequestsTab({
   rejectRequest,
   updateConnectionTerms,
   terminateConnection,
+  licensedStates,
 }: {
   buyerId: string;
   pendingRequests: ConnectionRequest[];
@@ -1283,6 +1758,7 @@ function RequestsTab({
   rejectRequest: (requestId: string) => void;
   updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
   terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
+  licensedStates: string[];
 }) {
   const [selectedRequest, setSelectedRequest] = useState<ConnectionRequest | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -1298,6 +1774,12 @@ function RequestsTab({
   const [terminationDays, setTerminationDays] = useState(7);
   const [notes, setNotes] = useState("");
 
+  // Lead cap state - buyer protection
+  const [enableLeadCaps, setEnableLeadCaps] = useState(false);
+  const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
+  const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
+  const [pauseWhenCapReached, setPauseWhenCapReached] = useState(true);
+
   const openTermsModal = (request: ConnectionRequest) => {
     setSelectedRequest(request);
     // Reset form to defaults
@@ -1308,6 +1790,11 @@ function RequestsTab({
     setExclusivity(false);
     setTerminationDays(7);
     setNotes("");
+    // Reset lead caps
+    setEnableLeadCaps(false);
+    setWeeklyLeadCap(undefined);
+    setMonthlyLeadCap(undefined);
+    setPauseWhenCapReached(true);
     setShowTermsModal(true);
   };
 
@@ -1319,11 +1806,21 @@ function RequestsTab({
         ratePerLead,
         timing: paymentTiming,
         minimumPayoutThreshold: minimumPayout,
+        paymentStructure: "per_lead", // Required for compliance - per lead, not per conversion
       },
       leadTypes,
       exclusivity,
       terminationNoticeDays: terminationDays,
       notes: notes || undefined,
+      // Lead caps - buyer protection from unlimited lead obligations
+      leadCaps: enableLeadCaps ? {
+        weeklyLimit: weeklyLeadCap,
+        monthlyLimit: monthlyLeadCap,
+        pauseWhenCapReached,
+      } : undefined,
+      licensedStates, // States where buyer is licensed
+      complianceAcknowledged: true, // Buyer sets terms = acknowledges compliance
+      agreementVersion: "1.0.0",
     };
 
     setTermsForRequest(selectedRequest.id, terms);
@@ -1346,6 +1843,12 @@ function RequestsTab({
     setExclusivity(connection.terms.exclusivity);
     setTerminationDays(connection.terms.terminationNoticeDays);
     setNotes(connection.terms.notes || "");
+    // Load lead caps
+    const caps = connection.terms.leadCaps;
+    setEnableLeadCaps(!!caps);
+    setWeeklyLeadCap(caps?.weeklyLimit);
+    setMonthlyLeadCap(caps?.monthlyLimit);
+    setPauseWhenCapReached(caps?.pauseWhenCapReached ?? true);
     setShowEditTermsModal(true);
   };
 
@@ -1357,11 +1860,21 @@ function RequestsTab({
         ratePerLead,
         timing: paymentTiming,
         minimumPayoutThreshold: minimumPayout,
+        paymentStructure: "per_lead", // Required for compliance - per lead, not per conversion
       },
       leadTypes,
       exclusivity,
       terminationNoticeDays: terminationDays,
       notes: notes || undefined,
+      // Lead caps - buyer protection from unlimited lead obligations
+      leadCaps: enableLeadCaps ? {
+        weeklyLimit: weeklyLeadCap,
+        monthlyLimit: monthlyLeadCap,
+        pauseWhenCapReached,
+      } : undefined,
+      licensedStates, // States where buyer is licensed
+      complianceAcknowledged: true,
+      agreementVersion: "1.0.0",
     };
 
     updateConnectionTerms(selectedConnection.id, terms);
@@ -1533,6 +2046,14 @@ function RequestsTab({
           setTerminationDays={setTerminationDays}
           notes={notes}
           setNotes={setNotes}
+          enableLeadCaps={enableLeadCaps}
+          setEnableLeadCaps={setEnableLeadCaps}
+          weeklyLeadCap={weeklyLeadCap}
+          setWeeklyLeadCap={setWeeklyLeadCap}
+          monthlyLeadCap={monthlyLeadCap}
+          setMonthlyLeadCap={setMonthlyLeadCap}
+          pauseWhenCapReached={pauseWhenCapReached}
+          setPauseWhenCapReached={setPauseWhenCapReached}
           onSave={handleSetTerms}
           onCancel={() => { setShowTermsModal(false); setSelectedRequest(null); }}
           saveButtonText="Send Terms to Provider"
@@ -1557,6 +2078,14 @@ function RequestsTab({
           setTerminationDays={setTerminationDays}
           notes={notes}
           setNotes={setNotes}
+          enableLeadCaps={enableLeadCaps}
+          setEnableLeadCaps={setEnableLeadCaps}
+          weeklyLeadCap={weeklyLeadCap}
+          setWeeklyLeadCap={setWeeklyLeadCap}
+          monthlyLeadCap={monthlyLeadCap}
+          setMonthlyLeadCap={setMonthlyLeadCap}
+          pauseWhenCapReached={pauseWhenCapReached}
+          setPauseWhenCapReached={setPauseWhenCapReached}
           onSave={handleUpdateTerms}
           onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
           saveButtonText="Update Terms"
@@ -1583,6 +2112,15 @@ function TermsModal({
   setTerminationDays,
   notes,
   setNotes,
+  // Lead caps props
+  enableLeadCaps,
+  setEnableLeadCaps,
+  weeklyLeadCap,
+  setWeeklyLeadCap,
+  monthlyLeadCap,
+  setMonthlyLeadCap,
+  pauseWhenCapReached,
+  setPauseWhenCapReached,
   onSave,
   onCancel,
   saveButtonText,
@@ -1602,6 +2140,15 @@ function TermsModal({
   setTerminationDays: (v: number) => void;
   notes: string;
   setNotes: (v: string) => void;
+  // Lead caps props
+  enableLeadCaps: boolean;
+  setEnableLeadCaps: (v: boolean) => void;
+  weeklyLeadCap: number | undefined;
+  setWeeklyLeadCap: (v: number | undefined) => void;
+  monthlyLeadCap: number | undefined;
+  setMonthlyLeadCap: (v: number | undefined) => void;
+  pauseWhenCapReached: boolean;
+  setPauseWhenCapReached: (v: boolean) => void;
   onSave: () => void;
   onCancel: () => void;
   saveButtonText: string;
@@ -1730,6 +2277,103 @@ function TermsModal({
               />
               <span className="text-gray-500">days notice required</span>
             </div>
+          </div>
+
+          {/* Lead Caps - Buyer Protection */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <label className="text-gray-700 text-sm font-medium">Lead Volume Caps</label>
+                <p className="text-amber-700 text-xs">Protect yourself from unlimited lead obligations</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnableLeadCaps(!enableLeadCaps)}
+                className={`relative w-12 h-6 rounded-full transition ${
+                  enableLeadCaps ? "bg-amber-500" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition ${
+                    enableLeadCaps ? "left-7" : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {enableLeadCaps && (
+              <div className="space-y-4 pt-3 border-t border-amber-200">
+                {/* Weekly Cap */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    Weekly Lead Limit <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={weeklyLeadCap || ""}
+                      onChange={(e) => setWeeklyLeadCap(e.target.value ? parseInt(e.target.value) : undefined)}
+                      placeholder="Unlimited"
+                      min="1"
+                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                    />
+                    <span className="text-gray-500 text-sm">leads per week</span>
+                  </div>
+                  <p className="text-gray-400 text-xs mt-1">Resets every Monday</p>
+                </div>
+
+                {/* Monthly Cap */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    Monthly Lead Limit <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={monthlyLeadCap || ""}
+                      onChange={(e) => setMonthlyLeadCap(e.target.value ? parseInt(e.target.value) : undefined)}
+                      placeholder="Unlimited"
+                      min="1"
+                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                    />
+                    <span className="text-gray-500 text-sm">leads per month</span>
+                  </div>
+                  <p className="text-gray-400 text-xs mt-1">Resets on the 1st of each month</p>
+                </div>
+
+                {/* What happens when cap is reached */}
+                <div className="flex items-center justify-between pt-2">
+                  <div>
+                    <label className="text-gray-700 text-sm font-medium">Auto-pause when cap reached</label>
+                    <p className="text-gray-400 text-xs">Provider cannot submit leads until cap resets</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPauseWhenCapReached(!pauseWhenCapReached)}
+                    className={`relative w-12 h-6 rounded-full transition ${
+                      pauseWhenCapReached ? "bg-[#1e3a5f]" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition ${
+                        pauseWhenCapReached ? "left-7" : "left-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Cap summary */}
+                {(weeklyLeadCap || monthlyLeadCap) && (
+                  <div className="bg-amber-100 rounded-lg p-3 mt-2">
+                    <p className="text-amber-800 text-sm font-medium">Cap Summary</p>
+                    <p className="text-amber-700 text-xs mt-1">
+                      Max cost per week: {weeklyLeadCap ? `$${weeklyLeadCap * ratePerLead}` : "Unlimited"}
+                      {monthlyLeadCap && ` • Max cost per month: $${monthlyLeadCap * ratePerLead}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Notes */}

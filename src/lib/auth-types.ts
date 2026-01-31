@@ -60,6 +60,11 @@ export interface LeadBuyer extends BaseUser {
     state: string;
     zip: string;
   };
+  // Licensing compliance
+  licensedStates: string[];           // States where licensed to sell insurance
+  nationalProducerNumber?: string;    // NPN for insurance agents
+  licenseVerified: boolean;           // Has license been verified
+  complianceAcknowledgedAt?: string;  // When they acknowledged per-lead payment terms
   stats: BuyerStats;
   connectionIds: string[];
 }
@@ -102,6 +107,10 @@ export interface BuyerRegistrationData {
   businessName: string;
   businessType: LeadBuyer["businessType"];
   phone: string;
+  // Licensing compliance - required for insurance businesses
+  licensedStates: string[];
+  nationalProducerNumber?: string;
+  complianceAcknowledged: boolean; // Must acknowledge per-lead payment structure
 }
 
 export interface ProviderRegistrationData {

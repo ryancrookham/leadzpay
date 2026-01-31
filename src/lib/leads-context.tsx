@@ -2,6 +2,29 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
+// Extended customer profile for quote generation
+export interface CustomerProfile {
+  age: number;
+  gender: "male" | "female" | "other";
+  maritalStatus: "single" | "married" | "divorced" | "widowed";
+  state: string;
+  zipCode: string;
+  creditScore: "excellent" | "good" | "fair" | "poor";
+  homeOwner: boolean;
+  yearsLicensed: number;
+  drivingHistory: "clean" | "minor_violations" | "major_violations" | "at_fault_accident" | "dui" | "multiple_incidents";
+  priorInsurance: boolean;
+  annualMileage: number;
+  vehicleOwnership: "owned" | "financed" | "leased";
+  primaryUse: "commute" | "pleasure" | "business";
+  garageType: "garage" | "carport" | "street" | "driveway";
+  antiTheft: boolean;
+  safetyFeatures: boolean;
+  occupation: "standard" | "military" | "teacher" | "engineer" | "medical";
+  coverageType: "liability" | "collision" | "comprehensive" | "full";
+  deductible: number;
+}
+
 export interface Lead {
   id: string;
   customerName: string;
@@ -9,7 +32,7 @@ export interface Lead {
   phone: string;
   carModel: string;
   carYear: number;
-  quoteType: "switch" | "quote";
+  quoteType: "asap" | "switch" | "quote";
   status: "pending" | "claimed" | "converted" | "expired";
   providerId: string;
   providerName: string;
@@ -21,6 +44,38 @@ export interface Lead {
   quote?: InsuranceQuote;
   createdAt: string;
   claimedAt?: string;
+  // ASAP channel tracking
+  asapCallInitiated?: boolean;
+  asapCallSid?: string;
+  asapCallTime?: string;
+  // Extended customer profile for Quote channel
+  customerProfile?: CustomerProfile;
+  // Simple quote flow - driver's license image
+  licenseImage?: string;
+  // Extracted license data
+  extractedLicenseData?: {
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    dateOfBirth: string;
+    age: number;
+    gender: "male" | "female" | "other";
+    licenseNumber: string;
+    licenseState: string;
+    expirationDate: string;
+    address: {
+      street: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      fullAddress: string;
+    };
+    isExpired: boolean;
+    isValid: boolean;
+  };
+  // CRM integration tracking
+  crmPushed?: boolean;
+  crmLeadId?: string;
 }
 
 export interface InsuranceQuote {
@@ -72,21 +127,9 @@ interface LeadsContextType {
 
 const LeadsContext = createContext<LeadsContextType | undefined>(undefined);
 
-// Demo provider for testing
-const DEMO_PROVIDER: Provider = {
-  id: "provider-1",
-  name: "Demo Salesperson",
-  email: "demo@example.com",
-  payoutRate: 50,
-  totalLeads: 0,
-  totalEarnings: 0,
-  status: "active",
-  paymentMethod: "venmo",
-};
-
 export function LeadsProvider({ children }: { children: ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [providers, setProviders] = useState<Provider[]>([DEMO_PROVIDER]);
+  const [providers, setProviders] = useState<Provider[]>([]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -97,13 +140,7 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
       setLeads(JSON.parse(savedLeads));
     }
     if (savedProviders) {
-      const parsed = JSON.parse(savedProviders);
-      // Ensure we have at least the demo provider
-      if (parsed.length === 0) {
-        setProviders([DEMO_PROVIDER]);
-      } else {
-        setProviders(parsed);
-      }
+      setProviders(JSON.parse(savedProviders));
     }
   }, []);
 

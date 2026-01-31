@@ -1,14 +1,85 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth, useCurrentProvider } from "@/lib/auth-context";
-import { useLeads, type Lead } from "@/lib/leads-context";
+import { useLeads, type Lead, type CustomerProfile } from "@/lib/leads-context";
 import { useConnections } from "@/lib/connection-context";
 import { isProvider, LeadBuyer } from "@/lib/auth-types";
-import { Connection, ConnectionRequest, formatPaymentTiming } from "@/lib/connection-types";
+import { Connection, ConnectionRequest, formatPaymentTiming, checkLeadCaps, formatLeadCapStatus } from "@/lib/connection-types";
+import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
+import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
+
+// Lead form data interface (basic info)
+interface LeadFormData {
+  customerName: string;
+  email: string;
+  phone: string;
+  carYear: string;
+  carMake: string;
+  carModel: string;
+  state: string;
+}
+
+// Extended form data for quote channel
+interface ExtendedFormData extends LeadFormData {
+  age: string;
+  gender: "male" | "female" | "other";
+  maritalStatus: "single" | "married" | "divorced" | "widowed";
+  zipCode: string;
+  creditScore: "excellent" | "good" | "fair" | "poor";
+  homeOwner: boolean;
+  yearsLicensed: string;
+  drivingHistory: "clean" | "minor_violations" | "major_violations" | "accidents" | "dui";
+  priorInsurance: boolean;
+  annualMileage: string;
+  vehicleOwnership: "owned" | "financed" | "leased";
+  primaryUse: "commute" | "pleasure" | "business";
+  garageType: "garage" | "carport" | "street" | "parking_lot";
+  antiTheft: boolean;
+  safetyFeatures: boolean;
+  occupation: "standard" | "professional" | "military" | "student";
+  coverageType: "liability" | "collision" | "comprehensive" | "full";
+  deductible: 250 | 500 | 1000 | 2000;
+}
+
+// Chat message interface
+interface ChatMessage {
+  role: "user" | "ai";
+  text: string;
+  action?: { type: string; data?: QuoteResult };
+}
+
+// Lead submission channel
+type LeadChannel = "asap" | "quote";
+
+// Form step type
+// ASAP flow: channel -> basic_info -> success (agent calls)
+// Quote flow: channel -> license_upload -> success (simple 3-field form)
+type FormStep = "channel" | "basic_info" | "license_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
+
+// US States list
+const US_STATES = [
+  { value: "AL", label: "Alabama" }, { value: "AK", label: "Alaska" }, { value: "AZ", label: "Arizona" },
+  { value: "AR", label: "Arkansas" }, { value: "CA", label: "California" }, { value: "CO", label: "Colorado" },
+  { value: "CT", label: "Connecticut" }, { value: "DE", label: "Delaware" }, { value: "FL", label: "Florida" },
+  { value: "GA", label: "Georgia" }, { value: "HI", label: "Hawaii" }, { value: "ID", label: "Idaho" },
+  { value: "IL", label: "Illinois" }, { value: "IN", label: "Indiana" }, { value: "IA", label: "Iowa" },
+  { value: "KS", label: "Kansas" }, { value: "KY", label: "Kentucky" }, { value: "LA", label: "Louisiana" },
+  { value: "ME", label: "Maine" }, { value: "MD", label: "Maryland" }, { value: "MA", label: "Massachusetts" },
+  { value: "MI", label: "Michigan" }, { value: "MN", label: "Minnesota" }, { value: "MS", label: "Mississippi" },
+  { value: "MO", label: "Missouri" }, { value: "MT", label: "Montana" }, { value: "NE", label: "Nebraska" },
+  { value: "NV", label: "Nevada" }, { value: "NH", label: "New Hampshire" }, { value: "NJ", label: "New Jersey" },
+  { value: "NM", label: "New Mexico" }, { value: "NY", label: "New York" }, { value: "NC", label: "North Carolina" },
+  { value: "ND", label: "North Dakota" }, { value: "OH", label: "Ohio" }, { value: "OK", label: "Oklahoma" },
+  { value: "OR", label: "Oregon" }, { value: "PA", label: "Pennsylvania" }, { value: "RI", label: "Rhode Island" },
+  { value: "SC", label: "South Carolina" }, { value: "SD", label: "South Dakota" }, { value: "TN", label: "Tennessee" },
+  { value: "TX", label: "Texas" }, { value: "UT", label: "Utah" }, { value: "VT", label: "Vermont" },
+  { value: "VA", label: "Virginia" }, { value: "WA", label: "Washington" }, { value: "WV", label: "West Virginia" },
+  { value: "WI", label: "Wisconsin" }, { value: "WY", label: "Wyoming" }, { value: "DC", label: "Washington DC" },
+];
 
 type Tab = "dashboard" | "connection" | "leads" | "earnings" | "profile";
 
@@ -16,14 +87,14 @@ export default function ProviderDashboard() {
   const router = useRouter();
   const { currentUser, isAuthenticated, isLoading, logout, updateUser, getUsersByRole } = useAuth();
   const currentProvider = useCurrentProvider();
-  const { leads } = useLeads();
+  const { leads, addLead } = useLeads();
   const {
     getRequestsForProvider,
     getActiveConnectionForProvider,
-    getConnectionsForProvider,
     sendConnectionRequest,
     acceptTerms,
     declineTerms,
+    updateConnectionStats,
   } = useConnections();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
@@ -223,7 +294,7 @@ export default function ProviderDashboard() {
             claimedLeads={claimedLeads}
             totalEarnings={totalEarnings}
             pendingEarnings={pendingEarnings}
-            currentProvider={currentProvider}
+            onNavigateToConnection={() => setActiveTab("connection")}
           />
         )}
 
@@ -240,12 +311,14 @@ export default function ProviderDashboard() {
             sendConnectionRequest={sendConnectionRequest}
             acceptTerms={acceptTerms}
             declineTerms={declineTerms}
+            addLead={addLead}
+            updateConnectionStats={updateConnectionStats}
           />
         )}
 
         {/* Leads Tab */}
         {activeTab === "leads" && (
-          <LeadsTab myLeads={myLeads} activeConnection={activeConnection} />
+          <LeadsTab myLeads={myLeads} activeConnection={activeConnection} onNavigateToConnection={() => setActiveTab("connection")} />
         )}
 
         {/* Earnings Tab */}
@@ -276,7 +349,7 @@ function DashboardTab({
   claimedLeads,
   totalEarnings,
   pendingEarnings,
-  currentProvider,
+  onNavigateToConnection,
 }: {
   activeConnection: Connection | null;
   myLeads: Lead[];
@@ -284,7 +357,7 @@ function DashboardTab({
   claimedLeads: number;
   totalEarnings: number;
   pendingEarnings: number;
-  currentProvider: import("@/lib/auth-types").LeadProvider | null;
+  onNavigateToConnection: () => void;
 }) {
   return (
     <div className="space-y-8">
@@ -299,9 +372,9 @@ function DashboardTab({
       {/* Quick Actions */}
       <div className="grid md:grid-cols-2 gap-6">
         {activeConnection ? (
-          <Link
-            href="/submit-lead"
-            className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md hover:border-[#1e3a5f]/30 transition group"
+          <button
+            onClick={onNavigateToConnection}
+            className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md hover:border-[#1e3a5f]/30 transition group text-left"
           >
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center group-hover:bg-[#1e3a5f]/20 transition">
@@ -314,21 +387,24 @@ function DashboardTab({
                 <p className="text-gray-500 text-sm">Earn ${activeConnection.terms.paymentTerms.ratePerLead} per lead</p>
               </div>
             </div>
-          </Link>
+          </button>
         ) : (
-          <div className="bg-gray-100 rounded-xl border border-gray-200 p-6 opacity-60">
+          <button
+            onClick={onNavigateToConnection}
+            className="bg-gray-100 rounded-xl border border-gray-200 p-6 text-left"
+          >
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center">
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-500">Submit New Lead</h3>
-                <p className="text-gray-400 text-sm">Connect with a business first</p>
+                <h3 className="text-lg font-semibold text-gray-600">Connect with a Business</h3>
+                <p className="text-gray-400 text-sm">Establish a connection to start earning</p>
               </div>
             </div>
-          </div>
+          </button>
         )}
 
         {/* Connection Status Card */}
@@ -416,6 +492,8 @@ function ConnectionTab({
   sendConnectionRequest,
   acceptTerms,
   declineTerms,
+  addLead,
+  updateConnectionStats,
 }: {
   currentUser: import("@/lib/auth-types").User;
   currentProvider: import("@/lib/auth-types").LeadProvider | null;
@@ -434,12 +512,437 @@ function ConnectionTab({
   ) => ConnectionRequest;
   acceptTerms: (requestId: string) => Connection | null;
   declineTerms: (requestId: string) => void;
+  addLead: (lead: Omit<Lead, "id" | "createdAt">) => Lead;
+  updateConnectionStats: (connectionId: string, leadPayout: number) => void;
 }) {
-  const [showBuyerList, setShowBuyerList] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
   const [selectedBuyer, setSelectedBuyer] = useState<LeadBuyer | null>(null);
+  const [, setShowBuyerList] = useState(false);
+
+  // Multi-step lead submission state
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [channel, setChannel] = useState<LeadChannel | null>(null);
+  const [formStep, setFormStep] = useState<FormStep>("channel");
+  const [leadSubmitted, setLeadSubmitted] = useState(false);
+  const [callStatus, setCallStatus] = useState<"idle" | "calling" | "completed" | "failed">("idle");
+
+  // Form data
+  const [formData, setFormData] = useState<ExtendedFormData>({
+    customerName: "",
+    email: "",
+    phone: "",
+    carYear: "",
+    carMake: "",
+    carModel: "",
+    state: "PA",
+    age: "35",
+    gender: "other",
+    maritalStatus: "single",
+    zipCode: "",
+    creditScore: "good",
+    homeOwner: false,
+    yearsLicensed: "10",
+    drivingHistory: "clean",
+    priorInsurance: true,
+    annualMileage: "12000",
+    vehicleOwnership: "owned",
+    primaryUse: "commute",
+    garageType: "garage",
+    antiTheft: false,
+    safetyFeatures: true,
+    occupation: "standard",
+    coverageType: "full",
+    deductible: 500,
+  });
+
+  // Quote and chatbot state
+  const [allQuotes, setAllQuotes] = useState<QuoteResult[]>([]);
+  const [selectedQuote, setSelectedQuote] = useState<QuoteResult | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Payment state
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>("ach_bank");
+  const [stateConfirmed, setStateConfirmed] = useState(false);
+
+  // Simple quote form state (license upload flow)
+  const [licenseImage, setLicenseImage] = useState<string | null>(null);
+  const [quoteEmail, setQuoteEmail] = useState("");
+  const [quotePhone, setQuotePhone] = useState("");
+  const [extractedLicenseData, setExtractedLicenseData] = useState<{
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    dateOfBirth: string;
+    age: number;
+    gender: "male" | "female" | "other";
+    licenseNumber: string;
+    licenseState: string;
+    expirationDate: string;
+    address: {
+      street: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      fullAddress: string;
+    };
+    isExpired: boolean;
+    isValid: boolean;
+    daysUntilExpiration: number;
+    validationNotes: string[];
+    confidence: "high" | "medium" | "low";
+  } | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
 
   const buyers = getUsersByRole("buyer") as LeadBuyer[];
+
+  // Reset form when closing
+  const resetForm = () => {
+    setShowLeadForm(false);
+    setChannel(null);
+    setFormStep("channel");
+    setFormData({
+      customerName: "", email: "", phone: "", carYear: "", carMake: "", carModel: "", state: "PA",
+      age: "35", gender: "other", maritalStatus: "single", zipCode: "", creditScore: "good",
+      homeOwner: false, yearsLicensed: "10", drivingHistory: "clean", priorInsurance: true,
+      annualMileage: "12000", vehicleOwnership: "owned", primaryUse: "commute", garageType: "garage",
+      antiTheft: false, safetyFeatures: true, occupation: "standard", coverageType: "full", deductible: 500,
+    });
+    setAllQuotes([]);
+    setSelectedQuote(null);
+    setChatMessages([]);
+    setCallStatus("idle");
+    setSelectedPaymentMethod("ach_bank");
+    setStateConfirmed(false);
+    // Reset simple quote form
+    setLicenseImage(null);
+    setQuoteEmail("");
+    setQuotePhone("");
+    setExtractedLicenseData(null);
+    setIsExtracting(false);
+    setExtractionError(null);
+  };
+
+  // Generate quotes using the insurance calculator
+  const generateQuotes = () => {
+    const input: MultiCarrierQuoteInput = {
+      carModel: `${formData.carYear} ${formData.carMake} ${formData.carModel}`,
+      state: formData.state,
+      age: parseInt(formData.age) || 35,
+      gender: formData.gender,
+      maritalStatus: formData.maritalStatus,
+      creditScore: formData.creditScore,
+      homeOwner: formData.homeOwner,
+      yearsLicensed: parseInt(formData.yearsLicensed) || 10,
+      drivingHistory: formData.drivingHistory,
+      priorInsurance: formData.priorInsurance,
+      annualMileage: parseInt(formData.annualMileage) || 12000,
+      vehicleOwnership: formData.vehicleOwnership,
+      primaryUse: formData.primaryUse,
+      garageType: formData.garageType,
+      antiTheft: formData.antiTheft,
+      safetyFeatures: formData.safetyFeatures,
+      occupation: formData.occupation,
+      coverageType: formData.coverageType,
+      deductible: formData.deductible,
+    };
+    const quotes = calculateMultiCarrierQuotes(input);
+    setAllQuotes(quotes);
+    setSelectedQuote(quotes[0] || null);
+    return quotes;
+  };
+
+  // Initialize chatbot with greeting
+  const initializeChatbot = (quotes: QuoteResult[]) => {
+    const bestQuote = quotes[0];
+    if (!bestQuote) return;
+
+    const firstName = formData.customerName.split(" ")[0] || "there";
+    setChatMessages([{
+      role: "ai",
+      text: `Great news, ${firstName}! I've found some excellent rates for your ${formData.carYear} ${formData.carMake} ${formData.carModel}.\n\nBased on your profile, you qualify for multiple discounts!\n\n**Your BEST rate: $${bestQuote.monthlyPremium}/month with ${bestQuote.companyName}**\n\nThis rate includes ${bestQuote.totalDiscount}% in savings. Would you like me to lock this in for you today, or do you have any questions about the coverage?`
+    }]);
+  };
+
+  // Handle chat messages
+  const handleChatSend = async (message: string) => {
+    if (!message.trim() || isAiLoading) return;
+
+    setChatMessages(prev => [...prev, { role: "user", text: message }]);
+    setChatInput("");
+    setIsAiLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...chatMessages, { role: "user" as const, text: message }].map(m => ({
+            role: m.role === "ai" ? "assistant" : m.role,
+            content: m.text,
+          })),
+          customerProfile: {
+            name: formData.customerName,
+            vehicleInfo: `${formData.carYear} ${formData.carMake} ${formData.carModel}`,
+            state: formData.state,
+          },
+          quotes: allQuotes,
+          selectedQuote,
+        }),
+      });
+
+      const data = await response.json();
+      setChatMessages(prev => [...prev, { role: "ai", text: data.message, action: data.action }]);
+    } catch {
+      setChatMessages(prev => [...prev, {
+        role: "ai",
+        text: "I apologize, I'm having trouble connecting. Please try again or click 'View All Quotes' to see your options directly.",
+      }]);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // Handle ASAP submission - trigger call
+  const handleAsapSubmit = async () => {
+    if (!activeConnection || !currentProvider) return;
+
+    // Check lead caps before submission
+    const capStatus = checkLeadCaps(activeConnection);
+    if (!capStatus.canSubmitLead) {
+      alert(capStatus.message || "Lead cap reached. Unable to submit.");
+      return;
+    }
+
+    setCallStatus("calling");
+    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+
+    // Create the lead
+    const lead = addLead({
+      providerId: currentUser.id,
+      providerName: currentProvider.displayName,
+      buyerId: activeConnection.buyerId,
+      customerName: formData.customerName,
+      email: formData.email,
+      phone: formData.phone,
+      carYear: parseInt(formData.carYear) || new Date().getFullYear(),
+      carModel: `${formData.carMake} ${formData.carModel}`.trim(),
+      quoteType: "asap",
+      payout,
+      connectionId: activeConnection.id,
+      status: "pending",
+    });
+
+    // Update connection stats
+    updateConnectionStats(activeConnection.id, payout);
+
+    // Trigger Twilio call
+    try {
+      const response = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: formData.customerName,
+          customerPhone: formData.phone,
+          carModel: `${formData.carMake} ${formData.carModel}`,
+          quoteType: "asap",
+          leadId: lead.id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success || data.simulated) {
+        setCallStatus("completed");
+        setFormStep("success");
+        setLeadSubmitted(true);
+      } else {
+        setCallStatus("failed");
+      }
+    } catch {
+      // Even if call fails, lead is still created
+      setCallStatus("completed");
+      setFormStep("success");
+      setLeadSubmitted(true);
+    }
+  };
+
+  // Handle Quote purchase
+  const handlePurchase = () => {
+    if (!activeConnection || !currentProvider || !selectedQuote) return;
+
+    // Check lead caps before submission
+    const capStatus = checkLeadCaps(activeConnection);
+    if (!capStatus.canSubmitLead) {
+      alert(capStatus.message || "Lead cap reached. Unable to submit.");
+      return;
+    }
+
+    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+
+    addLead({
+      providerId: currentUser.id,
+      providerName: currentProvider.displayName,
+      buyerId: activeConnection.buyerId,
+      customerName: formData.customerName,
+      email: formData.email,
+      phone: formData.phone,
+      carYear: parseInt(formData.carYear) || new Date().getFullYear(),
+      carModel: `${formData.carMake} ${formData.carModel}`.trim(),
+      quoteType: "quote",
+      payout,
+      connectionId: activeConnection.id,
+      status: "converted",
+      quote: {
+        monthlyPremium: selectedQuote.monthlyPremium,
+        annualPremium: selectedQuote.annualPremium,
+        coverageType: selectedQuote.coverageType,
+        deductible: selectedQuote.deductible,
+        provider: selectedQuote.companyName,
+      },
+    });
+
+    updateConnectionStats(activeConnection.id, payout);
+    setFormStep("success");
+    setLeadSubmitted(true);
+  };
+
+  // Handle simple quote submission (license upload flow)
+  const handleSimpleQuoteSubmit = async () => {
+    if (!activeConnection || !currentProvider) return;
+    if (!licenseImage || !quoteEmail || !quotePhone) return;
+
+    // Check lead caps before submission
+    const capStatus = checkLeadCaps(activeConnection);
+    if (!capStatus.canSubmitLead) {
+      alert(capStatus.message || "Lead cap reached. Unable to submit.");
+      return;
+    }
+
+    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+
+    // Use extracted name if available, otherwise placeholder
+    const customerName = extractedLicenseData?.fullName || "License Holder";
+
+    // Create the lead
+    const newLead = addLead({
+      providerId: currentUser.id,
+      providerName: currentProvider.displayName,
+      buyerId: activeConnection.buyerId,
+      customerName,
+      email: quoteEmail,
+      phone: quotePhone,
+      carYear: new Date().getFullYear(),
+      carModel: extractedLicenseData ? `Vehicle from ${extractedLicenseData.licenseState}` : "See License",
+      quoteType: "quote",
+      payout,
+      connectionId: activeConnection.id,
+      status: "pending",
+      licenseImage,
+      extractedLicenseData: extractedLicenseData ? {
+        firstName: extractedLicenseData.firstName,
+        lastName: extractedLicenseData.lastName,
+        fullName: extractedLicenseData.fullName,
+        dateOfBirth: extractedLicenseData.dateOfBirth,
+        age: extractedLicenseData.age,
+        gender: extractedLicenseData.gender,
+        licenseNumber: extractedLicenseData.licenseNumber,
+        licenseState: extractedLicenseData.licenseState,
+        expirationDate: extractedLicenseData.expirationDate,
+        address: extractedLicenseData.address,
+        isExpired: extractedLicenseData.isExpired,
+        isValid: extractedLicenseData.isValid,
+      } : undefined,
+    });
+
+    // Push to CRM if extracted data is available
+    if (extractedLicenseData) {
+      try {
+        await fetch("/api/crm/push-lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            licenseData: extractedLicenseData,
+            email: quoteEmail,
+            phone: quotePhone,
+            providerId: currentUser.id,
+            providerName: currentProvider.displayName,
+            leadType: "quote",
+          }),
+        });
+      } catch (err) {
+        console.error("CRM push failed:", err);
+        // Continue - lead is still saved locally
+      }
+    }
+
+    updateConnectionStats(activeConnection.id, payout);
+    setFormStep("success");
+    setLeadSubmitted(true);
+
+    // Log for debugging
+    console.log("Lead submitted:", newLead);
+  };
+
+  // Handle license image upload
+  const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please upload an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be less than 5MB");
+      return;
+    }
+
+    // Reset previous extraction
+    setExtractedLicenseData(null);
+    setExtractionError(null);
+    setIsExtracting(true);
+
+    // Convert to base64 for storage
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Image = reader.result as string;
+      setLicenseImage(base64Image);
+
+      // Extract license data using AI
+      try {
+        const response = await fetch("/api/extract-license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ licenseImage: base64Image }),
+        });
+
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          setExtractedLicenseData(result.data);
+          setExtractionError(null);
+        } else {
+          setExtractionError(result.error || "Could not extract license data. You can still submit manually.");
+        }
+      } catch {
+        setExtractionError("Failed to process license. You can still submit manually.");
+      } finally {
+        setIsExtracting(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Scroll chat to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   const handleSendRequest = () => {
     if (!selectedBuyer || !currentProvider) return;
@@ -472,59 +975,928 @@ function ConnectionTab({
   if (activeConnection) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="h-3 w-3 rounded-full bg-emerald-500"></div>
-            <h3 className="text-lg font-semibold text-[#1e3a5f]">Active Connection</h3>
+        {/* Success Message */}
+        {leadSubmitted && formStep === "success" && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xl font-bold text-emerald-800">
+                  {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
+                </p>
+                <p className="text-emerald-600">You earned ${activeConnection.terms.paymentTerms.ratePerLead} for this lead.</p>
+              </div>
+            </div>
+            {channel === "asap" && (
+              <p className="text-emerald-700 text-sm">An agent will call {formData.customerName} within 60 seconds.</p>
+            )}
+            <button
+              onClick={resetForm}
+              className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium transition"
+            >
+              Submit Another Lead
+            </button>
           </div>
+        )}
 
-          <div className="flex items-center gap-6 mb-6">
-            <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">{activeConnection.buyerBusinessName.charAt(0)}</span>
+        {/* Connection Info Card - Always visible */}
+        {formStep !== "success" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            {/* Check lead caps */}
+            {(() => {
+              const capStatus = checkLeadCaps(activeConnection);
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-3 w-3 rounded-full ${capStatus.canSubmitLead ? "bg-emerald-500" : "bg-amber-500"}`}></div>
+                      <h3 className="text-lg font-semibold text-[#1e3a5f]">Active Connection</h3>
+                    </div>
+                    {!showLeadForm && (
+                      capStatus.canSubmitLead ? (
+                        <button
+                          onClick={() => setShowLeadForm(true)}
+                          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Submit Lead
+                        </button>
+                      ) : (
+                        <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Cap Reached
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Cap Status Banner */}
+                  {!capStatus.canSubmitLead && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-6 h-6 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <p className="font-semibold text-amber-800">Lead Cap Reached</p>
+                          <p className="text-amber-700 text-sm mt-1">{capStatus.message}</p>
+                          <p className="text-amber-600 text-xs mt-2">The buyer has set limits to manage lead volume. You can submit more leads when the cap resets.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            <div className="flex items-center gap-6 mb-6">
+              <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+                <span className="text-2xl font-bold text-white">{activeConnection.buyerBusinessName.charAt(0)}</span>
+              </div>
+              <div>
+                <h4 className="text-xl font-bold text-gray-800">{activeConnection.buyerBusinessName}</h4>
+                <p className="text-gray-500">Connected since {new Date(activeConnection.acceptedAt).toLocaleDateString()}</p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xl font-bold text-gray-800">{activeConnection.buyerBusinessName}</h4>
-              <p className="text-gray-500">Connected since {new Date(activeConnection.acceptedAt).toLocaleDateString()}</p>
+
+            {/* Terms Display */}
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+              <h4 className="font-semibold text-gray-800 mb-4">Your Agreement Terms</h4>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-gray-500 text-sm">Rate per Lead</p>
+                  <p className="text-2xl font-bold text-[#1e3a5f]">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Payment Schedule</p>
+                  <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(activeConnection.terms.paymentTerms.timing)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Lead Types</p>
+                  <p className="text-xl font-semibold text-gray-800 capitalize">{activeConnection.terms.leadTypes.join(", ")}</p>
+                </div>
+              </div>
+
+              {/* Lead Cap Status */}
+              {activeConnection.terms.leadCaps && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-gray-500 text-sm mb-2">Lead Volume Limits</p>
+                  <div className="flex flex-wrap gap-3">
+                    {activeConnection.terms.leadCaps.weeklyLimit && (
+                      <div className="bg-white px-3 py-2 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500">Weekly</p>
+                        <p className="font-semibold text-gray-800">
+                          {activeConnection.stats.leadsThisWeek || 0} / {activeConnection.terms.leadCaps.weeklyLimit}
+                        </p>
+                      </div>
+                    )}
+                    {activeConnection.terms.leadCaps.monthlyLimit && (
+                      <div className="bg-white px-3 py-2 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-500">Monthly</p>
+                        <p className="font-semibold text-gray-800">
+                          {activeConnection.stats.leadsThisMonth || 0} / {activeConnection.terms.leadCaps.monthlyLimit}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="bg-gray-50 rounded-lg p-4 text-center">
+                <p className="text-3xl font-bold text-[#1e3a5f]">{activeConnection.stats.totalLeads}</p>
+                <p className="text-gray-500 text-sm">Total Leads</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4 text-center">
+                <p className="text-3xl font-bold text-emerald-600">${activeConnection.stats.totalPaid}</p>
+                <p className="text-gray-500 text-sm">Total Earned</p>
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Terms Display */}
-          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-            <h4 className="font-semibold text-gray-800 mb-4">Your Agreement Terms</h4>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-2xl font-bold text-[#1e3a5f]">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+        {/* Lead Submission Flow */}
+        {showLeadForm && formStep !== "success" && (
+          <div className="bg-white rounded-xl border-2 border-[#1e3a5f] p-6 shadow-lg">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                {formStep !== "channel" && (
+                  <button
+                    onClick={() => {
+                      if (formStep === "basic_info") setFormStep("channel");
+                      else if (formStep === "license_upload") setFormStep("channel");
+                      else if (formStep === "state_confirm") setFormStep("basic_info");
+                      else if (formStep === "extended_info") setFormStep("state_confirm");
+                      else if (formStep === "chatbot") setFormStep("extended_info");
+                      else if (formStep === "quotes") setFormStep("chatbot");
+                      else if (formStep === "payment") setFormStep("chatbot");
+                    }}
+                    className="text-gray-500 hover:text-[#1e3a5f] transition"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                )}
+                <h3 className="text-lg font-semibold text-[#1e3a5f]">
+                  {formStep === "channel" && "How can we help your customer?"}
+                  {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
+                  {formStep === "license_upload" && "Quick Quote - 3 Easy Steps"}
+                  {formStep === "state_confirm" && "Confirm State of Residence"}
+                  {formStep === "extended_info" && "Driver Profile Details"}
+                  {formStep === "chatbot" && "Insurance Quote Assistant"}
+                  {formStep === "quotes" && "Compare All Quotes"}
+                  {formStep === "payment" && "Select Payment Method"}
+                </h3>
               </div>
-              <div>
-                <p className="text-gray-500 text-sm">Payment Schedule</p>
-                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(activeConnection.terms.paymentTerms.timing)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 text-sm">Lead Types</p>
-                <p className="text-xl font-semibold text-gray-800 capitalize">{activeConnection.terms.leadTypes.join(", ")}</p>
-              </div>
+              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 transition">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            {activeConnection.terms.notes && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-gray-500 text-sm">Notes</p>
-                <p className="text-gray-700">{activeConnection.terms.notes}</p>
+
+            {/* Step 1: Channel Selection */}
+            {formStep === "channel" && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => { setChannel("asap"); setFormStep("basic_info"); }}
+                  className="bg-white border-2 border-gray-200 hover:border-red-500 rounded-xl p-6 text-left transition group"
+                >
+                  <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4 group-hover:bg-red-200 transition">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-800 mb-2">ASAP - Need Insurance Now</h4>
+                  <p className="text-gray-600 text-sm mb-4">Customer needs coverage immediately. Agent calls within 60 seconds.</p>
+                  <ul className="text-sm text-gray-500 space-y-1">
+                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Quick info collection</li>
+                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Immediate agent callback</li>
+                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Best for urgent needs</li>
+                  </ul>
+                </button>
+
+                <button
+                  onClick={() => { setChannel("quote"); setFormStep("license_upload"); }}
+                  className="bg-white border-2 border-gray-200 hover:border-blue-500 rounded-xl p-6 text-left transition group"
+                >
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mb-4 group-hover:bg-blue-200 transition">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                    </svg>
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-800 mb-2">Get Quote - Quick & Easy</h4>
+                  <p className="text-gray-600 text-sm mb-4">Customer might need insurance. High-value passive lead.</p>
+                  <ul className="text-sm text-gray-500 space-y-1">
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Just upload driver&apos;s license</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email &amp; phone only</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> High retention potential</li>
+                  </ul>
+                </button>
+              </div>
+            )}
+
+            {/* Simple Quote Flow: License Upload */}
+            {formStep === "license_upload" && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-blue-700 text-sm font-medium">
+                    High-value passive lead! Upload license to auto-extract customer info.
+                  </p>
+                  <p className="text-blue-600 text-xs mt-1">
+                    You&apos;ll earn ${activeConnection?.terms.paymentTerms.ratePerLead || 50} for this lead. Data is sent to CRM automatically.
+                  </p>
+                </div>
+
+                {/* Driver's License Upload */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    1. Driver&apos;s License Photo *
+                  </label>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData?.isExpired ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
+                    {isExtracting ? (
+                      <div className="space-y-3">
+                        <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+                        <p className="text-blue-600 font-medium">Analyzing license...</p>
+                        <p className="text-gray-500 text-sm">Extracting name, address, DOB, and validating expiration</p>
+                      </div>
+                    ) : licenseImage ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-2">
+                          {extractedLicenseData?.isValid && !extractedLicenseData?.isExpired ? (
+                            <span className="text-green-600 flex items-center gap-1">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                              </svg>
+                              <span className="font-medium">Valid License</span>
+                            </span>
+                          ) : extractedLicenseData?.isExpired ? (
+                            <span className="text-red-600 flex items-center gap-1">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span className="font-medium">License Expired</span>
+                            </span>
+                          ) : (
+                            <span className="text-yellow-600 flex items-center gap-1">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="font-medium">License Uploaded</span>
+                            </span>
+                          )}
+                        </div>
+                        <img src={licenseImage} alt="License preview" className="max-h-24 mx-auto rounded-lg shadow-sm" />
+                        <button
+                          onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
+                          className="text-sm text-red-600 hover:text-red-700 underline"
+                        >
+                          Remove and upload different image
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLicenseUpload}
+                          className="hidden"
+                        />
+                        <div className="space-y-2">
+                          <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto">
+                            <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-700 font-medium">Click to upload or take a photo</p>
+                          <p className="text-gray-500 text-sm">JPG, PNG up to 5MB - AI extracts data automatically</p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Extraction Error */}
+                {extractionError && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-yellow-700 text-sm">{extractionError}</p>
+                  </div>
+                )}
+
+                {/* Extracted License Data Display */}
+                {extractedLicenseData && (
+                  <div className={`border rounded-xl p-4 ${extractedLicenseData.isExpired ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200"}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className={`font-semibold ${extractedLicenseData.isExpired ? "text-red-800" : "text-emerald-800"}`}>
+                        Extracted License Data
+                      </h4>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        extractedLicenseData.confidence === "high" ? "bg-green-200 text-green-800" :
+                        extractedLicenseData.confidence === "medium" ? "bg-yellow-200 text-yellow-800" :
+                        "bg-red-200 text-red-800"
+                      }`}>
+                        {extractedLicenseData.confidence} confidence
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-500">Name:</span>
+                        <p className="font-medium text-gray-800">{extractedLicenseData.fullName}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">DOB:</span>
+                        <p className="font-medium text-gray-800">{extractedLicenseData.dateOfBirth} (Age {extractedLicenseData.age})</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">License #:</span>
+                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseNumber}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">State:</span>
+                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseState}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Address:</span>
+                        <p className="font-medium text-gray-800">{extractedLicenseData.address.fullAddress}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Expiration:</span>
+                        <p className={`font-medium ${extractedLicenseData.isExpired ? "text-red-600" : "text-gray-800"}`}>
+                          {extractedLicenseData.expirationDate}
+                          {extractedLicenseData.isExpired
+                            ? ` (Expired ${Math.abs(extractedLicenseData.daysUntilExpiration)} days ago)`
+                            : ` (${extractedLicenseData.daysUntilExpiration} days remaining)`}
+                        </p>
+                      </div>
+                    </div>
+                    {extractedLicenseData.validationNotes.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        {extractedLicenseData.validationNotes.map((note, i) => (
+                          <p key={i} className={`text-xs ${extractedLicenseData.isExpired ? "text-red-600" : "text-amber-600"}`}>
+                            • {note}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Email */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    2. Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    value={quoteEmail}
+                    onChange={(e) => setQuoteEmail(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    placeholder="customer@email.com"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    3. Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={quotePhone}
+                    onChange={(e) => setQuotePhone(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+
+                {/* CRM Push Info */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-gray-600 text-sm">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span>Lead data will be automatically pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  onClick={handleSimpleQuoteSubmit}
+                  disabled={!licenseImage || !quoteEmail || !quotePhone || isExtracting}
+                  className={`w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 ${
+                    extractedLicenseData?.isExpired
+                      ? "bg-amber-500 hover:bg-amber-600 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
+                  }`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  {extractedLicenseData?.isExpired ? "Submit Lead (Expired License)" : "Submit Lead"}
+                </button>
+
+                <p className="text-center text-gray-500 text-xs">
+                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${activeConnection?.terms.paymentTerms.ratePerLead || 50} once they process it.
+                </p>
+              </div>
+            )}
+
+            {/* Step 2: Basic Info Form */}
+            {formStep === "basic_info" && (
+              <div className="space-y-4">
+                <div className={`${channel === "asap" ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"} border rounded-lg p-3 mb-4`}>
+                  <p className={`${channel === "asap" ? "text-red-700" : "text-blue-700"} text-sm font-medium`}>
+                    {channel === "asap"
+                      ? "Get the essentials - agent will call within 60 seconds"
+                      : `You'll earn $${activeConnection.terms.paymentTerms.ratePerLead} when this lead converts`}
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Customer Name *</label>
+                    <input type="text" value={formData.customerName} onChange={(e) => setFormData({ ...formData, customerName: e.target.value })} required
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="John Doe" />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Email *</label>
+                    <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="john@example.com" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Phone *</label>
+                  <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="(555) 123-4567" />
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Vehicle Year *</label>
+                    <input type="text" value={formData.carYear} onChange={(e) => setFormData({ ...formData, carYear: e.target.value })} required
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="2022" />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Make *</label>
+                    <input type="text" value={formData.carMake} onChange={(e) => setFormData({ ...formData, carMake: e.target.value })} required
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="Toyota" />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Model *</label>
+                    <input type="text" value={formData.carModel} onChange={(e) => setFormData({ ...formData, carModel: e.target.value })} required
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="Camry" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">State *</label>
+                  <select value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                    {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  {channel === "asap" ? (
+                    <button onClick={handleAsapSubmit} disabled={callStatus === "calling" || !formData.customerName || !formData.phone}
+                      className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2">
+                      {callStatus === "calling" ? (
+                        <><span className="animate-spin">⏳</span> Connecting Agent...</>
+                      ) : (
+                        <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg> Call Agent Now</>
+                      )}
+                    </button>
+                  ) : (
+                    <button onClick={() => setFormStep("state_confirm")} disabled={!formData.customerName || !formData.phone || !formData.carYear}
+                      className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition">
+                      Continue to Get Best Rates
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* State Confirmation Step (Quote only) */}
+            {formStep === "state_confirm" && channel === "quote" && (
+              <div className="space-y-6">
+                {/* State Verification Notice */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-6 h-6 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="font-semibold text-blue-800">Insurance Licensing Verification</p>
+                      <p className="text-blue-700 text-sm mt-1">Insurance rates and regulations vary by state. Please confirm the customer&apos;s state of residence to ensure we provide accurate quotes from licensed carriers.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* State Selection */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <label className="block text-gray-700 text-sm font-medium mb-2">State of Residence *</label>
+                  <select
+                    value={formData.state}
+                    onChange={(e) => { setFormData({ ...formData, state: e.target.value }); setStateConfirmed(false); }}
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition text-lg"
+                  >
+                    {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+
+                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600 text-sm">
+                      Selected: <span className="font-semibold text-gray-800">{US_STATES.find(s => s.value === formData.state)?.label || formData.state}</span>
+                    </p>
+                    <p className="text-gray-500 text-xs mt-1">
+                      Quotes will be based on {formData.state} insurance requirements and rates.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Confirmation Checkbox */}
+                <label className="flex items-start gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition">
+                  <input
+                    type="checkbox"
+                    checked={stateConfirmed}
+                    onChange={(e) => setStateConfirmed(e.target.checked)}
+                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                  />
+                  <span className="text-gray-700 text-sm">
+                    I confirm that the customer is seeking insurance coverage for a vehicle registered in <strong>{US_STATES.find(s => s.value === formData.state)?.label || formData.state}</strong>, and I understand that a licensed agent will finalize their policy.
+                  </span>
+                </label>
+
+                {/* Compliance Disclaimer */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-amber-800 text-xs leading-relaxed">
+                    <strong>Important:</strong> {DISCLAIMERS.leadGenDisclaimer}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setFormStep("extended_info")}
+                  disabled={!stateConfirmed}
+                  className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition"
+                >
+                  Continue to Profile Details
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Extended Info Form (Quote only) */}
+            {formStep === "extended_info" && channel === "quote" && (
+              <div className="space-y-4">
+                <p className="text-gray-600 text-sm mb-4">More details = better rates. These help us find the best discounts.</p>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Age</label>
+                    <input type="number" value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Gender</label>
+                    <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value as ExtendedFormData["gender"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Marital Status</label>
+                    <select value={formData.maritalStatus} onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value as ExtendedFormData["maritalStatus"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value="single">Single</option><option value="married">Married</option><option value="divorced">Divorced</option><option value="widowed">Widowed</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Years Licensed</label>
+                    <input type="number" value={formData.yearsLicensed} onChange={(e) => setFormData({ ...formData, yearsLicensed: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Driving History</label>
+                    <select value={formData.drivingHistory} onChange={(e) => setFormData({ ...formData, drivingHistory: e.target.value as ExtendedFormData["drivingHistory"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value="clean">Clean Record</option><option value="minor_violations">Minor Violations</option><option value="major_violations">Major Violations</option><option value="accidents">At-Fault Accidents</option><option value="dui">DUI/DWI</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Credit Score</label>
+                    <select value={formData.creditScore} onChange={(e) => setFormData({ ...formData, creditScore: e.target.value as ExtendedFormData["creditScore"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value="excellent">Excellent (750+)</option><option value="good">Good (700-749)</option><option value="fair">Fair (650-699)</option><option value="poor">Poor (Below 650)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Annual Mileage</label>
+                    <input type="number" value={formData.annualMileage} onChange={(e) => setFormData({ ...formData, annualMileage: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Coverage Type</label>
+                    <select value={formData.coverageType} onChange={(e) => setFormData({ ...formData, coverageType: e.target.value as ExtendedFormData["coverageType"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value="liability">Liability Only</option><option value="collision">Liability + Collision</option><option value="comprehensive">Liability + Comprehensive</option><option value="full">Full Coverage</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Deductible</label>
+                    <select value={formData.deductible} onChange={(e) => setFormData({ ...formData, deductible: parseInt(e.target.value) as ExtendedFormData["deductible"] })}
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      <option value={250}>$250</option><option value={500}>$500</option><option value={1000}>$1,000</option><option value={2000}>$2,000</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.homeOwner} onChange={(e) => setFormData({ ...formData, homeOwner: e.target.checked })} className="w-4 h-4" />
+                    <span className="text-sm text-gray-700">Homeowner</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.priorInsurance} onChange={(e) => setFormData({ ...formData, priorInsurance: e.target.checked })} className="w-4 h-4" />
+                    <span className="text-sm text-gray-700">Currently Insured</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.antiTheft} onChange={(e) => setFormData({ ...formData, antiTheft: e.target.checked })} className="w-4 h-4" />
+                    <span className="text-sm text-gray-700">Anti-Theft Device</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={formData.safetyFeatures} onChange={(e) => setFormData({ ...formData, safetyFeatures: e.target.checked })} className="w-4 h-4" />
+                    <span className="text-sm text-gray-700">Safety Features (ABS, Airbags)</span>
+                  </label>
+                </div>
+
+                <button onClick={() => { const quotes = generateQuotes(); initializeChatbot(quotes); setFormStep("chatbot"); }}
+                  className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg font-semibold transition mt-4">
+                  Get My Quotes
+                </button>
+              </div>
+            )}
+
+            {/* Step 4: Chatbot */}
+            {formStep === "chatbot" && (
+              <div className="flex flex-col h-[500px]">
+                {/* Quote Header */}
+                {selectedQuote && (
+                  <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-t-xl p-4 text-white -mx-6 -mt-6 mb-4">
+                    <div className="flex items-center justify-between px-2">
+                      <div>
+                        <p className="text-sm opacity-80">Best Rate for {formData.customerName.split(" ")[0]}</p>
+                        <p className="text-3xl font-bold">${selectedQuote.monthlyPremium}/mo</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm opacity-80">{selectedQuote.companyName}</p>
+                        <p className="text-sm text-emerald-300">Saving {selectedQuote.totalDiscount}%</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[80%] rounded-xl px-4 py-3 ${msg.role === "user" ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-800"}`}>
+                        <p className="whitespace-pre-wrap text-sm">{msg.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isAiLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-100 rounded-xl px-4 py-3">
+                        <div className="flex gap-1"><span className="animate-bounce">.</span><span className="animate-bounce delay-100">.</span><span className="animate-bounce delay-200">.</span></div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Quick Actions */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button onClick={() => handleChatSend("Yes, lock in this rate!")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">Lock In This Rate</button>
+                  <button onClick={() => setFormStep("quotes")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">View All Quotes</button>
+                  <button onClick={() => handleChatSend("What's included in my coverage?")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">What&apos;s Covered?</button>
+                  <button onClick={() => handleChatSend("Can I get a lower price?")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">Lower Price Options</button>
+                </div>
+
+                {/* Chat Input */}
+                <div className="flex gap-2">
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleChatSend(chatInput)}
+                    placeholder="Ask about coverage, discounts, or anything else..." className="flex-1 px-4 py-3 rounded-lg border border-gray-200 focus:border-[#1e3a5f] focus:outline-none" />
+                  <button onClick={() => handleChatSend(chatInput)} className="bg-[#1e3a5f] text-white px-4 py-3 rounded-lg">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                  </button>
+                </div>
+
+                {/* Purchase CTA */}
+                {selectedQuote && (
+                  <button onClick={() => setFormStep("payment")} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Purchase {selectedQuote.companyName} - ${selectedQuote.monthlyPremium}/mo
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Payment Method Selection Step */}
+            {formStep === "payment" && selectedQuote && (
+              <div className="space-y-6">
+                {/* Selected Quote Summary */}
+                <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-xl p-4 text-white -mx-6 -mt-6 mb-2">
+                  <div className="flex items-center justify-between px-2">
+                    <div>
+                      <p className="text-sm opacity-80">Selected Policy</p>
+                      <p className="text-2xl font-bold">${selectedQuote.monthlyPremium}/mo</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{selectedQuote.companyName}</p>
+                      <p className="text-sm text-emerald-300">{selectedQuote.coverageType} coverage</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Methods */}
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Choose Payment Method</h4>
+                  <div className="space-y-3">
+                    {PAYMENT_METHODS.map((method) => {
+                      const fee = calculateFee(method, selectedQuote.monthlyPremium);
+                      const total = selectedQuote.monthlyPremium + fee;
+                      return (
+                        <label
+                          key={method.id}
+                          className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition ${
+                            selectedPaymentMethod === method.id
+                              ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                              : "border-gray-200 hover:border-[#1e3a5f]/30"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="paymentMethod"
+                              value={method.id}
+                              checked={selectedPaymentMethod === method.id}
+                              onChange={(e) => setSelectedPaymentMethod(e.target.value as PaymentMethodType)}
+                              className="w-4 h-4 text-[#1e3a5f]"
+                            />
+                            <div className="text-2xl">{method.icon}</div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-800">{method.name}</span>
+                                {method.recommended && (
+                                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">Recommended</span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500">{method.processingTime}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {fee > 0 ? (
+                              <>
+                                <p className="font-semibold text-gray-800">${total.toFixed(2)}</p>
+                                <p className="text-xs text-gray-500">+${fee.toFixed(2)} fee</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-semibold text-gray-800">${selectedQuote.monthlyPremium.toFixed(2)}</p>
+                                <p className="text-xs text-emerald-600">No fee</p>
+                              </>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Fee Breakdown */}
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <h5 className="font-medium text-gray-700 mb-3">Payment Summary</h5>
+                  {(() => {
+                    const method = PAYMENT_METHODS.find(m => m.id === selectedPaymentMethod);
+                    const fee = method ? calculateFee(method, selectedQuote.monthlyPremium) : 0;
+                    const total = selectedQuote.monthlyPremium + fee;
+                    return (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Monthly Premium</span>
+                          <span className="text-gray-800">${selectedQuote.monthlyPremium.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Processing Fee</span>
+                          <span className={fee > 0 ? "text-gray-800" : "text-emerald-600"}>
+                            {fee > 0 ? `$${fee.toFixed(2)}` : "Free"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold">
+                          <span className="text-gray-800">Total Due Today</span>
+                          <span className="text-[#1e3a5f]">${total.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Fee Information */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <p className="text-blue-700 text-xs">
+                    <strong>Lower fees with ACH:</strong> Bank transfers (ACH) have the lowest processing fees, capped at $5 max. Credit cards and digital wallets have higher fees but process instantly.
+                  </p>
+                </div>
+
+                {/* Compliance Disclaimers */}
+                <div className="space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p className="text-amber-800 text-xs leading-relaxed">
+                      <strong>Quote Disclaimer:</strong> {DISCLAIMERS.quoteDisclaimer}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      {DISCLAIMERS.licenseVerification}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Purchase Button */}
+                <button
+                  onClick={handlePurchase}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold transition flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Complete Purchase
+                </button>
+
+                <p className="text-center text-gray-500 text-xs">
+                  A licensed insurance agent will contact you to finalize your policy.
+                </p>
+              </div>
+            )}
+
+            {/* Step 5: All Quotes Comparison */}
+            {formStep === "quotes" && (
+              <div className="space-y-4">
+                <p className="text-gray-600 text-sm">Compare rates from all carriers. Click to select and purchase.</p>
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {allQuotes.map((quote) => (
+                    <button key={quote.companyId} onClick={() => { setSelectedQuote(quote); setFormStep("chatbot"); }}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition ${selectedQuote?.companyId === quote.companyId ? "border-[#1e3a5f] bg-[#1e3a5f]/5" : "border-gray-200 hover:border-[#1e3a5f]/50"}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-gray-800">{quote.companyName}</p>
+                          <p className="text-sm text-gray-500">{quote.coverageType} coverage • ${quote.deductible} deductible</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-[#1e3a5f]">${quote.monthlyPremium}/mo</p>
+                          <p className="text-sm text-emerald-600">{quote.totalDiscount}% savings</p>
+                        </div>
+                      </div>
+                      {quote.discountsApplied.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {quote.discountsApplied.slice(0, 3).map((d, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">{d}</span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setFormStep("chatbot")} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-medium transition">
+                  Back to Chat
+                </button>
               </div>
             )}
           </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 mt-6">
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-[#1e3a5f]">{activeConnection.stats.totalLeads}</p>
-              <p className="text-gray-500 text-sm">Total Leads</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-emerald-600">${activeConnection.stats.totalPaid}</p>
-              <p className="text-gray-500 text-sm">Total Earned</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -730,21 +2102,21 @@ function ConnectionTab({
 }
 
 // Leads Tab
-function LeadsTab({ myLeads, activeConnection }: { myLeads: Lead[]; activeConnection: Connection | null }) {
+function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLeads: Lead[]; activeConnection: Connection | null; onNavigateToConnection: () => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({myLeads.length})</h3>
         {activeConnection && (
-          <Link
-            href="/submit-lead"
+          <button
+            onClick={onNavigateToConnection}
             className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-medium"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             New Lead
-          </Link>
+          </button>
         )}
       </div>
       {myLeads.length > 0 ? (
