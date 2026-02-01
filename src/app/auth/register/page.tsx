@@ -156,10 +156,10 @@ function RegisterContent() {
           <Link href="/" className="inline-block">
             <Image
               src="/woml-logo.png"
-              alt="WOML Logo"
-              width={64}
-              height={64}
-              className="mx-auto mb-4 object-contain"
+              alt="WOML - Word of Mouth Leads"
+              width={200}
+              height={60}
+              className="mx-auto mb-4 h-14 w-auto object-contain"
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Create Account</h1>

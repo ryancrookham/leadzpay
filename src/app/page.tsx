@@ -50,9 +50,9 @@ export default function Home() {
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
-            width={160}
-            height={48}
-            className="h-12 w-auto object-contain"
+            width={200}
+            height={56}
+            className="h-14 w-auto object-contain"
           />
         </div>
         <div className="flex gap-3">
