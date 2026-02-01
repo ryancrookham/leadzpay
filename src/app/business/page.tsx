@@ -148,13 +148,18 @@ export default function BusinessPortal() {
     }
   };
 
-  // Show loading while checking auth
-  if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser)) {
+  // Only show loading during initial auth check, not after login redirect
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
       </div>
     );
+  }
+
+  // Redirect handled by useEffect above - show nothing while redirecting
+  if (!isAuthenticated || !currentUser || !isBuyer(currentUser)) {
+    return null;
   }
 
   // Calculate stats
