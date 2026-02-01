@@ -151,7 +151,7 @@ export default function ProviderDashboard() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/logo.jpg"
+          src="/woml-logo.png"
           alt=""
           width={600}
           height={600}
@@ -164,15 +164,14 @@ export default function ProviderDashboard() {
       <header className="relative z-10 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center">
               <Image
-                src="/logo.jpg"
-                alt="LeadzPay Logo"
-                width={40}
+                src="/woml-logo.png"
+                alt="WOML - Word of Mouth Leads"
+                width={140}
                 height={40}
-                className="h-10 w-10 object-contain"
+                className="h-10 w-auto object-contain"
               />
-              <span className="text-2xl font-bold text-[#1e3a5f]">LeadzPay</span>
             </Link>
             <span className="text-gray-300">|</span>
             <span className="text-[#1e3a5f] font-medium">Provider Portal</span>

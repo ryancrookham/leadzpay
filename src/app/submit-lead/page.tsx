@@ -685,8 +685,8 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+            <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+            
           </Link>
           <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
         </nav>
@@ -817,8 +817,8 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-4 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+            <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+            
           </Link>
           <button onClick={() => setStep("questions")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
@@ -976,8 +976,8 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+            <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+            
           </Link>
           <button onClick={() => setStep("chatbot")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
@@ -1195,8 +1195,8 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+            <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+            
           </Link>
           <button onClick={() => setStep("form")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
         </nav>
@@ -1424,8 +1424,8 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-            <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+            <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+            
           </Link>
           <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
         </nav>
@@ -1613,8 +1613,8 @@ export default function SubmitLead() {
 
       <nav className="flex items-center justify-between px-8 py-6 relative z-10">
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/logo.jpg" alt="LeadzPay" width={40} height={40} className="h-10 w-10 object-contain" />
-          <span className="text-2xl font-bold text-gray-800">LeadzPay</span>
+          <Image src="/woml-logo.png" alt="WOML" width={40} height={40} className="h-10 w-10 object-contain" />
+          
         </Link>
         <div className="flex items-center gap-4">
           {currentProvider && (

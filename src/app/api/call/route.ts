@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const call = await client.calls.create({
       twiml: `<Response>
         <Say voice="alice">
-          New urgent insurance lead from LeadzPay.
+          New urgent insurance lead from WOML.
           Customer name: ${customerName}.
           Phone number: ${customerPhone}.
           Vehicle: ${carModel}.

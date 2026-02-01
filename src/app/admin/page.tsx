@@ -101,7 +101,7 @@ export default function AdminPanel() {
             <div className="h-10 w-10 rounded-lg bg-emerald-500 flex items-center justify-center">
               <span className="text-white font-bold text-xl">L</span>
             </div>
-            <span className="text-2xl font-bold text-white">LeadzPay</span>
+            
           </Link>
           <span className="px-3 py-1 bg-red-500/20 text-red-400 text-sm rounded-full">Admin</span>
         </div>

@@ -142,7 +142,7 @@ function RegisterContent() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/logo.jpg"
+          src="/woml-logo.png"
           alt=""
           width={500}
           height={500}
@@ -155,15 +155,15 @@ function RegisterContent() {
         <div className="text-center mb-6">
           <Link href="/" className="inline-block">
             <Image
-              src="/logo.jpg"
-              alt="LeadzPay Logo"
+              src="/woml-logo.png"
+              alt="WOML Logo"
               width={64}
               height={64}
               className="mx-auto mb-4 object-contain"
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Create Account</h1>
-          <p className="text-gray-500">Join the LeadzPay marketplace</p>
+          <p className="text-gray-500">Join the WOML marketplace</p>
         </div>
 
         {/* Role Tabs */}

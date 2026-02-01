@@ -22,7 +22,7 @@ export default function Dashboard() {
           <div className="h-10 w-10 rounded-lg bg-emerald-500 flex items-center justify-center">
             <span className="text-white font-bold text-xl">L</span>
           </div>
-          <span className="text-2xl font-bold text-white">LeadzPay</span>
+          
         </Link>
 
         {/* Role Toggle */}

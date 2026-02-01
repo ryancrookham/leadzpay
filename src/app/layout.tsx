@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LeadzPay - Car Insurance Lead Marketplace",
+  title: "WOML - Word of Mouth Leads",
   description: "Connect car salespeople with insurance agents. Send qualified leads, get paid instantly.",
 };
 

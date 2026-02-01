@@ -35,7 +35,7 @@ export default function Home() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/logo.jpg"
+          src="/woml-logo.png"
           alt=""
           width={600}
           height={600}
@@ -46,17 +46,14 @@ export default function Home() {
 
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center">
           <Image
-            src="/logo.jpg"
-            alt="LeadzPay Logo"
-            width={48}
+            src="/woml-logo.png"
+            alt="WOML - Word of Mouth Leads"
+            width={160}
             height={48}
-            className="h-12 w-12 object-contain"
+            className="h-12 w-auto object-contain"
           />
-          <span className="text-2xl font-bold text-[#1e3a5f] tracking-tight">
-            LeadzPay
-          </span>
         </div>
         <div className="flex gap-3">
           <Link
@@ -89,7 +86,7 @@ export default function Home() {
             Who Are You?
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-            Select your role to get started with LeadzPay
+            Select your role to get started with WOML
           </p>
         </div>
 
@@ -247,7 +244,7 @@ export default function Home() {
 
         {/* How It Works */}
         <div className="mt-16 mb-24">
-          <h2 className="text-3xl font-bold text-[#1e3a5f] text-center mb-12">How LeadzPay Works</h2>
+          <h2 className="text-3xl font-bold text-[#1e3a5f] text-center mb-12">How WOML Works</h2>
           <div className="grid md:grid-cols-4 gap-6">
             {[
               { num: "1", title: "Customer Walks In", desc: "A car buyer needs insurance to drive off the lot legally" },
@@ -287,17 +284,16 @@ export default function Home() {
       {/* Footer */}
       <footer className="relative z-10 border-t border-gray-100 py-8 px-8 mt-16 bg-white">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             <Image
-              src="/logo.jpg"
-              alt="LeadzPay Logo"
-              width={32}
-              height={32}
-              className="h-8 w-8 object-contain"
+              src="/woml-logo.png"
+              alt="WOML - Word of Mouth Leads"
+              width={120}
+              height={36}
+              className="h-9 w-auto object-contain"
             />
-            <span className="text-xl font-bold text-[#1e3a5f]">LeadzPay</span>
           </div>
-          <div className="text-gray-400 text-sm">© 2025 LeadzPay. All rights reserved.</div>
+          <div className="text-gray-400 text-sm">© 2025 WOML. All rights reserved.</div>
         </div>
       </footer>
     </div>

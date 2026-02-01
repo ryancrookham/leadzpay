@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
       providerEmail,
       oldRate,
       newRate,
-      businessName = "LeadzPay Insurance Agency",
+      businessName = "WOML Insurance Agency",
       businessEmail = "business@leadzpay.com"
     } = body;
 
@@ -33,7 +33,7 @@ If you have any questions about this change, please contact ${businessName}.
 
 Best regards,
 ${businessName}
-LeadzPay Platform
+WOML Platform
       `.trim()
     };
 
@@ -51,7 +51,7 @@ Changed At: ${new Date().toLocaleString()}
 
 The provider has been notified of this change via email.
 
-- LeadzPay System
+- WOML System
       `.trim()
     };
 

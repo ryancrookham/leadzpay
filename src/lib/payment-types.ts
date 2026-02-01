@@ -169,7 +169,7 @@ export interface BusinessLicensing {
 export const DISCLAIMERS = {
   quoteDisclaimer: `The quotes displayed are estimates based on the information you provided. Actual premiums may vary based on additional underwriting factors. Final rates will be determined by the insurance carrier upon application review.`,
 
-  leadGenDisclaimer: `LeadzPay is a lead generation platform that connects consumers with licensed insurance agents. LeadzPay does not sell, bind, or underwrite insurance policies. All insurance products are offered and sold by licensed insurance agents and carriers.`,
+  leadGenDisclaimer: `WOML is a lead generation platform that connects consumers with licensed insurance agents. WOML does not sell, bind, or underwrite insurance policies. All insurance products are offered and sold by licensed insurance agents and carriers.`,
 
   licenseVerification: `By proceeding, you confirm that you are seeking insurance quotes in a state where you reside and that you understand a licensed insurance agent will contact you to complete your application.`,
 
@@ -180,24 +180,24 @@ export const DISCLAIMERS = {
   // Per-Lead Payment Compliance
   perLeadPaymentNotice: `Lead providers are compensated on a per-lead basis, not per customer acquisition or policy sale. This payment structure ensures fair market competition and compliance with lead generation regulations.`,
 
-  antiMonopolyNotice: `LeadzPay maintains fair market practices by compensating lead providers per qualified lead submitted, regardless of conversion outcome. This prevents any single buyer from monopolizing lead sources through conversion-based pricing.`,
+  antiMonopolyNotice: `WOML maintains fair market practices by compensating lead providers per qualified lead submitted, regardless of conversion outcome. This prevents any single buyer from monopolizing lead sources through conversion-based pricing.`,
 
   // Financial Transparency
-  feeTransparency: `All transaction fees are clearly disclosed before payment. LeadzPay does not charge hidden fees. Processing fees vary by payment method and are charged by third-party payment processors.`,
+  feeTransparency: `All transaction fees are clearly disclosed before payment. WOML does not charge hidden fees. Processing fees vary by payment method and are charged by third-party payment processors.`,
 
   providerPayoutNotice: `Lead providers receive payment for each qualified lead submitted according to their agreement terms. Payouts are processed via your selected payout method. Standard bank transfers are free; instant transfers and digital wallets may have small fees.`,
 
   // State Compliance
-  stateComplianceNotice: `Insurance lead generation is regulated at the state level. LeadzPay ensures all lead transactions comply with applicable state laws. Buyers must hold valid insurance licenses in states where they receive leads.`,
+  stateComplianceNotice: `Insurance lead generation is regulated at the state level. WOML ensures all lead transactions comply with applicable state laws. Buyers must hold valid insurance licenses in states where they receive leads.`,
 
   buyerLicenseRequirement: `By registering as a lead buyer, you certify that you hold valid insurance licenses in all states you select, and you agree to only receive leads from states where you are licensed to conduct business.`,
 
   tcpaCompliance: `By submitting contact information, you consent to be contacted by licensed insurance agents via phone, text, or email regarding insurance products. You may opt out at any time. This consent is not a condition of purchase.`,
 };
 
-// Platform fee structure (LeadzPay's cut)
+// Platform fee structure (WOML's cut)
 export const PLATFORM_FEES = {
-  leadTransactionFee: 0, // LeadzPay takes no cut from lead payments (transparent)
+  leadTransactionFee: 0, // WOML takes no cut from lead payments (transparent)
   paymentProcessingPassthrough: true, // We pass through payment processor fees only
   noHiddenFees: true,
 };
