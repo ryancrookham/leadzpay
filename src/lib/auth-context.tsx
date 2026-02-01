@@ -111,9 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
     ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }> => {
       try {
+        console.log("[Login] Starting login for:", email);
+
         // Get credentials
         const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
         if (!credentialsData) {
+          console.log("[Login] No credentials found in localStorage");
           return { success: false, error: "Invalid email or password" };
         }
 
@@ -123,15 +126,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
 
         if (!userCreds) {
+          console.log("[Login] Email not found in credentials");
           return { success: false, error: "Invalid email or password" };
         }
 
-        // Verify password
-        const isValid = await verifyPassword(
-          password,
-          userCreds.salt,
-          userCreds.passwordHash
-        );
+        console.log("[Login] Found credentials, verifying password...");
+
+        // Verify password with timeout to prevent hanging
+        const verifyWithTimeout = Promise.race([
+          verifyPassword(password, userCreds.salt, userCreds.passwordHash),
+          new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error("Password verification timeout")), 5000)
+          )
+        ]);
+
+        const isValid = await verifyWithTimeout;
+        console.log("[Login] Password verification result:", isValid);
+
         if (!isValid) {
           return { success: false, error: "Invalid email or password" };
         }
@@ -165,9 +176,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
         setCurrentUser(user);
 
+        console.log("[Login] Success! User role:", user.role);
         return { success: true, role: user.role };
       } catch (error) {
-        console.error("Login error:", error);
+        console.error("[Login] Error:", error);
         return { success: false, error: "An error occurred during login" };
       }
     },

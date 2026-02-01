@@ -34,17 +34,33 @@ function LoginContent() {
     setError("");
     setIsSubmitting(true);
 
-    const result = await login(email, password);
+    try {
+      console.log("[LoginPage] Attempting login...");
+      const result = await login(email, password);
+      console.log("[LoginPage] Login result:", result);
 
-    if (result.success && result.role) {
-      // Redirect immediately based on role - don't wait for state update
-      if (result.role === "buyer") {
-        router.replace("/business");
+      if (result.success && result.role) {
+        // Redirect immediately based on role
+        const targetUrl = result.role === "buyer" ? "/business" : "/provider-dashboard";
+        console.log("[LoginPage] Redirecting to:", targetUrl);
+
+        // Use push instead of replace for more reliable navigation
+        router.push(targetUrl);
+
+        // Fallback: if still on page after 3 seconds, something went wrong
+        setTimeout(() => {
+          if (window.location.pathname === "/auth/login") {
+            console.log("[LoginPage] Redirect failed, trying window.location");
+            window.location.href = targetUrl;
+          }
+        }, 3000);
       } else {
-        router.replace("/provider-dashboard");
+        setError(result.error || "Login failed");
+        setIsSubmitting(false);
       }
-    } else {
-      setError(result.error || "Login failed");
+    } catch (err) {
+      console.error("[LoginPage] Login error:", err);
+      setError("An unexpected error occurred");
       setIsSubmitting(false);
     }
   };
