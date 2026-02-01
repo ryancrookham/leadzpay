@@ -14,46 +14,62 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const preselectedRole = searchParams.get("role") as "buyer" | "provider" | null;
 
-  // Redirect if already authenticated (handles page refresh while logged in)
+  // Redirect if already authenticated
   useEffect(() => {
     if (!isLoading && isAuthenticated && currentUser) {
-      if (currentUser.role === "buyer") {
-        router.replace("/business");
-      } else {
-        router.replace("/provider-dashboard");
-      }
+      const targetUrl = currentUser.role === "buyer" ? "/business" : "/provider-dashboard";
+      window.location.href = targetUrl;
     }
-  }, [isAuthenticated, currentUser, isLoading, router]);
+  }, [isAuthenticated, currentUser, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setDebugInfo("");
     setIsSubmitting(true);
 
-    console.log("[LOGIN] Attempting login for:", email.trim());
-
     try {
+      // Show what we're attempting
+      setDebugInfo(`Attempting login for: ${email.trim()}`);
+
       const result = await login(email.trim(), password);
-      console.log("[LOGIN] Login result:", result);
 
       if (result.success && result.role) {
-        // Login successful - redirect to appropriate dashboard
+        setDebugInfo(`Login successful! Role: ${result.role}. Redirecting...`);
         const targetUrl = result.role === "buyer" ? "/business" : "/provider-dashboard";
-        console.log("[LOGIN] Success! Redirecting to:", targetUrl);
         window.location.href = targetUrl;
       } else {
-        console.log("[LOGIN] Failed:", result.error);
         setError(result.error || "Invalid email or password");
+        setDebugInfo(`Login failed: ${result.error || "Unknown error"}`);
         setIsSubmitting(false);
       }
     } catch (err) {
-      console.error("[LOGIN] Exception:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
       setError("Login failed. Please try again.");
+      setDebugInfo(`Exception: ${message}`);
       setIsSubmitting(false);
+    }
+  };
+
+  // Check localStorage status for debugging
+  const checkStorage = () => {
+    try {
+      const credentials = localStorage.getItem("leadzpay_credentials");
+      const users = localStorage.getItem("leadzpay_users");
+      const session = localStorage.getItem("leadzpay_session");
+
+      const credCount = credentials ? JSON.parse(credentials).length : 0;
+      const userCount = users ? JSON.parse(users).length : 0;
+      const hasSession = !!session;
+
+      setDebugInfo(`Storage: ${credCount} credentials, ${userCount} users, session: ${hasSession ? "yes" : "no"}`);
+    } catch (err) {
+      setDebugInfo(`Storage check error: ${err}`);
     }
   };
 
@@ -97,6 +113,12 @@ function LoginContent() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
             {error}
+          </div>
+        )}
+
+        {debugInfo && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-xs font-mono">
+            {debugInfo}
           </div>
         )}
 
@@ -146,6 +168,14 @@ function LoginContent() {
             )}
           </button>
         </form>
+
+        {/* Debug button */}
+        <button
+          onClick={checkStorage}
+          className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-600 transition"
+        >
+          Check Storage Status
+        </button>
 
         <div className="mt-8 pt-6 border-t border-gray-100">
           <p className="text-center text-gray-500 text-sm mb-4">

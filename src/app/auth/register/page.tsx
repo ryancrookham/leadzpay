@@ -6,7 +6,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { LeadBuyer } from "@/lib/auth-types";
-import { DISCLAIMERS } from "@/lib/payment-types";
 
 type RegistrationRole = "buyer" | "provider";
 
@@ -50,8 +49,6 @@ function RegisterContent() {
   const [businessType, setBusinessType] = useState<LeadBuyer["businessType"]>("insurance_agency");
   const [buyerPhone, setBuyerPhone] = useState("");
   const [licensedStates, setLicensedStates] = useState<string[]>([]);
-  const [nationalProducerNumber, setNationalProducerNumber] = useState("");
-  const [complianceAcknowledged, setComplianceAcknowledged] = useState(false);
 
   // Provider-specific fields
   const [displayName, setDisplayName] = useState("");
@@ -59,22 +56,21 @@ function RegisterContent() {
   const [location, setLocation] = useState("");
 
   const [error, setError] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
     if (!isLoading && isAuthenticated && currentUser) {
-      if (currentUser.role === "buyer") {
-        router.push("/business");
-      } else {
-        router.push("/provider-dashboard");
-      }
+      const targetUrl = currentUser.role === "buyer" ? "/business" : "/provider-dashboard";
+      window.location.href = targetUrl;
     }
-  }, [isAuthenticated, currentUser, isLoading, router]);
+  }, [isAuthenticated, currentUser, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setDebugInfo("");
 
     // Validate passwords match
     if (password !== confirmPassword) {
@@ -88,46 +84,49 @@ function RegisterContent() {
         setError("Please select at least one state where you are licensed");
         return;
       }
-      if (!complianceAcknowledged) {
-        setError("Please acknowledge the per-lead payment terms");
-        return;
-      }
     }
 
     setIsSubmitting(true);
+    setDebugInfo(`Registering as ${activeRole}...`);
 
     let result;
 
-    if (activeRole === "buyer") {
-      result = await registerBuyer({
-        email,
-        password,
-        username,
-        businessName,
-        businessType,
-        phone: buyerPhone,
-        licensedStates,
-        nationalProducerNumber: nationalProducerNumber || undefined,
-        complianceAcknowledged,
-      });
-    } else {
-      result = await registerProvider({
-        email,
-        password,
-        username,
-        displayName,
-        phone: providerPhone || undefined,
-        location: location || undefined,
-      });
-    }
+    try {
+      if (activeRole === "buyer") {
+        result = await registerBuyer({
+          email,
+          password,
+          username,
+          businessName,
+          businessType,
+          phone: buyerPhone,
+          licensedStates,
+          complianceAcknowledged: true,
+        });
+      } else {
+        result = await registerProvider({
+          email,
+          password,
+          username,
+          displayName,
+          phone: providerPhone || undefined,
+          location: location || undefined,
+        });
+      }
 
-    if (result.success) {
-      // Registration successful - redirect to dashboard
-      const targetUrl = activeRole === "buyer" ? "/business" : "/provider-dashboard";
-      // Use window.location for reliable navigation
-      window.location.href = targetUrl;
-    } else {
-      setError(result.error || "Registration failed. Please try again.");
+      if (result.success) {
+        setDebugInfo(`Registration successful! Redirecting to dashboard...`);
+        const targetUrl = activeRole === "buyer" ? "/business" : "/provider-dashboard";
+        window.location.href = targetUrl;
+      } else {
+        setError(result.error || "Registration failed. Please try again.");
+        setDebugInfo(`Registration failed: ${result.error}`);
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError("Registration failed. Please try again.");
+      setDebugInfo(`Exception: ${message}`);
       setIsSubmitting(false);
     }
   };
@@ -200,6 +199,12 @@ function RegisterContent() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
             {error}
+          </div>
+        )}
+
+        {debugInfo && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-xs font-mono">
+            {debugInfo}
           </div>
         )}
 
@@ -287,16 +292,16 @@ function RegisterContent() {
                 </div>
               </div>
 
-              {/* Licensed States - Required for Insurance */}
+              {/* Licensed States */}
               <div>
                 <label className="block text-gray-700 text-sm font-medium mb-2">
                   Licensed States <span className="text-red-500">*</span>
                 </label>
                 <p className="text-xs text-gray-500 mb-2">
-                  Select all states where you hold valid insurance licenses. You will only receive leads from these states.
+                  Select states where you hold valid insurance licenses.
                 </p>
-                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {US_STATES.map((state) => (
                       <label key={state.value} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded">
                         <input
@@ -319,47 +324,9 @@ function RegisterContent() {
                 </div>
                 {licensedStates.length > 0 && (
                   <p className="text-xs text-emerald-600 mt-2">
-                    Selected: {licensedStates.join(", ")} ({licensedStates.length} state{licensedStates.length > 1 ? "s" : ""})
+                    Selected: {licensedStates.join(", ")}
                   </p>
                 )}
-              </div>
-
-              {/* National Producer Number (Optional) */}
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  National Producer Number (NPN) <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={nationalProducerNumber}
-                  onChange={(e) => setNationalProducerNumber(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                  placeholder="e.g., 12345678"
-                  disabled={isSubmitting}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Your NPN can be found on your state insurance license or at nipr.com
-                </p>
-              </div>
-
-              {/* Compliance Acknowledgment */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <h4 className="font-medium text-amber-800 mb-2">Per-Lead Payment Agreement</h4>
-                <p className="text-xs text-amber-700 mb-3">
-                  {DISCLAIMERS.perLeadPaymentNotice}
-                </p>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={complianceAcknowledged}
-                    onChange={(e) => setComplianceAcknowledged(e.target.checked)}
-                    disabled={isSubmitting}
-                    className="w-5 h-5 mt-0.5 text-[#1e3a5f] rounded"
-                  />
-                  <span className="text-sm text-amber-800">
-                    I understand and agree that lead providers are paid <strong>per qualified lead submitted</strong>, not per customer conversion or policy sale. I acknowledge this payment structure ensures fair market competition.
-                  </span>
-                </label>
               </div>
             </>
           ) : (
