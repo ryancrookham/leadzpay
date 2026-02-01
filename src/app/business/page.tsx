@@ -148,18 +148,16 @@ export default function BusinessPortal() {
     }
   };
 
-  // Only show loading during initial auth check, not after login redirect
-  if (isLoading) {
+  // Show branded loading state during auth check or before redirect
+  if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+        <div className="text-center">
+          <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f] mx-auto"></div>
+        </div>
       </div>
     );
-  }
-
-  // Redirect handled by useEffect above - show nothing while redirecting
-  if (!isAuthenticated || !currentUser || !isBuyer(currentUser)) {
-    return null;
   }
 
   // Calculate stats
