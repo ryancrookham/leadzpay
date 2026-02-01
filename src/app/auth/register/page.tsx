@@ -122,9 +122,12 @@ function RegisterContent() {
     }
 
     if (result.success) {
-      // Redirect will happen via useEffect
+      // Registration successful - redirect to dashboard
+      const targetUrl = activeRole === "buyer" ? "/business" : "/provider-dashboard";
+      // Use window.location for reliable navigation
+      window.location.href = targetUrl;
     } else {
-      setError(result.error || "Registration failed");
+      setError(result.error || "Registration failed. Please try again.");
       setIsSubmitting(false);
     }
   };

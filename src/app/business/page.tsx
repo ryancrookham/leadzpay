@@ -42,10 +42,12 @@ export default function BusinessPortal() {
 
   // Redirect to login if not authenticated or not a buyer
   useEffect(() => {
+    console.log("[BUSINESS] Auth check - isLoading:", isLoading, "isAuthenticated:", isAuthenticated, "currentUser:", currentUser?.email);
     if (!isLoading && (!isAuthenticated || !currentUser)) {
+      console.log("[BUSINESS] Not authenticated, redirecting to login");
       router.push("/auth/login?role=buyer");
     } else if (!isLoading && currentUser && !isBuyer(currentUser)) {
-      // If logged in as provider, redirect to provider dashboard
+      console.log("[BUSINESS] User is not a buyer, redirecting to provider dashboard");
       router.push("/provider-dashboard");
     }
   }, [isLoading, isAuthenticated, currentUser, router]);

@@ -100,9 +100,12 @@ export default function ProviderDashboard() {
 
   // Redirect to login if not authenticated or not a provider
   useEffect(() => {
+    console.log("[PROVIDER] Auth check - isLoading:", isLoading, "isAuthenticated:", isAuthenticated, "currentUser:", currentUser?.email);
     if (!isLoading && (!isAuthenticated || !currentUser)) {
+      console.log("[PROVIDER] Not authenticated, redirecting to login");
       router.push("/auth/login?role=provider");
     } else if (!isLoading && currentUser && !isProvider(currentUser)) {
+      console.log("[PROVIDER] User is not a provider, redirecting to business");
       router.push("/business");
     }
   }, [isLoading, isAuthenticated, currentUser, router]);

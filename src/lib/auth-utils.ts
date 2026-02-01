@@ -1,9 +1,42 @@
-// Authentication utilities using Web Crypto API (no external dependencies)
+// Authentication utilities - simple synchronous approach for reliability
+
+// Simple hash function (synchronous, works everywhere)
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  // Convert to positive hex string and pad
+  const positiveHash = (hash >>> 0).toString(16);
+
+  // Create a longer hash by hashing multiple times with different seeds
+  let fullHash = positiveHash;
+  for (let seed = 1; seed <= 7; seed++) {
+    let seedHash = seed;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      seedHash = ((seedHash << 5) - seedHash + seed) + char;
+      seedHash = seedHash & seedHash;
+    }
+    fullHash += (seedHash >>> 0).toString(16).padStart(8, '0');
+  }
+
+  return fullHash;
+}
 
 // Generate a random salt for password hashing
 export function generateSalt(): string {
   const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    // Fallback for environments without crypto
+    for (let i = 0; i < 16; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
   return Array.from(array)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -12,32 +45,87 @@ export function generateSalt(): string {
 // Generate a random session token
 export function generateSessionToken(): string {
   const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < 32; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
   return Array.from(array)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
 
-// Hash password with salt using SHA-256
+// Hash password with salt - SYNCHRONOUS version
+export function hashPasswordSync(password: string, salt: string): string {
+  return simpleHash(password + salt + password.length + salt.length);
+}
+
+// Async wrapper for backwards compatibility
 export async function hashPassword(
   password: string,
   salt: string
 ): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + salt);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hashPasswordSync(password, salt);
 }
 
-// Verify password against stored hash
+// Verify password against stored hash - SYNCHRONOUS version
+export function verifyPasswordSync(
+  password: string,
+  salt: string,
+  storedHash: string
+): boolean {
+  const hash = hashPasswordSync(password, salt);
+  return hash === storedHash;
+}
+
+// Legacy SHA-256 hash for backward compatibility with existing accounts
+async function legacyHashPassword(password: string, salt: string): Promise<string> {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password + salt);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch {
+    // crypto.subtle not available
+  }
+  return "";
+}
+
+// Async wrapper - tries new hash first, then legacy hash for backward compatibility
 export async function verifyPassword(
   password: string,
   salt: string,
   storedHash: string
 ): Promise<boolean> {
-  const hash = await hashPassword(password, salt);
-  return hash === storedHash;
+  // Try new simple hash first
+  const newHash = hashPasswordSync(password, salt);
+  console.log("[VERIFY] New hash:", newHash.substring(0, 20) + "...");
+  console.log("[VERIFY] Stored hash:", storedHash.substring(0, 20) + "...");
+  console.log("[VERIFY] Match:", newHash === storedHash);
+
+  if (newHash === storedHash) {
+    return true;
+  }
+
+  // Try legacy SHA-256 hash for existing accounts
+  try {
+    const legacyHash = await legacyHashPassword(password, salt);
+    console.log("[VERIFY] Legacy hash:", legacyHash ? legacyHash.substring(0, 20) + "..." : "failed");
+    if (legacyHash && legacyHash === storedHash) {
+      console.log("[VERIFY] Legacy match!");
+      return true;
+    }
+  } catch {
+    console.log("[VERIFY] Legacy hash exception");
+  }
+
+  console.log("[VERIFY] No match found");
+  return false;
 }
 
 // Generate unique user ID

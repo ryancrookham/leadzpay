@@ -64,17 +64,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load session on mount
   useEffect(() => {
     const loadSession = () => {
+      console.log("[AUTH] loadSession starting...");
       try {
         const sessionData = localStorage.getItem(STORAGE_KEYS.SESSION);
+        console.log("[AUTH] Session data exists:", !!sessionData);
+
         if (!sessionData) {
+          console.log("[AUTH] No session found, not authenticated");
           setIsLoading(false);
           return;
         }
 
-        const session: Session = JSON.parse(sessionData);
+        let session: Session;
+        try {
+          session = JSON.parse(sessionData);
+          console.log("[AUTH] Parsed session for user:", session.userId, "role:", session.role);
+        } catch {
+          console.log("[AUTH] Failed to parse session data");
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
+          setIsLoading(false);
+          return;
+        }
+
+        // Validate session has required fields
+        if (!session.userId || !session.role || !session.expiresAt) {
+          console.log("[AUTH] Session missing required fields:", { userId: !!session.userId, role: !!session.role, expiresAt: !!session.expiresAt });
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
+          setIsLoading(false);
+          return;
+        }
 
         // Check if session is expired
         if (isSessionExpired(session.expiresAt)) {
+          console.log("[AUTH] Session expired at:", session.expiresAt);
           localStorage.removeItem(STORAGE_KEYS.SESSION);
           setIsLoading(false);
           return;
@@ -82,23 +104,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Load user data
         const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
+        console.log("[AUTH] Users data exists:", !!usersData);
+
         if (!usersData) {
+          console.log("[AUTH] No users data found");
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
           setIsLoading(false);
           return;
         }
 
-        const users: User[] = JSON.parse(usersData);
-        const user = users.find((u) => u.id === session.userId);
+        let users: User[];
+        try {
+          users = JSON.parse(usersData);
+          console.log("[AUTH] Found", users.length, "users in storage");
+        } catch {
+          console.log("[AUTH] Failed to parse users data");
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
+          localStorage.removeItem(STORAGE_KEYS.USERS);
+          localStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+          setIsLoading(false);
+          return;
+        }
 
-        if (user) {
+        const user = users.find((u) => u.id === session.userId);
+        console.log("[AUTH] Found user for session:", !!user, user?.isActive ? "active" : "inactive");
+
+        if (user && user.isActive) {
+          console.log("[AUTH] Setting currentUser:", user.email, user.role);
           setCurrentUser(user);
         } else {
+          console.log("[AUTH] User not found or inactive, clearing session");
           localStorage.removeItem(STORAGE_KEYS.SESSION);
         }
       } catch (error) {
-        console.error("Error loading session:", error);
+        console.error("[AUTH] Error loading session:", error);
         localStorage.removeItem(STORAGE_KEYS.SESSION);
+        localStorage.removeItem(STORAGE_KEYS.USERS);
+        localStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
       }
+      console.log("[AUTH] loadSession complete, setting isLoading=false");
       setIsLoading(false);
     };
 
@@ -110,61 +154,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string
     ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }> => {
-      try {
-        console.log("[Login] Starting login for:", email);
+      console.log("[AUTH] Login attempt for:", email);
 
-        // Get credentials
+      // Input validation
+      if (!email || !password) {
+        console.log("[AUTH] Login failed: missing email or password");
+        return { success: false, error: "Email and password are required" };
+      }
+
+      try {
+        // Get credentials from localStorage
         const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
+        console.log("[AUTH] Credentials data exists:", !!credentialsData);
+
         if (!credentialsData) {
-          console.log("[Login] No credentials found in localStorage");
-          return { success: false, error: "Invalid email or password" };
+          return { success: false, error: "No account found. Please register first." };
         }
 
-        const credentials: UserCredentials[] = JSON.parse(credentialsData);
+        let credentials: UserCredentials[];
+        try {
+          credentials = JSON.parse(credentialsData);
+          console.log("[AUTH] Found", credentials.length, "credentials");
+        } catch {
+          return { success: false, error: "Account data corrupted. Please clear browser data and register again." };
+        }
+
+        // Find user credentials by email
         const userCreds = credentials.find(
-          (c) => c.email.toLowerCase() === email.toLowerCase()
+          (c) => c.email.toLowerCase() === email.toLowerCase().trim()
         );
 
         if (!userCreds) {
-          console.log("[Login] Email not found in credentials");
+          console.log("[AUTH] No credentials found for email:", email.toLowerCase().trim());
+          console.log("[AUTH] Available emails:", credentials.map(c => c.email));
           return { success: false, error: "Invalid email or password" };
         }
 
-        console.log("[Login] Found credentials, verifying password...");
+        console.log("[AUTH] Found credentials for user:", userCreds.id);
 
-        // Verify password with timeout to prevent hanging
-        const verifyWithTimeout = Promise.race([
-          verifyPassword(password, userCreds.salt, userCreds.passwordHash),
-          new Promise<boolean>((_, reject) =>
-            setTimeout(() => reject(new Error("Password verification timeout")), 5000)
-          )
-        ]);
-
-        const isValid = await verifyWithTimeout;
-        console.log("[Login] Password verification result:", isValid);
+        // Verify password (tries both new and legacy hash methods)
+        const isValid = await verifyPassword(password, userCreds.salt, userCreds.passwordHash);
+        console.log("[AUTH] Password verification result:", isValid);
 
         if (!isValid) {
           return { success: false, error: "Invalid email or password" };
         }
 
-        // Get user data
+        // Get user profile data
         const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
         if (!usersData) {
-          return { success: false, error: "User not found" };
+          console.log("[AUTH] No users data in localStorage");
+          return { success: false, error: "User profile not found" };
         }
 
-        const users: User[] = JSON.parse(usersData);
+        let users: User[];
+        try {
+          users = JSON.parse(usersData);
+          console.log("[AUTH] Found", users.length, "users");
+        } catch {
+          return { success: false, error: "User data corrupted" };
+        }
+
         const user = users.find((u) => u.id === userCreds.id);
 
         if (!user) {
-          return { success: false, error: "User not found" };
+          console.log("[AUTH] User not found with id:", userCreds.id);
+          return { success: false, error: "User profile not found" };
         }
 
         if (!user.isActive) {
+          console.log("[AUTH] User account is deactivated");
           return { success: false, error: "Account is deactivated" };
         }
 
-        // Create session
+        // Create new session
         const session: Session = {
           userId: user.id,
           role: user.role,
@@ -173,14 +236,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           createdAt: new Date().toISOString(),
         };
 
+        // Save session and update state
         localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
         setCurrentUser(user);
 
-        console.log("[Login] Success! User role:", user.role);
+        console.log("[AUTH] Login successful! Role:", user.role);
+        console.log("[AUTH] Session saved:", session.userId);
+
         return { success: true, role: user.role };
       } catch (error) {
-        console.error("[Login] Error:", error);
-        return { success: false, error: "An error occurred during login" };
+        console.error("[AUTH] Login exception:", error);
+        const message = error instanceof Error ? error.message : "Login failed";
+        return { success: false, error: message };
       }
     },
     []

@@ -34,33 +34,25 @@ function LoginContent() {
     setError("");
     setIsSubmitting(true);
 
+    console.log("[LOGIN] Attempting login for:", email.trim());
+
     try {
-      console.log("[LoginPage] Attempting login...");
-      const result = await login(email, password);
-      console.log("[LoginPage] Login result:", result);
+      const result = await login(email.trim(), password);
+      console.log("[LOGIN] Login result:", result);
 
       if (result.success && result.role) {
-        // Redirect immediately based on role
+        // Login successful - redirect to appropriate dashboard
         const targetUrl = result.role === "buyer" ? "/business" : "/provider-dashboard";
-        console.log("[LoginPage] Redirecting to:", targetUrl);
-
-        // Use push instead of replace for more reliable navigation
-        router.push(targetUrl);
-
-        // Fallback: if still on page after 3 seconds, something went wrong
-        setTimeout(() => {
-          if (window.location.pathname === "/auth/login") {
-            console.log("[LoginPage] Redirect failed, trying window.location");
-            window.location.href = targetUrl;
-          }
-        }, 3000);
+        console.log("[LOGIN] Success! Redirecting to:", targetUrl);
+        window.location.href = targetUrl;
       } else {
-        setError(result.error || "Login failed");
+        console.log("[LOGIN] Failed:", result.error);
+        setError(result.error || "Invalid email or password");
         setIsSubmitting(false);
       }
     } catch (err) {
-      console.error("[LoginPage] Login error:", err);
-      setError("An unexpected error occurred");
+      console.error("[LOGIN] Exception:", err);
+      setError("Login failed. Please try again.");
       setIsSubmitting(false);
     }
   };
