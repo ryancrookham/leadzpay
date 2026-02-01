@@ -157,9 +157,9 @@ function RegisterContent() {
             <Image
               src="/woml-logo.png"
               alt="WOML - Word of Mouth Leads"
-              width={200}
-              height={60}
-              className="mx-auto mb-4 h-14 w-auto object-contain"
+              width={260}
+              height={75}
+              className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Create Account</h1>

@@ -685,7 +685,7 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
             
           </Link>
           <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
@@ -817,7 +817,7 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-4 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
             
           </Link>
           <button onClick={() => setStep("questions")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
@@ -976,7 +976,7 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
             
           </Link>
           <button onClick={() => setStep("chatbot")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
@@ -1195,7 +1195,7 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
             
           </Link>
           <button onClick={() => setStep("form")} className="text-gray-600 hover:text-[#1e3a5f] transition">Back</button>
@@ -1424,7 +1424,7 @@ export default function SubmitLead() {
 
         <nav className="flex items-center justify-between px-8 py-6 relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+            <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
             
           </Link>
           <Link href="/" className="text-gray-600 hover:text-[#1e3a5f] transition">Back to Home</Link>
@@ -1613,7 +1613,7 @@ export default function SubmitLead() {
 
       <nav className="flex items-center justify-between px-8 py-6 relative z-10">
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={160} height={45} className="h-11 w-auto object-contain" />
+          <Image src="/woml-logo.png" alt="WOML - Word of Mouth Leads" width={220} height={65} className="h-16 w-auto object-contain" />
           
         </Link>
         <div className="flex items-center gap-4">

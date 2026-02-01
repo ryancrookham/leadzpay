@@ -204,9 +204,9 @@ export default function BusinessPortal() {
               <Image
                 src="/woml-logo.png"
                 alt="WOML - Word of Mouth Leads"
-                width={180}
-                height={50}
-                className="h-12 w-auto object-contain"
+                width={240}
+                height={70}
+                className="h-16 w-auto object-contain"
               />
             </Link>
             <span className="text-gray-300">|</span>

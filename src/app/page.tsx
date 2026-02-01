@@ -50,9 +50,9 @@ export default function Home() {
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
-            width={200}
-            height={56}
-            className="h-14 w-auto object-contain"
+            width={280}
+            height={80}
+            className="h-20 w-auto object-contain"
           />
         </div>
         <div className="flex gap-3">
@@ -82,12 +82,6 @@ export default function Home() {
               Car Insurance Lead Marketplace
             </span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-[#1e3a5f] mb-6">
-            Who Are You?
-          </h1>
-          <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-            Select your role to get started with WOML
-          </p>
         </div>
 
         {/* Role Selection */}
