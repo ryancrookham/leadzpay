@@ -45,7 +45,7 @@ interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }>;
   logout: () => void;
   registerBuyer: (data: BuyerRegistrationData) => Promise<{ success: boolean; error?: string }>;
   registerProvider: (data: ProviderRegistrationData) => Promise<{ success: boolean; error?: string }>;
@@ -109,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (
       email: string,
       password: string
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }> => {
       try {
         // Get credentials
         const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
@@ -165,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
         setCurrentUser(user);
 
-        return { success: true };
+        return { success: true, role: user.role };
       } catch (error) {
         console.error("Login error:", error);
         return { success: false, error: "An error occurred during login" };

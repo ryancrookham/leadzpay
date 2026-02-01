@@ -52,7 +52,7 @@ export default function BusinessPortal() {
 
   const handleLogout = () => {
     logout();
-    router.push("/");
+    router.replace("/");
   };
 
   // Calculate CRM analytics from uploaded data

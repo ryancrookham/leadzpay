@@ -18,13 +18,13 @@ function LoginContent() {
 
   const preselectedRole = searchParams.get("role") as "buyer" | "provider" | null;
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (handles page refresh while logged in)
   useEffect(() => {
     if (!isLoading && isAuthenticated && currentUser) {
       if (currentUser.role === "buyer") {
-        router.push("/business");
+        router.replace("/business");
       } else {
-        router.push("/provider-dashboard");
+        router.replace("/provider-dashboard");
       }
     }
   }, [isAuthenticated, currentUser, isLoading, router]);
@@ -36,8 +36,13 @@ function LoginContent() {
 
     const result = await login(email, password);
 
-    if (result.success) {
-      // Redirect based on role will happen via useEffect
+    if (result.success && result.role) {
+      // Redirect immediately based on role - don't wait for state update
+      if (result.role === "buyer") {
+        router.replace("/business");
+      } else {
+        router.replace("/provider-dashboard");
+      }
     } else {
       setError(result.error || "Login failed");
       setIsSubmitting(false);

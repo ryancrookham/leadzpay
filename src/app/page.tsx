@@ -11,16 +11,8 @@ export default function Home() {
   const { isAuthenticated, currentUser, isLoading } = useAuth();
   const [selectedRole, setSelectedRole] = useState<"provider" | "receiver" | null>(null);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && currentUser) {
-      if (currentUser.role === "buyer") {
-        router.push("/business");
-      } else {
-        router.push("/provider-dashboard");
-      }
-    }
-  }, [isAuthenticated, currentUser, isLoading, router]);
+  // Get dashboard URL based on user role
+  const dashboardUrl = currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
 
   const handleContinue = () => {
     if (selectedRole === "provider") {
@@ -29,6 +21,25 @@ export default function Home() {
       router.push("/auth/register?role=buyer");
     }
   };
+
+  // Show minimal loading state only while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <Image
+            src="/woml-logo.png"
+            alt="WOML"
+            width={200}
+            height={60}
+            className="mx-auto mb-4 animate-pulse"
+            priority
+          />
+          <div className="text-gray-400 text-sm">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white relative">
@@ -56,32 +67,45 @@ export default function Home() {
           />
         </div>
         <div className="flex gap-3">
-          <Link
-            href="/auth/login"
-            className="text-gray-600 hover:text-[#1e3a5f] transition px-4 py-2 rounded-lg hover:bg-gray-50"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/auth/register"
-            className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition"
-          >
-            Sign Up
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href={dashboardUrl}
+              className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+            >
+              Go to Dashboard
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/auth/login"
+                className="text-gray-600 hover:text-[#1e3a5f] transition px-4 py-2 rounded-lg hover:bg-gray-50"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/auth/register"
+                className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
       {/* Hero Section */}
-      <main className="relative z-10 max-w-5xl mx-auto px-8 py-16">
-        <div className="text-center mb-12">
-          <div className="inline-block mb-4 px-4 py-2 bg-[#1e3a5f]/5 rounded-full border border-[#1e3a5f]/10">
-            <span className="text-[#1e3a5f] text-sm font-medium flex items-center gap-2">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
-              </svg>
-              Car Insurance Lead Marketplace
-            </span>
-          </div>
+      <main className="relative z-10 max-w-5xl mx-auto px-8 py-8">
+        <div className="text-center mb-2">
+          <Image
+            src="/woml-logo.png"
+            alt="WOML - Word of Mouth Leads"
+            width={1120}
+            height={315}
+            className="mx-auto w-full max-w-2xl h-auto object-contain"
+          />
         </div>
 
         {/* Role Selection */}
@@ -235,27 +259,6 @@ export default function Home() {
             </button>
           </div>
         )}
-
-        {/* How It Works */}
-        <div className="mt-16 mb-24">
-          <h2 className="text-3xl font-bold text-[#1e3a5f] text-center mb-12">How WOML Works</h2>
-          <div className="grid md:grid-cols-4 gap-6">
-            {[
-              { num: "1", title: "Customer Walks In", desc: "A car buyer needs insurance to drive off the lot legally" },
-              { num: "2", title: "Salesperson Submits", desc: "Enter customer info, get instant quotes from 10+ carriers" },
-              { num: "3", title: "Customer Buys Policy", desc: "AI chatbot closes the deal with best rate" },
-              { num: "4", title: "Everyone Gets Paid", desc: "Salesperson paid via Venmo/PayPal/Bank, recorded on ledger" },
-            ].map((step, i) => (
-              <div key={i} className="text-center group">
-                <div className="h-14 w-14 rounded-2xl bg-[#1e3a5f] flex items-center justify-center mx-auto mb-4 shadow-md group-hover:shadow-lg transition-shadow">
-                  <span className="text-2xl font-bold text-white">{step.num}</span>
-                </div>
-                <h3 className="text-lg font-semibold text-[#1e3a5f] mb-2">{step.title}</h3>
-                <p className="text-gray-500 text-sm">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* Stats */}
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-8">

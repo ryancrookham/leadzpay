@@ -9,21 +9,57 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState<"overview" | "transactions" | "users" | "settings">("overview");
   const [accessCode, setAccessCode] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Simple access code for demo (in production, use proper auth)
-  const ADMIN_CODE = "leadzpay2025";
+  const handleLogin = async () => {
+    setError("");
+    setIsLoading(true);
 
-  const handleLogin = () => {
-    if (accessCode === ADMIN_CODE) {
-      setIsAuthenticated(true);
-      localStorage.setItem("admin_auth", "true");
+    try {
+      const response = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: accessCode }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setIsAuthenticated(true);
+      } else {
+        setError(data.error || "Authentication failed");
+      }
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (localStorage.getItem("admin_auth") === "true") {
-      setIsAuthenticated(true);
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/admin/auth", { method: "DELETE" });
+    } catch {
+      // Continue with logout even if API fails
     }
+    setIsAuthenticated(false);
+  };
+
+  useEffect(() => {
+    // Check if already authenticated via server-side session
+    const checkAuth = async () => {
+      try {
+        const response = await fetch("/api/admin/auth");
+        const data = await response.json();
+        setIsAuthenticated(data.authenticated === true);
+      } catch {
+        setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkAuth();
   }, []);
 
   const handleClearAllData = () => {
@@ -57,6 +93,14 @@ export default function AdminPanel() {
   const totalRevenue = leads.reduce((sum, l) => sum + l.payout, 0);
   const conversionRate = totalLeads > 0 ? Math.round((claimedLeads / totalLeads) * 100) : 0;
 
+  if (isLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center p-4">
@@ -68,21 +112,28 @@ export default function AdminPanel() {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-white">Admin Access</h1>
-            <p className="text-slate-400 mt-2">Enter access code to continue</p>
+            <p className="text-slate-400 mt-2">Enter admin password to continue</p>
           </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              {error}
+            </div>
+          )}
           <input
             type="password"
             value={accessCode}
             onChange={(e) => setAccessCode(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            placeholder="Access code"
+            placeholder="Admin password"
             className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-4"
+            disabled={isLoading}
           />
           <button
             onClick={handleLogin}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-medium transition"
+            disabled={isLoading || !accessCode}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Access Admin Panel
+            {isLoading ? "Authenticating..." : "Access Admin Panel"}
           </button>
           <Link href="/" className="block text-center text-slate-400 hover:text-white mt-4">
             Back to Home
@@ -106,7 +157,7 @@ export default function AdminPanel() {
           <span className="px-3 py-1 bg-red-500/20 text-red-400 text-sm rounded-full">Admin</span>
         </div>
         <button
-          onClick={() => { localStorage.removeItem("admin_auth"); setIsAuthenticated(false); }}
+          onClick={handleLogout}
           className="text-slate-400 hover:text-white transition"
         >
           Logout
@@ -285,7 +336,7 @@ export default function AdminPanel() {
                 </button>
               </div>
               <p className="text-slate-500 text-sm mt-2">
-                Admin access code: <code className="bg-slate-700 px-2 py-1 rounded">{ADMIN_CODE}</code>
+                Admin authentication is secured via environment variables.
               </p>
             </div>
           </div>

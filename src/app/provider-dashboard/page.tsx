@@ -109,7 +109,7 @@ export default function ProviderDashboard() {
 
   const handleLogout = () => {
     logout();
-    router.push("/");
+    router.replace("/");
   };
 
   // Show loading while checking auth

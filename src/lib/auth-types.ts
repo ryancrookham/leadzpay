@@ -76,13 +76,16 @@ export interface LeadProvider extends BaseUser {
   phone?: string;
   location?: string;
   bio?: string;
-  paymentMethod?: "venmo" | "paypal" | "bank";
+  paymentMethod?: "venmo" | "paypal" | "bank" | "stripe";
   paymentDetails?: {
     venmoUsername?: string;
     paypalEmail?: string;
     bankAccountLast4?: string;
     bankRoutingLast4?: string;
   };
+  // Stripe Connect
+  stripeAccountId?: string;
+  stripeOnboardingComplete?: boolean;
   stats: ProviderStats;
   connectionIds: string[];
 }
