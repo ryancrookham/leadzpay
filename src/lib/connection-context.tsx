@@ -71,32 +71,50 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount and filter out demo data
   useEffect(() => {
-    const savedRequests = localStorage.getItem(STORAGE_KEYS.REQUESTS);
-    const savedConnections = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
+    try {
+      const savedRequests = localStorage.getItem(STORAGE_KEYS.REQUESTS);
+      const savedConnections = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
 
-    if (savedRequests) {
-      const parsed = JSON.parse(savedRequests);
-      // Filter out demo companies
-      const filtered = parsed.filter((r: ConnectionRequest) =>
-        !DEMO_COMPANIES_TO_REMOVE.includes(r.buyerBusinessName)
-      );
-      setRequests(filtered);
-      // Also clean up localStorage
-      if (filtered.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(filtered));
+      if (savedRequests) {
+        try {
+          const parsed = JSON.parse(savedRequests);
+          if (Array.isArray(parsed)) {
+            // Filter out demo companies
+            const filtered = parsed.filter((r: ConnectionRequest) =>
+              !DEMO_COMPANIES_TO_REMOVE.includes(r.buyerBusinessName)
+            );
+            setRequests(filtered);
+            // Also clean up localStorage
+            if (filtered.length !== parsed.length) {
+              localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(filtered));
+            }
+          }
+        } catch (e) {
+          console.error("[ConnectionContext] Failed to parse requests:", e);
+          localStorage.removeItem(STORAGE_KEYS.REQUESTS);
+        }
       }
-    }
-    if (savedConnections) {
-      const parsed = JSON.parse(savedConnections);
-      // Filter out demo companies
-      const filtered = parsed.filter((c: Connection) =>
-        !DEMO_COMPANIES_TO_REMOVE.includes(c.buyerBusinessName)
-      );
-      setConnections(filtered);
-      // Also clean up localStorage
-      if (filtered.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(filtered));
+      if (savedConnections) {
+        try {
+          const parsed = JSON.parse(savedConnections);
+          if (Array.isArray(parsed)) {
+            // Filter out demo companies
+            const filtered = parsed.filter((c: Connection) =>
+              !DEMO_COMPANIES_TO_REMOVE.includes(c.buyerBusinessName)
+            );
+            setConnections(filtered);
+            // Also clean up localStorage
+            if (filtered.length !== parsed.length) {
+              localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(filtered));
+            }
+          }
+        } catch (e) {
+          console.error("[ConnectionContext] Failed to parse connections:", e);
+          localStorage.removeItem(STORAGE_KEYS.CONNECTIONS);
+        }
       }
+    } catch (e) {
+      console.error("[ConnectionContext] localStorage error:", e);
     }
   }, []);
 

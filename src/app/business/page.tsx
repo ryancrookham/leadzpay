@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useLeads, type Lead, type Provider } from "@/lib/leads-context";
@@ -12,11 +12,17 @@ import { ConnectionRequest, ContractTerms, getDefaultContractTerms, formatPaymen
 
 type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
 
-export default function BusinessPortal() {
+function BusinessPortalContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
   const currentBuyer = useCurrentBuyer();
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+
+  // Get initial tab from URL query param
+  const urlTab = searchParams.get("tab") as Tab | null;
+  const validTabs: Tab[] = ["dashboard", "leads", "requests", "providers", "rolodex", "ledger", "settings"];
+  const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // Excel upload state for Dashboard analytics
   const [uploadedCrmData, setUploadedCrmData] = useState<UploadedRecord[]>([]);
@@ -2651,5 +2657,26 @@ function TermsModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading fallback
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f] mx-auto"></div>
+      </div>
+    </div>
+  );
+}
+
+// Main export with Suspense
+export default function BusinessPortal() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <BusinessPortalContent />
+    </Suspense>
   );
 }

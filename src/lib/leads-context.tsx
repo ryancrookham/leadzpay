@@ -133,14 +133,34 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const savedLeads = localStorage.getItem("leadzpay_leads");
-    const savedProviders = localStorage.getItem("leadzpay_providers");
+    try {
+      const savedLeads = localStorage.getItem("leadzpay_leads");
+      const savedProviders = localStorage.getItem("leadzpay_providers");
 
-    if (savedLeads) {
-      setLeads(JSON.parse(savedLeads));
-    }
-    if (savedProviders) {
-      setProviders(JSON.parse(savedProviders));
+      if (savedLeads) {
+        try {
+          const parsed = JSON.parse(savedLeads);
+          if (Array.isArray(parsed)) {
+            setLeads(parsed);
+          }
+        } catch (e) {
+          console.error("[LeadsContext] Failed to parse leads:", e);
+          localStorage.removeItem("leadzpay_leads");
+        }
+      }
+      if (savedProviders) {
+        try {
+          const parsed = JSON.parse(savedProviders);
+          if (Array.isArray(parsed)) {
+            setProviders(parsed);
+          }
+        } catch (e) {
+          console.error("[LeadsContext] Failed to parse providers:", e);
+          localStorage.removeItem("leadzpay_providers");
+        }
+      }
+    } catch (e) {
+      console.error("[LeadsContext] localStorage error:", e);
     }
   }, []);
 
