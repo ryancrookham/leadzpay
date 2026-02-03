@@ -26,6 +26,7 @@ interface ConnectionContextType {
   requests: ConnectionRequest[];
   getRequestsForBuyer: (buyerId: string) => ConnectionRequest[];
   getRequestsForProvider: (providerId: string) => ConnectionRequest[];
+  getInvitationsForProvider: (providerEmail: string) => ConnectionRequest[];
 
   // Provider actions
   sendConnectionRequest: (
@@ -39,7 +40,15 @@ interface ConnectionContextType {
   acceptTerms: (requestId: string) => Connection | null;
   declineTerms: (requestId: string) => void;
 
-  // Buyer actions
+  // Buyer actions - including initiating connections
+  sendInvitationToProvider: (
+    buyerId: string,
+    buyerBusinessName: string,
+    providerEmail: string,
+    providerName: string,
+    terms: ContractTerms,
+    message?: string
+  ) => ConnectionRequest;
   setTermsForRequest: (requestId: string, terms: ContractTerms) => void;
   rejectRequest: (requestId: string) => void;
 
@@ -212,6 +221,60 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       )
     );
   }, []);
+
+  // Get invitations for a provider (buyer-initiated requests with terms already set)
+  const getInvitationsForProvider = useCallback(
+    (providerEmail: string) => {
+      return requests.filter(
+        (r) =>
+          r.providerEmail.toLowerCase() === providerEmail.toLowerCase() &&
+          r.status === "terms_set"
+      );
+    },
+    [requests]
+  );
+
+  // Buyer sends invitation to provider with terms pre-set
+  const sendInvitationToProvider = useCallback(
+    (
+      buyerId: string,
+      buyerBusinessName: string,
+      providerEmail: string,
+      providerName: string,
+      terms: ContractTerms,
+      message?: string
+    ): ConnectionRequest => {
+      // Check if invitation already exists
+      const existingRequest = requests.find(
+        (r) =>
+          r.providerEmail.toLowerCase() === providerEmail.toLowerCase() &&
+          r.buyerId === buyerId &&
+          (r.status === "pending" || r.status === "terms_set")
+      );
+      if (existingRequest) {
+        return existingRequest;
+      }
+
+      const now = new Date().toISOString();
+      const newRequest: ConnectionRequest = {
+        id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        providerId: "", // Will be filled when provider accepts
+        providerName,
+        providerEmail,
+        buyerId,
+        buyerBusinessName,
+        message,
+        status: "terms_set", // Skip pending - terms are already set by buyer
+        proposedTerms: terms,
+        createdAt: now,
+        reviewedAt: now, // Terms set at creation time
+      };
+
+      setRequests((prev) => [...prev, newRequest]);
+      return newRequest;
+    },
+    [requests]
+  );
 
   // Provider accepts terms - creates connection
   const acceptTerms = useCallback(
@@ -390,9 +453,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         requests,
         getRequestsForBuyer,
         getRequestsForProvider,
+        getInvitationsForProvider,
         sendConnectionRequest,
         acceptTerms,
         declineTerms,
+        sendInvitationToProvider,
         setTermsForRequest,
         rejectRequest,
         connections,

@@ -90,6 +90,7 @@ export default function ProviderDashboard() {
   const { leads, addLead } = useLeads();
   const {
     getRequestsForProvider,
+    getInvitationsForProvider,
     getActiveConnectionForProvider,
     sendConnectionRequest,
     acceptTerms,
@@ -127,8 +128,12 @@ export default function ProviderDashboard() {
   // Get connection status
   const activeConnection = getActiveConnectionForProvider(currentUser.id);
   const myRequests = getRequestsForProvider(currentUser.id);
+  // Also get invitations from businesses (requests where provider email matches and terms are already set)
+  const myInvitations = getInvitationsForProvider(currentUser.email);
   const pendingTermsRequest = myRequests.find(r => r.status === "terms_set");
   const pendingRequest = myRequests.find(r => r.status === "pending");
+  // Business invitations are also terms_set status but initiated by the business
+  const pendingInvitation = myInvitations.length > 0 ? myInvitations[0] : null;
 
   // Get provider's leads from active connection
   const myLeads = activeConnection
@@ -143,6 +148,7 @@ export default function ProviderDashboard() {
   const getConnectionStatus = () => {
     if (activeConnection) return { status: "active", message: "Connected" };
     if (pendingTermsRequest) return { status: "terms_pending", message: "Terms Pending Review" };
+    if (pendingInvitation) return { status: "invitation", message: "New Invitation" };
     if (pendingRequest) return { status: "pending", message: "Awaiting Approval" };
     return { status: "none", message: "Not Connected" };
   };
@@ -307,6 +313,7 @@ export default function ProviderDashboard() {
             currentProvider={currentProvider}
             activeConnection={activeConnection}
             pendingTermsRequest={pendingTermsRequest}
+            pendingInvitation={pendingInvitation}
             pendingRequest={pendingRequest}
             myRequests={myRequests}
             getUsersByRole={getUsersByRole}
@@ -488,6 +495,7 @@ function ConnectionTab({
   currentProvider,
   activeConnection,
   pendingTermsRequest,
+  pendingInvitation,
   pendingRequest,
   myRequests,
   getUsersByRole,
@@ -501,6 +509,7 @@ function ConnectionTab({
   currentProvider: import("@/lib/auth-types").LeadProvider | null;
   activeConnection: Connection | null;
   pendingTermsRequest: ConnectionRequest | undefined;
+  pendingInvitation: ConnectionRequest | null;
   pendingRequest: ConnectionRequest | undefined;
   myRequests: ConnectionRequest[];
   getUsersByRole: (role: "buyer" | "provider") => import("@/lib/auth-types").User[];
@@ -1903,7 +1912,107 @@ function ConnectionTab({
     );
   }
 
-  // Show pending terms to review
+  // Show pending invitation from business
+  if (pendingInvitation && pendingInvitation.proposedTerms) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border-2 border-emerald-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+            <h3 className="text-lg font-semibold text-emerald-700">New Invitation from a Business</h3>
+          </div>
+
+          <div className="flex items-center gap-6 mb-6">
+            <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+              <span className="text-2xl font-bold text-white">{pendingInvitation.buyerBusinessName.charAt(0)}</span>
+            </div>
+            <div>
+              <h4 className="text-xl font-bold text-gray-800">{pendingInvitation.buyerBusinessName}</h4>
+              <p className="text-gray-500">Has invited you to become a lead provider</p>
+            </div>
+          </div>
+
+          {pendingInvitation.message && (
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
+              <p className="text-gray-500 text-sm mb-1">Message from {pendingInvitation.buyerBusinessName}</p>
+              <p className="text-gray-700 italic">&quot;{pendingInvitation.message}&quot;</p>
+            </div>
+          )}
+
+          {/* Proposed Terms */}
+          <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 mb-6">
+            <h4 className="font-semibold text-gray-800 mb-4">Offered Agreement Terms</h4>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-gray-500 text-sm">Rate per Lead</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingInvitation.proposedTerms.paymentTerms.ratePerLead}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-sm">Payment Schedule</p>
+                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(pendingInvitation.proposedTerms.paymentTerms.timing)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-sm">Lead Types</p>
+                <p className="text-xl font-semibold text-gray-800 capitalize">{pendingInvitation.proposedTerms.leadTypes.join(", ")}</p>
+              </div>
+            </div>
+            {pendingInvitation.proposedTerms.leadCaps && (
+              <div className="mt-4 pt-4 border-t border-emerald-200 grid md:grid-cols-2 gap-4">
+                {pendingInvitation.proposedTerms.leadCaps.weeklyLimit && (
+                  <div>
+                    <p className="text-gray-500 text-sm">Weekly Lead Cap</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.proposedTerms.leadCaps.weeklyLimit} leads</p>
+                  </div>
+                )}
+                {pendingInvitation.proposedTerms.leadCaps.monthlyLimit && (
+                  <div>
+                    <p className="text-gray-500 text-sm">Monthly Lead Cap</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.proposedTerms.leadCaps.monthlyLimit} leads</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {pendingInvitation.proposedTerms.notes && (
+              <div className="mt-4 pt-4 border-t border-emerald-200">
+                <p className="text-gray-500 text-sm">Notes from Business</p>
+                <p className="text-gray-700">{pendingInvitation.proposedTerms.notes}</p>
+              </div>
+            )}
+          </div>
+
+          <p className="text-gray-600 text-sm mb-6">
+            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${pendingInvitation.proposedTerms.paymentTerms.ratePerLead} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.proposedTerms.terminationNoticeDays} days notice.
+          </p>
+
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                const result = acceptTerms(pendingInvitation.id);
+                if (result) {
+                  alert(`Welcome! You are now connected with ${pendingInvitation.buyerBusinessName}. You can start submitting leads.`);
+                }
+              }}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-semibold transition"
+            >
+              Accept Invitation
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("Are you sure you want to decline this invitation?")) {
+                  declineTerms(pendingInvitation.id);
+                }
+              }}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold transition border border-gray-200"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show pending terms to review (from a request the provider initiated)
   if (pendingTermsRequest && pendingTermsRequest.proposedTerms) {
     return (
       <div className="space-y-6">

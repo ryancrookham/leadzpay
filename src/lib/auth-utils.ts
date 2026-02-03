@@ -133,12 +133,14 @@ export function generateUserId(): string {
   return `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Session expiry time (7 days)
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+// Session expiry times
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (default)
+const EXTENDED_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days (stay signed in)
 
 // Create session expiry date
-export function getSessionExpiry(): string {
-  return new Date(Date.now() + SESSION_DURATION_MS).toISOString();
+export function getSessionExpiry(extended: boolean = false): string {
+  const duration = extended ? EXTENDED_SESSION_DURATION_MS : SESSION_DURATION_MS;
+  return new Date(Date.now() + duration).toISOString();
 }
 
 // Check if session is expired

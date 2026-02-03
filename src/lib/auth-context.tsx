@@ -12,8 +12,6 @@ import {
   User,
   LeadBuyer,
   LeadProvider,
-  UserCredentials,
-  Session,
   BuyerRegistrationData,
   ProviderRegistrationData,
   getDefaultBuyerStats,
@@ -21,34 +19,25 @@ import {
   isBuyer,
   isProvider,
 } from "./auth-types";
-import {
-  generateSalt,
-  generateSessionToken,
-  hashPassword,
-  verifyPassword,
-  generateUserId,
-  getSessionExpiry,
-  isSessionExpired,
-  isValidEmail,
-  isValidPassword,
-  isValidUsername,
-} from "./auth-utils";
-
-// LocalStorage keys
-const STORAGE_KEYS = {
-  USERS: "leadzpay_users",
-  CREDENTIALS: "leadzpay_credentials",
-  SESSION: "leadzpay_session",
-};
+import { supabase, isSupabaseConfigured } from "./supabase";
+import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }>;
+  login: (
+    email: string,
+    password: string,
+    staySignedIn?: boolean
+  ) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }>;
   logout: () => void;
-  registerBuyer: (data: BuyerRegistrationData) => Promise<{ success: boolean; error?: string }>;
-  registerProvider: (data: ProviderRegistrationData) => Promise<{ success: boolean; error?: string }>;
+  registerBuyer: (
+    data: BuyerRegistrationData
+  ) => Promise<{ success: boolean; error?: string }>;
+  registerProvider: (
+    data: ProviderRegistrationData
+  ) => Promise<{ success: boolean; error?: string }>;
   updateUser: (updates: Partial<User>) => void;
   getAllUsers: () => User[];
   getUserById: (id: string) => User | undefined;
@@ -57,474 +46,444 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Helper to convert Supabase profile to User type
+function profileToUser(profile: Record<string, unknown>): User {
+  const role = profile.role as "buyer" | "provider";
+  const now = new Date().toISOString();
+
+  if (role === "buyer") {
+    const buyer: LeadBuyer = {
+      id: profile.id as string,
+      email: profile.email as string,
+      username: profile.username as string,
+      role: "buyer",
+      businessName: (profile.business_name as string) || "",
+      businessType: (profile.business_type as LeadBuyer["businessType"]) || "other",
+      phone: (profile.phone as string) || "",
+      licensedStates: (profile.licensed_states as string[]) || [],
+      nationalProducerNumber: profile.national_producer_number as string | undefined,
+      licenseVerified: (profile.license_verified as boolean) || false,
+      complianceAcknowledgedAt: profile.compliance_acknowledged_at as string | undefined,
+      stats: (profile.stats as LeadBuyer["stats"]) || {
+        ...getDefaultBuyerStats(),
+        memberSince: (profile.created_at as string) || now,
+      },
+      connectionIds: (profile.connection_ids as string[]) || [],
+      createdAt: (profile.created_at as string) || now,
+      updatedAt: (profile.updated_at as string) || now,
+      isActive: profile.is_active !== false,
+    };
+    return buyer;
+  } else {
+    const provider: LeadProvider = {
+      id: profile.id as string,
+      email: profile.email as string,
+      username: profile.username as string,
+      role: "provider",
+      displayName: (profile.display_name as string) || "",
+      phone: profile.phone as string | undefined,
+      location: profile.location as string | undefined,
+      stats: (profile.stats as LeadProvider["stats"]) || {
+        ...getDefaultProviderStats(),
+        memberSince: (profile.created_at as string) || now,
+      },
+      connectionIds: (profile.connection_ids as string[]) || [],
+      createdAt: (profile.created_at as string) || now,
+      updatedAt: (profile.updated_at as string) || now,
+      isActive: profile.is_active !== false,
+    };
+    return provider;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load session on mount
+  // Fetch user profile from Supabase
+  const fetchProfile = useCallback(async (userId: string): Promise<User | null> => {
+    if (!isSupabaseConfigured()) {
+      console.warn("[AUTH] Supabase not configured");
+      return null;
+    }
+
+    try {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("[AUTH] Error fetching profile:", error);
+        return null;
+      }
+
+      if (!profile) {
+        console.log("[AUTH] No profile found for user:", userId);
+        return null;
+      }
+
+      return profileToUser(profile);
+    } catch (error) {
+      console.error("[AUTH] Exception fetching profile:", error);
+      return null;
+    }
+  }, []);
+
+  // Initialize auth state
   useEffect(() => {
-    const loadSession = () => {
-      console.log("[AUTH] loadSession starting...");
+    if (!isSupabaseConfigured()) {
+      console.warn("[AUTH] Supabase not configured, auth disabled");
+      setIsLoading(false);
+      return;
+    }
+
+    // Get initial session
+    const initializeAuth = async () => {
       try {
-        const sessionData = localStorage.getItem(STORAGE_KEYS.SESSION);
-        console.log("[AUTH] Session data exists:", !!sessionData);
+        const { data: { session } } = await supabase.auth.getSession();
 
-        if (!sessionData) {
-          console.log("[AUTH] No session found, not authenticated");
-          setIsLoading(false);
-          return;
-        }
-
-        let session: Session;
-        try {
-          session = JSON.parse(sessionData);
-          console.log("[AUTH] Parsed session for user:", session.userId, "role:", session.role);
-        } catch {
-          console.log("[AUTH] Failed to parse session data");
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
-          setIsLoading(false);
-          return;
-        }
-
-        // Validate session has required fields
-        if (!session.userId || !session.role || !session.expiresAt) {
-          console.log("[AUTH] Session missing required fields:", { userId: !!session.userId, role: !!session.role, expiresAt: !!session.expiresAt });
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
-          setIsLoading(false);
-          return;
-        }
-
-        // Check if session is expired
-        if (isSessionExpired(session.expiresAt)) {
-          console.log("[AUTH] Session expired at:", session.expiresAt);
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
-          setIsLoading(false);
-          return;
-        }
-
-        // Load user data
-        const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-        console.log("[AUTH] Users data exists:", !!usersData);
-
-        if (!usersData) {
-          console.log("[AUTH] No users data found");
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
-          setIsLoading(false);
-          return;
-        }
-
-        let users: User[];
-        try {
-          users = JSON.parse(usersData);
-          console.log("[AUTH] Found", users.length, "users in storage");
-        } catch {
-          console.log("[AUTH] Failed to parse users data");
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
-          localStorage.removeItem(STORAGE_KEYS.USERS);
-          localStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
-          setIsLoading(false);
-          return;
-        }
-
-        const user = users.find((u) => u.id === session.userId);
-        console.log("[AUTH] Found user for session:", !!user, user?.isActive ? "active" : "inactive");
-
-        if (user && user.isActive) {
-          console.log("[AUTH] Setting currentUser:", user.email, user.role);
+        if (session?.user) {
+          const user = await fetchProfile(session.user.id);
           setCurrentUser(user);
-        } else {
-          console.log("[AUTH] User not found or inactive, clearing session");
-          localStorage.removeItem(STORAGE_KEYS.SESSION);
         }
       } catch (error) {
-        console.error("[AUTH] Error loading session:", error);
-        localStorage.removeItem(STORAGE_KEYS.SESSION);
-        localStorage.removeItem(STORAGE_KEYS.USERS);
-        localStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+        console.error("[AUTH] Error initializing auth:", error);
+      } finally {
+        setIsLoading(false);
       }
-      console.log("[AUTH] loadSession complete, setting isLoading=false");
-      setIsLoading(false);
     };
 
-    loadSession();
-  }, []);
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("[AUTH] Auth state changed:", event);
+
+        if (event === "SIGNED_IN" && session?.user) {
+          const user = await fetchProfile(session.user.id);
+          setCurrentUser(user);
+        } else if (event === "SIGNED_OUT") {
+          setCurrentUser(null);
+        } else if (event === "TOKEN_REFRESHED" && session?.user) {
+          // Refresh profile on token refresh
+          const user = await fetchProfile(session.user.id);
+          setCurrentUser(user);
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
 
   const login = useCallback(
     async (
       email: string,
-      password: string
+      password: string,
+      staySignedIn: boolean = false
     ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }> => {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: "Authentication service not configured" };
+      }
+
       console.log("[AUTH] Login attempt for:", email);
 
-      // Input validation
       if (!email || !password) {
-        console.log("[AUTH] Login failed: missing email or password");
         return { success: false, error: "Email and password are required" };
       }
 
       try {
-        // Get credentials from localStorage
-        const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
-        console.log("[AUTH] Credentials data exists:", !!credentialsData);
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
 
-        if (!credentialsData) {
-          return { success: false, error: "No account found. Please register first." };
+        if (error) {
+          console.error("[AUTH] Login error:", error.message);
+          if (error.message.includes("Invalid login credentials")) {
+            return { success: false, error: "Invalid email or password" };
+          }
+          return { success: false, error: error.message };
         }
 
-        let credentials: UserCredentials[];
-        try {
-          credentials = JSON.parse(credentialsData);
-          console.log("[AUTH] Found", credentials.length, "credentials");
-        } catch {
-          return { success: false, error: "Account data corrupted. Please clear browser data and register again." };
+        if (!data.user) {
+          return { success: false, error: "Login failed" };
         }
 
-        // Find user credentials by email
-        const userCreds = credentials.find(
-          (c) => c.email.toLowerCase() === email.toLowerCase().trim()
-        );
-
-        if (!userCreds) {
-          console.log("[AUTH] No credentials found for email:", email.toLowerCase().trim());
-          console.log("[AUTH] Available emails:", credentials.map(c => c.email));
-          return { success: false, error: "Invalid email or password" };
-        }
-
-        console.log("[AUTH] Found credentials for user:", userCreds.id);
-
-        // Verify password (tries both new and legacy hash methods)
-        const isValid = await verifyPassword(password, userCreds.salt, userCreds.passwordHash);
-        console.log("[AUTH] Password verification result:", isValid);
-
-        if (!isValid) {
-          return { success: false, error: "Invalid email or password" };
-        }
-
-        // Get user profile data
-        const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-        if (!usersData) {
-          console.log("[AUTH] No users data in localStorage");
+        // Fetch profile to get role
+        const profile = await fetchProfile(data.user.id);
+        if (!profile) {
           return { success: false, error: "User profile not found" };
         }
 
-        let users: User[];
-        try {
-          users = JSON.parse(usersData);
-          console.log("[AUTH] Found", users.length, "users");
-        } catch {
-          return { success: false, error: "User data corrupted" };
-        }
-
-        const user = users.find((u) => u.id === userCreds.id);
-
-        if (!user) {
-          console.log("[AUTH] User not found with id:", userCreds.id);
-          return { success: false, error: "User profile not found" };
-        }
-
-        if (!user.isActive) {
-          console.log("[AUTH] User account is deactivated");
+        if (!profile.isActive) {
+          await supabase.auth.signOut();
           return { success: false, error: "Account is deactivated" };
         }
 
-        // Create new session
-        const session: Session = {
-          userId: user.id,
-          role: user.role,
-          token: generateSessionToken(),
-          expiresAt: getSessionExpiry(),
-          createdAt: new Date().toISOString(),
-        };
+        setCurrentUser(profile);
+        console.log("[AUTH] Login successful! Role:", profile.role);
 
-        // Save session and update state
-        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
-        setCurrentUser(user);
-
-        console.log("[AUTH] Login successful! Role:", user.role);
-        console.log("[AUTH] Session saved:", session.userId);
-
-        return { success: true, role: user.role };
+        return { success: true, role: profile.role };
       } catch (error) {
         console.error("[AUTH] Login exception:", error);
         const message = error instanceof Error ? error.message : "Login failed";
         return { success: false, error: message };
       }
     },
-    []
+    [fetchProfile]
   );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEYS.SESSION);
-    setCurrentUser(null);
+  const logout = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setCurrentUser(null);
+      return;
+    }
+
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+    } catch (error) {
+      console.error("[AUTH] Logout error:", error);
+      setCurrentUser(null);
+    }
   }, []);
 
   const registerBuyer = useCallback(
     async (
       data: BuyerRegistrationData
     ): Promise<{ success: boolean; error?: string }> => {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: "Authentication service not configured" };
+      }
+
       try {
-        // Validate email
-        if (!isValidEmail(data.email)) {
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email)) {
           return { success: false, error: "Invalid email format" };
         }
 
         // Validate password
-        const passwordValidation = isValidPassword(data.password);
-        if (!passwordValidation.valid) {
-          return { success: false, error: passwordValidation.message };
+        if (data.password.length < 8) {
+          return { success: false, error: "Password must be at least 8 characters" };
+        }
+        if (!/[a-zA-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+          return { success: false, error: "Password must contain at least one letter and one number" };
         }
 
         // Validate username
-        const usernameValidation = isValidUsername(data.username);
-        if (!usernameValidation.valid) {
-          return { success: false, error: usernameValidation.message };
+        if (data.username.length < 3) {
+          return { success: false, error: "Username must be at least 3 characters" };
         }
 
-        // Check if email already exists
-        const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
-        const credentials: UserCredentials[] = credentialsData
-          ? JSON.parse(credentialsData)
-          : [];
-
-        if (
-          credentials.some(
-            (c) => c.email.toLowerCase() === data.email.toLowerCase()
-          )
-        ) {
-          return { success: false, error: "Email already registered" };
-        }
-
-        // Check if username already exists
-        const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-        const users: User[] = usersData ? JSON.parse(usersData) : [];
-
-        if (
-          users.some(
-            (u) => u.username.toLowerCase() === data.username.toLowerCase()
-          )
-        ) {
-          return { success: false, error: "Username already taken" };
-        }
-
-        // Create user
-        const userId = generateUserId();
-        const salt = generateSalt();
-        const passwordHash = await hashPassword(data.password, salt);
-
-        // Store credentials
-        const newCredentials: UserCredentials = {
-          id: userId,
-          email: data.email.toLowerCase(),
-          passwordHash,
-          salt,
-          role: "buyer",
-        };
-        credentials.push(newCredentials);
-        localStorage.setItem(
-          STORAGE_KEYS.CREDENTIALS,
-          JSON.stringify(credentials)
-        );
-
-        // Store user profile
-        const now = new Date().toISOString();
-        const newUser: LeadBuyer = {
-          id: userId,
-          email: data.email.toLowerCase(),
-          username: data.username,
-          role: "buyer",
-          businessName: data.businessName,
-          businessType: data.businessType,
-          phone: data.phone,
-          // Licensing compliance fields
-          licensedStates: data.licensedStates || [],
-          nationalProducerNumber: data.nationalProducerNumber,
-          licenseVerified: false, // Pending verification
-          complianceAcknowledgedAt: data.complianceAcknowledged ? now : undefined,
-          stats: {
-            ...getDefaultBuyerStats(),
-            memberSince: now,
+        // Sign up with Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: data.email.toLowerCase().trim(),
+          password: data.password,
+          options: {
+            data: {
+              username: data.username,
+              role: "buyer",
+              businessName: data.businessName,
+              businessType: data.businessType,
+              phone: data.phone,
+              licensedStates: JSON.stringify(data.licensedStates),
+              nationalProducerNumber: data.nationalProducerNumber || null,
+              complianceAcknowledged: data.complianceAcknowledged,
+            },
           },
-          connectionIds: [],
-          createdAt: now,
-          updatedAt: now,
-          isActive: true,
-        };
+        });
 
-        users.push(newUser);
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+        if (authError) {
+          console.error("[AUTH] Registration error:", authError.message);
+          if (authError.message.includes("already registered")) {
+            return { success: false, error: "Email already registered" };
+          }
+          return { success: false, error: authError.message };
+        }
 
-        // Auto-login
-        const session: Session = {
-          userId: newUser.id,
-          role: newUser.role,
-          token: generateSessionToken(),
-          expiresAt: getSessionExpiry(),
-          createdAt: now,
-        };
+        if (!authData.user) {
+          return { success: false, error: "Registration failed" };
+        }
 
-        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
-        setCurrentUser(newUser);
+        // Wait briefly for the trigger to create the profile
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Fetch the created profile
+        const profile = await fetchProfile(authData.user.id);
+        if (profile) {
+          setCurrentUser(profile);
+        }
 
         return { success: true };
       } catch (error) {
-        console.error("Registration error:", error);
+        console.error("[AUTH] Registration exception:", error);
         return { success: false, error: "An error occurred during registration" };
       }
     },
-    []
+    [fetchProfile]
   );
 
   const registerProvider = useCallback(
     async (
       data: ProviderRegistrationData
     ): Promise<{ success: boolean; error?: string }> => {
+      if (!isSupabaseConfigured()) {
+        return { success: false, error: "Authentication service not configured" };
+      }
+
       try {
-        // Validate email
-        if (!isValidEmail(data.email)) {
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email)) {
           return { success: false, error: "Invalid email format" };
         }
 
         // Validate password
-        const passwordValidation = isValidPassword(data.password);
-        if (!passwordValidation.valid) {
-          return { success: false, error: passwordValidation.message };
+        if (data.password.length < 8) {
+          return { success: false, error: "Password must be at least 8 characters" };
+        }
+        if (!/[a-zA-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+          return { success: false, error: "Password must contain at least one letter and one number" };
         }
 
         // Validate username
-        const usernameValidation = isValidUsername(data.username);
-        if (!usernameValidation.valid) {
-          return { success: false, error: usernameValidation.message };
+        if (data.username.length < 3) {
+          return { success: false, error: "Username must be at least 3 characters" };
         }
 
-        // Check if email already exists
-        const credentialsData = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
-        const credentials: UserCredentials[] = credentialsData
-          ? JSON.parse(credentialsData)
-          : [];
-
-        if (
-          credentials.some(
-            (c) => c.email.toLowerCase() === data.email.toLowerCase()
-          )
-        ) {
-          return { success: false, error: "Email already registered" };
-        }
-
-        // Check if username already exists
-        const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-        const users: User[] = usersData ? JSON.parse(usersData) : [];
-
-        if (
-          users.some(
-            (u) => u.username.toLowerCase() === data.username.toLowerCase()
-          )
-        ) {
-          return { success: false, error: "Username already taken" };
-        }
-
-        // Create user
-        const userId = generateUserId();
-        const salt = generateSalt();
-        const passwordHash = await hashPassword(data.password, salt);
-
-        // Store credentials
-        const newCredentials: UserCredentials = {
-          id: userId,
-          email: data.email.toLowerCase(),
-          passwordHash,
-          salt,
-          role: "provider",
-        };
-        credentials.push(newCredentials);
-        localStorage.setItem(
-          STORAGE_KEYS.CREDENTIALS,
-          JSON.stringify(credentials)
-        );
-
-        // Store user profile
-        const now = new Date().toISOString();
-        const newUser: LeadProvider = {
-          id: userId,
-          email: data.email.toLowerCase(),
-          username: data.username,
-          role: "provider",
-          displayName: data.displayName,
-          phone: data.phone,
-          location: data.location,
-          stats: {
-            ...getDefaultProviderStats(),
-            memberSince: now,
+        // Sign up with Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: data.email.toLowerCase().trim(),
+          password: data.password,
+          options: {
+            data: {
+              username: data.username,
+              role: "provider",
+              displayName: data.displayName,
+              phone: data.phone || null,
+              location: data.location || null,
+            },
           },
-          connectionIds: [],
-          createdAt: now,
-          updatedAt: now,
-          isActive: true,
-        };
+        });
 
-        users.push(newUser);
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+        if (authError) {
+          console.error("[AUTH] Registration error:", authError.message);
+          if (authError.message.includes("already registered")) {
+            return { success: false, error: "Email already registered" };
+          }
+          return { success: false, error: authError.message };
+        }
 
-        // Auto-login
-        const session: Session = {
-          userId: newUser.id,
-          role: newUser.role,
-          token: generateSessionToken(),
-          expiresAt: getSessionExpiry(),
-          createdAt: now,
-        };
+        if (!authData.user) {
+          return { success: false, error: "Registration failed" };
+        }
 
-        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
-        setCurrentUser(newUser);
+        // Wait briefly for the trigger to create the profile
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Fetch the created profile
+        const profile = await fetchProfile(authData.user.id);
+        if (profile) {
+          setCurrentUser(profile);
+        }
 
         return { success: true };
       } catch (error) {
-        console.error("Registration error:", error);
+        console.error("[AUTH] Registration exception:", error);
         return { success: false, error: "An error occurred during registration" };
       }
     },
-    []
+    [fetchProfile]
   );
 
   const updateUser = useCallback(
-    (updates: Partial<User>) => {
-      if (!currentUser) return;
+    async (updates: Partial<User>) => {
+      if (!currentUser || !isSupabaseConfigured()) return;
 
-      const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-      if (!usersData) return;
+      try {
+        // Convert camelCase to snake_case for Supabase
+        // Use type assertion to access union type properties
+        const updatesAny = updates as Record<string, unknown>;
+        const snakeCaseUpdates: Record<string, unknown> = {};
 
-      const users: User[] = JSON.parse(usersData);
-      const updatedUsers = users.map((u) =>
-        u.id === currentUser.id
-          ? { ...u, ...updates, updatedAt: new Date().toISOString() }
-          : u
-      );
+        if ("businessName" in updatesAny && updatesAny.businessName !== undefined) {
+          snakeCaseUpdates.business_name = updatesAny.businessName;
+        }
+        if ("businessType" in updatesAny && updatesAny.businessType !== undefined) {
+          snakeCaseUpdates.business_type = updatesAny.businessType;
+        }
+        if ("phone" in updatesAny && updatesAny.phone !== undefined) {
+          snakeCaseUpdates.phone = updatesAny.phone;
+        }
+        if ("displayName" in updatesAny && updatesAny.displayName !== undefined) {
+          snakeCaseUpdates.display_name = updatesAny.displayName;
+        }
+        if ("location" in updatesAny && updatesAny.location !== undefined) {
+          snakeCaseUpdates.location = updatesAny.location;
+        }
+        if ("licensedStates" in updatesAny && updatesAny.licensedStates !== undefined) {
+          snakeCaseUpdates.licensed_states = updatesAny.licensedStates;
+        }
+        if ("stats" in updatesAny && updatesAny.stats !== undefined) {
+          snakeCaseUpdates.stats = updatesAny.stats;
+        }
+        if ("connectionIds" in updatesAny && updatesAny.connectionIds !== undefined) {
+          snakeCaseUpdates.connection_ids = updatesAny.connectionIds;
+        }
+        if ("isActive" in updatesAny && updatesAny.isActive !== undefined) {
+          snakeCaseUpdates.is_active = updatesAny.isActive;
+        }
 
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+        const { error } = await supabase
+          .from("profiles")
+          .update(snakeCaseUpdates)
+          .eq("id", currentUser.id);
 
-      const updatedUser = updatedUsers.find((u) => u.id === currentUser.id);
-      if (updatedUser) {
-        setCurrentUser(updatedUser as User);
+        if (error) {
+          console.error("[AUTH] Update error:", error);
+          return;
+        }
+
+        // Refresh local user state
+        const updatedProfile = await fetchProfile(currentUser.id);
+        if (updatedProfile) {
+          setCurrentUser(updatedProfile);
+        }
+      } catch (error) {
+        console.error("[AUTH] Update exception:", error);
       }
     },
-    [currentUser]
+    [currentUser, fetchProfile]
   );
 
   const getAllUsers = useCallback((): User[] => {
-    const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-    return usersData ? JSON.parse(usersData) : [];
+    // This would need to fetch from Supabase
+    // For now, return empty - implement if needed
+    console.warn("[AUTH] getAllUsers not fully implemented for Supabase");
+    return [];
   }, []);
 
   const getUserById = useCallback((id: string): User | undefined => {
-    const users = getAllUsers();
-    return users.find((u) => u.id === id);
-  }, [getAllUsers]);
+    // This would need to fetch from Supabase
+    // For now, return undefined - implement if needed
+    console.warn("[AUTH] getUserById not fully implemented for Supabase");
+    return undefined;
+  }, []);
 
   const getUsersByRole = useCallback(
     (role: "buyer" | "provider"): User[] => {
-      const users = getAllUsers();
-      return users.filter((u) => u.role === role);
+      // This would need to fetch from Supabase
+      // For now, return empty - implement if needed
+      console.warn("[AUTH] getUsersByRole not fully implemented for Supabase");
+      return [];
     },
-    [getAllUsers]
+    []
   );
 
   return (

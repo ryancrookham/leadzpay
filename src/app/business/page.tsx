@@ -40,6 +40,7 @@ function BusinessPortalContent() {
     rejectRequest,
     updateConnectionTerms,
     terminateConnection,
+    sendInvitationToProvider,
   } = useConnections();
 
   // Get connection requests for this buyer
@@ -62,37 +63,103 @@ function BusinessPortalContent() {
 
   // Calculate CRM analytics from uploaded data
   const calculateCrmAnalytics = (data: UploadedRecord[]): AnalyticsData => {
-    const totalCustomers = data.length;
-    const boundPolicies = data.filter(r => r.policyStatus === "bound" || r.policyStatus === "renewed").length;
-    const renewedPolicies = data.filter(r => r.policyStatus === "renewed").length;
-    const lapsedPolicies = data.filter(r => r.policyStatus === "lapsed" || r.policyStatus === "cancelled").length;
-    const eligibleForRenewal = renewedPolicies + lapsedPolicies;
-    const retentionRate = eligibleForRenewal > 0 ? (renewedPolicies / eligibleForRenewal) * 100 : 0;
-    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
-    const avgPremium = boundPolicies > 0 ? totalPremium / boundPolicies : 0;
+    // Helper to parse Y/N values
+    const parseYesNo = (value: unknown): boolean => {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value === 1;
+      const str = String(value || "").toLowerCase().trim();
+      return str === "y" || str === "yes" || str === "true" || str === "1";
+    };
 
-    const providerMap = new Map<string, { leads: number; bound: number; revenue: number }>();
+    const totalLeads = data.length;
+    const totalContacted = data.filter(r => r.contactMade).length;
+    const totalSold = data.filter(r => r.sold).length;
+    const totalPaid = data.filter(r => r.paidGenerator).length;
+
+    const overallContactRate = totalLeads > 0 ? (totalContacted / totalLeads) * 100 : 0;
+    const overallConversionRate = totalLeads > 0 ? (totalSold / totalLeads) * 100 : 0;
+    const overallPaymentRate = totalLeads > 0 ? (totalPaid / totalLeads) * 100 : 0;
+
+    // Group by individual sender
+    const providerMap = new Map<string, {
+      businessName: string;
+      totalLeads: number;
+      contactedLeads: number;
+      soldLeads: number;
+      paidLeads: number;
+    }>();
+
     data.forEach(record => {
-      const existing = providerMap.get(record.providerName) || { leads: 0, bound: 0, revenue: 0 };
-      existing.leads++;
-      if (record.policyStatus === "bound" || record.policyStatus === "renewed") {
-        existing.bound++;
-        existing.revenue += record.premium || 0;
-      }
-      providerMap.set(record.providerName, existing);
+      const key = record.individualSender || record.providerName || "Unknown";
+      const existing = providerMap.get(key) || {
+        businessName: record.businessSender || "",
+        totalLeads: 0,
+        contactedLeads: 0,
+        soldLeads: 0,
+        paidLeads: 0
+      };
+      existing.totalLeads++;
+      if (record.contactMade) existing.contactedLeads++;
+      if (record.sold) existing.soldLeads++;
+      if (record.paidGenerator) existing.paidLeads++;
+      providerMap.set(key, existing);
     });
 
-    const providerStats = Array.from(providerMap.entries())
+    const providerStats: ProviderPerformance[] = Array.from(providerMap.entries())
       .map(([name, stats]) => ({
         name,
-        leads: stats.leads,
-        bound: stats.bound,
-        closingRate: stats.leads > 0 ? (stats.bound / stats.leads) * 100 : 0,
-        revenue: stats.revenue,
+        businessName: stats.businessName,
+        totalLeads: stats.totalLeads,
+        contactedLeads: stats.contactedLeads,
+        soldLeads: stats.soldLeads,
+        paidLeads: stats.paidLeads,
+        contactRate: stats.totalLeads > 0 ? (stats.contactedLeads / stats.totalLeads) * 100 : 0,
+        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
+        paymentRate: stats.totalLeads > 0 ? (stats.paidLeads / stats.totalLeads) * 100 : 0,
+        unpaidAmount: stats.totalLeads - stats.paidLeads,
       }))
-      .sort((a, b) => b.leads - a.leads);
+      .sort((a, b) => b.totalLeads - a.totalLeads);
 
-    return { totalCustomers, boundPolicies, renewedPolicies, lapsedPolicies, retentionRate, totalPremium, avgPremium, providerStats };
+    // Group by business
+    const businessMap = new Map<string, { totalLeads: number; soldLeads: number }>();
+    data.forEach(record => {
+      const key = record.businessSender || "Unknown";
+      const existing = businessMap.get(key) || { totalLeads: 0, soldLeads: 0 };
+      existing.totalLeads++;
+      if (record.sold) existing.soldLeads++;
+      businessMap.set(key, existing);
+    });
+
+    const businessStats = Array.from(businessMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        totalLeads: stats.totalLeads,
+        soldLeads: stats.soldLeads,
+        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalLeads - a.totalLeads);
+
+    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
+    const avgPremium = totalSold > 0 ? totalPremium / totalSold : 0;
+
+    return {
+      totalLeads,
+      totalContacted,
+      totalSold,
+      totalPaid,
+      overallContactRate,
+      overallConversionRate,
+      overallPaymentRate,
+      providerStats,
+      businessStats,
+      totalCustomers: totalLeads,
+      boundPolicies: totalSold,
+      renewedPolicies: 0,
+      lapsedPolicies: 0,
+      retentionRate: overallConversionRate,
+      totalPremium,
+      avgPremium,
+    };
   };
 
   // Parse Excel/CSV file for CRM data
@@ -109,23 +176,107 @@ function BusinessPortalContent() {
       const sheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
 
-      const records: UploadedRecord[] = jsonData.map((row) => {
-        const providerName = (row["Provider Name"] || row["Provider"] || row["Salesperson"] || row["Agent"] || row["provider_name"] || "Unknown") as string;
-        const customerName = (row["Customer Name"] || row["Customer"] || row["Name"] || row["customer_name"] || "Unknown") as string;
-        const customerEmail = (row["Email"] || row["Customer Email"] || row["email"] || "") as string;
-        const rawStatus = ((row["Status"] || row["Policy Status"] || row["status"] || row["policy_status"] || "lead") as string).toLowerCase();
-        let policyStatus: UploadedRecord["policyStatus"] = "lead";
-        if (rawStatus.includes("bound") || rawStatus.includes("sold") || rawStatus.includes("active")) policyStatus = "bound";
-        else if (rawStatus.includes("renew")) policyStatus = "renewed";
-        else if (rawStatus.includes("lapse") || rawStatus.includes("cancel")) policyStatus = "lapsed";
-        else if (rawStatus.includes("quote")) policyStatus = "quoted";
-        const rawPremium = row["Premium"] || row["Annual Premium"] || row["premium"] || row["Amount"] || 0;
+      // Helper to find column value with flexible matching (handles whitespace, case variations)
+      const getColumn = (row: Record<string, unknown>, ...possibleNames: string[]): unknown => {
+        // First try exact matches
+        for (const name of possibleNames) {
+          if (row[name] !== undefined) return row[name];
+        }
+        // Then try case-insensitive matching with trimmed keys
+        const rowKeys = Object.keys(row);
+        for (const name of possibleNames) {
+          const normalizedName = name.toLowerCase().trim();
+          for (const key of rowKeys) {
+            if (key.toLowerCase().trim() === normalizedName) {
+              return row[key];
+            }
+          }
+        }
+        // Try partial matching for common patterns
+        for (const name of possibleNames) {
+          const normalizedName = name.toLowerCase().replace(/[^a-z]/g, "");
+          for (const key of rowKeys) {
+            const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
+            if (normalizedKey.includes(normalizedName) || normalizedName.includes(normalizedKey)) {
+              return row[key];
+            }
+          }
+        }
+        return undefined;
+      };
+
+      // Helper to parse Y/N values - handles text, boolean, and numeric
+      const parseYesNo = (value: unknown): boolean => {
+        if (value === undefined || value === null || value === "") return false;
+        if (typeof value === "boolean") return value;
+        if (typeof value === "number") return value === 1 || value > 0;
+        const str = String(value).toLowerCase().trim();
+        return str === "y" || str === "yes" || str === "true" || str === "1";
+      };
+
+      // Debug: log first row to see actual column names
+      if (jsonData.length > 0) {
+        console.log("[CRM Parser] Column names found:", Object.keys(jsonData[0]));
+        console.log("[CRM Parser] First row values:", jsonData[0]);
+      }
+
+      const records: UploadedRecord[] = jsonData.map((row, index) => {
+        const customerName = String(
+          getColumn(row, "Name of Person", "Insurance Seeker", "Customer Name", "Customer", "Name") || "Unknown"
+        );
+
+        const businessSender = String(
+          getColumn(row, "Business Sender", "Company", "Dealership", "Business") || ""
+        );
+
+        const individualSender = String(
+          getColumn(row, "Individual Sender", "Car Salesman", "Salesperson", "Provider", "Provider Name", "Agent") || "Unknown"
+        );
+
+        // Get raw Y/N values for debugging
+        const rawPaid = getColumn(row, "Paid (Y/N)", "Paid the Lead Generator", "Paid", "Payment Made");
+        const rawContact = getColumn(row, "Contact Made (Y/N)", "Contact Made", "Contacted", "Contact");
+        const rawSold = getColumn(row, "Sold (Y/N)", "Sold Lead Business", "Sold", "Converted", "Policy Sold");
+
+        // Debug first few rows
+        if (index < 3) {
+          console.log(`[CRM Parser] Row ${index + 1}: Paid raw="${rawPaid}" Contact raw="${rawContact}" Sold raw="${rawSold}"`);
+        }
+
+        const paidGenerator = parseYesNo(rawPaid);
+        const contactMade = parseYesNo(rawContact);
+        const sold = parseYesNo(rawSold);
+
+        if (index < 3) {
+          console.log(`[CRM Parser] Row ${index + 1}: Paid=${paidGenerator} Contact=${contactMade} Sold=${sold}`);
+        }
+
+        const rawPremium = getColumn(row, "Premium", "Annual Premium", "Amount") || 0;
         const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
-        const rawDate = row["Date"] || row["Created"] || row["date"] || row["created_at"] || new Date().toISOString();
-        const date = String(rawDate);
-        const carrier = (row["Carrier"] || row["Insurance Company"] || row["carrier"] || "") as string;
-        return { providerName, customerName, customerEmail, policyStatus, premium, date, carrier };
+        const date = parseExcelDate(getColumn(row, "Date", "Created"));
+        const carrier = String(getColumn(row, "Carrier", "Insurance Company") || "");
+
+        return {
+          customerName,
+          businessSender,
+          individualSender,
+          paidGenerator,
+          contactMade,
+          sold,
+          providerName: individualSender,
+          customerEmail: String(getColumn(row, "Email", "Customer Email") || ""),
+          policyStatus: sold ? "bound" as const : "lead" as const,
+          premium,
+          date,
+          carrier,
+        };
       });
+
+      // Debug: summary
+      const soldCount = records.filter(r => r.sold).length;
+      const contactCount = records.filter(r => r.contactMade).length;
+      const paidCount = records.filter(r => r.paidGenerator).length;
+      console.log(`[CRM Parser] Summary: ${records.length} records, ${contactCount} contacted, ${soldCount} sold, ${paidCount} paid`);
 
       setUploadedCrmData(records);
       setCrmAnalytics(calculateCrmAnalytics(records));
@@ -410,61 +561,114 @@ function BusinessPortalContent() {
               )}
 
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <p className="text-gray-600 text-sm font-medium mb-2">Expected columns:</p>
+                <p className="text-gray-600 text-sm font-medium mb-2">Expected columns in your Excel file:</p>
                 <div className="flex flex-wrap gap-2">
-                  {["Provider Name", "Customer Name", "Status", "Date"].map(col => (
+                  {[
+                    "Name of Person",
+                    "Business Sender",
+                    "Individual Sender",
+                    "Paid (Y/N)",
+                    "Contact Made (Y/N)",
+                    "Sold (Y/N)"
+                  ].map(col => (
                     <span key={col} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600">{col}</span>
                   ))}
                 </div>
-                <p className="text-gray-400 text-xs mt-2">Status values: lead, quoted, bound, renewed, lapsed, cancelled</p>
+                <p className="text-gray-400 text-xs mt-2">Source Conversion Rate is calculated automatically (Sold ÷ Total per Individual Sender)</p>
               </div>
             </div>
 
             {/* CRM Analytics (shown after upload) */}
             {crmAnalytics && (
               <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-[#1e3a5f]">CRM Analytics</h3>
+                <h3 className="text-lg font-semibold text-[#1e3a5f]">Lead Performance Analytics</h3>
 
+                {/* Summary Metrics */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Retention Rate</p>
-                    <p className="text-3xl font-bold text-emerald-600">{crmAnalytics.retentionRate.toFixed(1)}%</p>
-                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.renewedPolicies} renewed / {crmAnalytics.renewedPolicies + crmAnalytics.lapsedPolicies} eligible</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Total Policies</p>
-                    <p className="text-3xl font-bold text-[#1e3a5f]">{crmAnalytics.boundPolicies}</p>
-                    <p className="text-gray-400 text-xs mt-1">Bound + Renewed</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Records Imported</p>
-                    <p className="text-3xl font-bold text-blue-600">{crmAnalytics.totalCustomers}</p>
+                    <p className="text-gray-500 text-sm">Total Leads</p>
+                    <p className="text-3xl font-bold text-[#1e3a5f]">{crmAnalytics.totalLeads}</p>
                     <p className="text-gray-400 text-xs mt-1">From uploaded file</p>
                   </div>
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Closing Rate</p>
-                    <p className="text-3xl font-bold text-amber-600">{crmAnalytics.totalCustomers > 0 ? ((crmAnalytics.boundPolicies / crmAnalytics.totalCustomers) * 100).toFixed(1) : 0}%</p>
-                    <p className="text-gray-400 text-xs mt-1">Leads → Policies</p>
+                    <p className="text-gray-500 text-sm">Contact Rate</p>
+                    <p className="text-3xl font-bold text-blue-600">{crmAnalytics.overallContactRate.toFixed(1)}%</p>
+                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalContacted} contacted</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Conversion Rate</p>
+                    <p className="text-3xl font-bold text-emerald-600">{crmAnalytics.overallConversionRate.toFixed(1)}%</p>
+                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalSold} sold</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <p className="text-gray-500 text-sm">Payment Rate</p>
+                    <p className="text-3xl font-bold text-amber-600">{crmAnalytics.overallPaymentRate.toFixed(1)}%</p>
+                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalPaid} paid</p>
                   </div>
                 </div>
 
-                {/* Provider Performance Table */}
+                {/* Lead Funnel Visualization */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Provider Performance</h4>
+                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Lead Funnel</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Total Leads</span>
+                        <span className="font-bold text-[#1e3a5f]">{crmAnalytics.totalLeads}</span>
+                      </div>
+                      <div className="h-6 bg-[#1e3a5f] rounded"></div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Contacted</span>
+                        <span className="font-bold text-blue-600">{crmAnalytics.totalContacted} ({crmAnalytics.overallContactRate.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded" style={{ width: `${crmAnalytics.overallContactRate}%` }}></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Sold</span>
+                        <span className="font-bold text-emerald-600">{crmAnalytics.totalSold} ({crmAnalytics.overallConversionRate.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded" style={{ width: `${crmAnalytics.overallConversionRate}%` }}></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">Paid to Providers</span>
+                        <span className="font-bold text-amber-600">{crmAnalytics.totalPaid} ({crmAnalytics.overallPaymentRate.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded" style={{ width: `${crmAnalytics.overallPaymentRate}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual Sender (Provider) Performance Table */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Individual Sender Performance</h4>
+                  <p className="text-gray-500 text-sm mb-4">Use this to adjust payment rates or lead caps</p>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="text-left text-gray-500 border-b border-gray-200">
                           <th className="pb-3 font-medium">Rank</th>
-                          <th className="pb-3 font-medium">Provider</th>
+                          <th className="pb-3 font-medium">Individual Sender</th>
+                          <th className="pb-3 font-medium">Business</th>
                           <th className="pb-3 font-medium">Leads</th>
-                          <th className="pb-3 font-medium">Bound</th>
-                          <th className="pb-3 font-medium">Closing Rate</th>
+                          <th className="pb-3 font-medium">Contacted</th>
+                          <th className="pb-3 font-medium">Sold</th>
+                          <th className="pb-3 font-medium">Conv. Rate</th>
+                          <th className="pb-3 font-medium">Unpaid</th>
                         </tr>
                       </thead>
                       <tbody>
                         {crmAnalytics.providerStats.slice(0, 10).map((provider, i) => (
-                          <tr key={provider.name} className="border-b border-gray-100">
+                          <tr key={provider.name} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-4">
                               <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
                                 i === 0 ? "bg-yellow-100 text-yellow-700" :
@@ -476,17 +680,230 @@ function BusinessPortalContent() {
                               </span>
                             </td>
                             <td className="py-4 font-medium text-gray-800">{provider.name}</td>
-                            <td className="py-4 text-gray-600">{provider.leads}</td>
-                            <td className="py-4 text-gray-600">{provider.bound}</td>
+                            <td className="py-4 text-gray-500 text-sm">{provider.businessName || "-"}</td>
+                            <td className="py-4 text-gray-600">{provider.totalLeads}</td>
+                            <td className="py-4 text-gray-600">{provider.contactedLeads}</td>
+                            <td className="py-4 text-gray-600">{provider.soldLeads}</td>
                             <td className="py-4">
-                              <span className={`font-medium ${provider.closingRate >= 30 ? "text-emerald-600" : provider.closingRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
-                                {provider.closingRate.toFixed(1)}%
+                              <span className={`font-medium ${provider.conversionRate >= 30 ? "text-emerald-600" : provider.conversionRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                                {provider.conversionRate.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="py-4">
+                              <span className={`font-medium ${provider.unpaidAmount > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                                {provider.unpaidAmount}
                               </span>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+
+                {/* Top 3 Performers Over Time - Dot Plot */}
+                {(() => {
+                  const { weeklyData, allWeeks } = calculateWeeklyPerformance(uploadedCrmData, crmAnalytics.providerStats);
+                  if (weeklyData.length === 0 || allWeeks.length < 2) return null;
+
+                  const chartHeight = 280;
+                  const chartWidth = 100; // percentage
+                  const paddingLeft = 50;
+                  const paddingRight = 20;
+                  const paddingTop = 20;
+                  const paddingBottom = 50;
+                  const effectiveWidth = 800 - paddingLeft - paddingRight;
+                  const effectiveHeight = chartHeight - paddingTop - paddingBottom;
+
+                  return (
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                      <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Top 3 Performers Over Time</h4>
+                      <p className="text-gray-500 text-sm mb-4">Weekly source conversion rate (%) for your best performers</p>
+
+                      {/* Legend */}
+                      <div className="flex gap-6 mb-4">
+                        {weeklyData.map(provider => (
+                          <div key={provider.providerName} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }}></div>
+                            <span className="text-sm text-gray-700">{provider.providerName}</span>
+                            <span className="text-xs text-gray-400">({provider.overallConversionRate.toFixed(1)}%)</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* SVG Chart */}
+                      <div className="w-full overflow-x-auto">
+                        <svg viewBox="0 0 800 280" className="w-full" style={{ minWidth: "600px" }}>
+                          {/* Y-axis grid lines and labels */}
+                          {[0, 25, 50, 75, 100].map(val => {
+                            const y = paddingTop + effectiveHeight - (val / 100) * effectiveHeight;
+                            return (
+                              <g key={val}>
+                                <line x1={paddingLeft} y1={y} x2={800 - paddingRight} y2={y} stroke="#e5e7eb" strokeDasharray="4,4" />
+                                <text x={paddingLeft - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-xs">{val}%</text>
+                              </g>
+                            );
+                          })}
+
+                          {/* X-axis labels (weeks) */}
+                          {allWeeks.map((week, i) => {
+                            const x = paddingLeft + (i / (allWeeks.length - 1)) * effectiveWidth;
+                            return (
+                              <text key={week} x={x} y={chartHeight - 15} textAnchor="middle" className="fill-gray-500 text-xs">
+                                {formatWeekLabel(week)}
+                              </text>
+                            );
+                          })}
+
+                          {/* Lines and dots for each provider */}
+                          {weeklyData.map(provider => {
+                            const points = provider.weeks
+                              .map((w, i) => {
+                                if (w.totalLeads === 0) return null;
+                                const x = paddingLeft + (i / (allWeeks.length - 1)) * effectiveWidth;
+                                const y = paddingTop + effectiveHeight - (w.conversionRate / 100) * effectiveHeight;
+                                return { x, y, data: w };
+                              })
+                              .filter(Boolean) as { x: number; y: number; data: typeof provider.weeks[0] }[];
+
+                            if (points.length === 0) return null;
+
+                            // Create line path
+                            const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+                            return (
+                              <g key={provider.providerName}>
+                                {/* Line */}
+                                <path d={linePath} fill="none" stroke={provider.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                {/* Dots */}
+                                {points.map((p, i) => (
+                                  <g key={i}>
+                                    <circle cx={p.x} cy={p.y} r="6" fill={provider.color} />
+                                    <circle cx={p.x} cy={p.y} r="4" fill="white" />
+                                    <circle cx={p.x} cy={p.y} r="3" fill={provider.color} />
+                                    {/* Tooltip on hover (using title for basic tooltip) */}
+                                    <title>{`${provider.providerName}: ${p.data.conversionRate.toFixed(1)}% cumulative (${p.data.cumulativeSold}/${p.data.cumulativeTotal} total leads)`}</title>
+                                  </g>
+                                ))}
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Volume vs Quality Scatter Plot */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Volume vs Quality</h4>
+                  <p className="text-gray-500 text-sm mb-4">Find providers with the best balance of lead volume and conversion quality</p>
+
+                  {(() => {
+                    const maxLeads = Math.max(...crmAnalytics.providerStats.map(p => p.totalLeads), 1);
+                    const chartHeight = 250;
+                    const paddingLeft = 50;
+                    const paddingRight = 20;
+                    const paddingTop = 20;
+                    const paddingBottom = 40;
+
+                    return (
+                      <div className="w-full overflow-x-auto">
+                        <svg viewBox="0 0 600 250" className="w-full" style={{ minWidth: "400px" }}>
+                          {/* Y-axis (Conversion Rate) */}
+                          {[0, 25, 50, 75, 100].map(val => {
+                            const y = paddingTop + (chartHeight - paddingTop - paddingBottom) * (1 - val / 100);
+                            return (
+                              <g key={val}>
+                                <line x1={paddingLeft} y1={y} x2={600 - paddingRight} y2={y} stroke="#e5e7eb" strokeDasharray="2,2" />
+                                <text x={paddingLeft - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-xs">{val}%</text>
+                              </g>
+                            );
+                          })}
+
+                          {/* X-axis label */}
+                          <text x={325} y={chartHeight - 5} textAnchor="middle" className="fill-gray-500 text-xs">Total Leads</text>
+                          <text x={20} y={chartHeight / 2} textAnchor="middle" transform={`rotate(-90, 20, ${chartHeight / 2})`} className="fill-gray-500 text-xs">Conv. Rate %</text>
+
+                          {/* Quadrant backgrounds */}
+                          <rect x={paddingLeft + (600 - paddingLeft - paddingRight) / 2} y={paddingTop}
+                                width={(600 - paddingLeft - paddingRight) / 2} height={(chartHeight - paddingTop - paddingBottom) / 2}
+                                fill="#10b98110" />
+
+                          {/* Scatter points */}
+                          {crmAnalytics.providerStats.slice(0, 15).map((provider, i) => {
+                            const x = paddingLeft + (provider.totalLeads / maxLeads) * (600 - paddingLeft - paddingRight - 20);
+                            const y = paddingTop + (chartHeight - paddingTop - paddingBottom) * (1 - provider.conversionRate / 100);
+                            const radius = Math.max(8, Math.min(20, 6 + provider.totalLeads / 3));
+                            const color = provider.conversionRate >= 30 ? "#10b981" : provider.conversionRate >= 15 ? "#f59e0b" : "#ef4444";
+
+                            return (
+                              <g key={provider.name}>
+                                <circle cx={x} cy={y} r={radius} fill={color} opacity="0.7" />
+                                <title>{`${provider.name}: ${provider.totalLeads} leads, ${provider.conversionRate.toFixed(1)}% conv.`}</title>
+                              </g>
+                            );
+                          })}
+
+                          {/* Legend */}
+                          <g transform="translate(480, 30)">
+                            <circle cx="0" cy="0" r="6" fill="#10b981" />
+                            <text x="12" y="4" className="fill-gray-600 text-xs">High (30%+)</text>
+                            <circle cx="0" cy="18" r="6" fill="#f59e0b" />
+                            <text x="12" y="22" className="fill-gray-600 text-xs">Med (15-30%)</text>
+                            <circle cx="0" cy="36" r="6" fill="#ef4444" />
+                            <text x="12" y="40" className="fill-gray-600 text-xs">Low (&lt;15%)</text>
+                          </g>
+                        </svg>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Payment Status by Provider */}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Payment Status</h4>
+                  <p className="text-gray-500 text-sm mb-4">Track paid vs unpaid leads by provider</p>
+
+                  <div className="space-y-3">
+                    {crmAnalytics.providerStats
+                      .filter(p => p.totalLeads > 0)
+                      .sort((a, b) => b.unpaidAmount - a.unpaidAmount)
+                      .slice(0, 8)
+                      .map(provider => {
+                        const paidPercent = (provider.paidLeads / provider.totalLeads) * 100;
+                        return (
+                          <div key={provider.name} className="flex items-center gap-3">
+                            <div className="w-32 truncate text-sm text-gray-700" title={provider.name}>{provider.name}</div>
+                            <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden flex">
+                              <div
+                                className="h-full bg-emerald-500 transition-all"
+                                style={{ width: `${paidPercent}%` }}
+                              ></div>
+                              <div
+                                className="h-full bg-amber-400 transition-all"
+                                style={{ width: `${100 - paidPercent}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-xs text-gray-500 w-24 text-right">
+                              <span className="text-emerald-600 font-medium">{provider.paidLeads}</span>
+                              <span className="mx-1">/</span>
+                              <span className="text-amber-600 font-medium">{provider.unpaidAmount}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  <div className="flex gap-4 mt-4 text-xs text-gray-500">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-emerald-500"></div>
+                      <span>Paid</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded bg-amber-400"></div>
+                      <span>Unpaid</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -498,12 +915,14 @@ function BusinessPortalContent() {
         {activeTab === "requests" && (
           <RequestsTab
             buyerId={currentUser.id}
+            buyerBusinessName={currentBuyer?.businessName || ""}
             pendingRequests={pendingRequests}
             myConnections={myConnections}
             setTermsForRequest={setTermsForRequest}
             rejectRequest={rejectRequest}
             updateConnectionTerms={updateConnectionTerms}
             terminateConnection={terminateConnection}
+            sendInvitationToProvider={sendInvitationToProvider}
             licensedStates={currentBuyer?.licensedStates || []}
           />
         )}
@@ -1438,17 +1857,53 @@ function ProviderDetailModal({
 
 // Analytics Tab - Excel Upload & Data Visualization
 interface UploadedRecord {
-  providerName: string;
-  providerId?: string;
-  customerName: string;
+  customerName: string;          // Name of person (insurance seeker)
+  businessSender: string;        // Business sender (at company level)
+  individualSender: string;      // Individual sender (car salesman providing business)
+  paidGenerator: boolean;        // Paid the lead generator or not (Y/N)
+  contactMade: boolean;          // Contact made with the lead (Y/N)
+  sold: boolean;                 // Sold lead business (Y/N)
+  // Legacy fields for backward compatibility
+  providerName?: string;
   customerEmail?: string;
-  policyStatus: "lead" | "quoted" | "bound" | "renewed" | "lapsed" | "cancelled";
+  policyStatus?: "lead" | "quoted" | "bound" | "renewed" | "lapsed" | "cancelled";
   premium?: number;
-  date: string;
+  date?: string;
   carrier?: string;
 }
 
+interface ProviderPerformance {
+  name: string;
+  businessName: string;
+  totalLeads: number;
+  contactedLeads: number;
+  soldLeads: number;
+  paidLeads: number;
+  contactRate: number;
+  conversionRate: number;
+  paymentRate: number;
+  unpaidAmount: number;  // Leads not paid yet
+}
+
 interface AnalyticsData {
+  // Summary metrics
+  totalLeads: number;
+  totalContacted: number;
+  totalSold: number;
+  totalPaid: number;
+  overallContactRate: number;
+  overallConversionRate: number;
+  overallPaymentRate: number;
+  // Provider breakdown
+  providerStats: ProviderPerformance[];
+  // Business breakdown
+  businessStats: {
+    name: string;
+    totalLeads: number;
+    soldLeads: number;
+    conversionRate: number;
+  }[];
+  // Legacy fields
   totalCustomers: number;
   boundPolicies: number;
   renewedPolicies: number;
@@ -1456,13 +1911,148 @@ interface AnalyticsData {
   retentionRate: number;
   totalPremium: number;
   avgPremium: number;
-  providerStats: {
-    name: string;
-    leads: number;
-    bound: number;
-    closingRate: number;
-    revenue: number;
+}
+
+// Weekly time-series data for dot plot visualization
+interface ProviderWeeklyData {
+  providerName: string;
+  color: string;
+  overallConversionRate: number;
+  weeks: {
+    weekStart: string;
+    weekLabel: string;
+    totalLeads: number;      // Leads this week only
+    soldLeads: number;       // Sold this week only
+    conversionRate: number;  // CUMULATIVE: cumulativeSold / cumulativeTotal * 100
+    cumulativeTotal: number; // Running total of all leads up to this week
+    cumulativeSold: number;  // Running total of all sold up to this week
   }[];
+}
+
+// Parse Excel date (handles both serial numbers and date strings)
+function parseExcelDate(value: unknown): string {
+  if (!value) return new Date().toISOString();
+
+  // If it's a number (Excel serial date), convert it
+  // Excel dates are number of days since Dec 30, 1899
+  if (typeof value === "number" || (typeof value === "string" && !isNaN(Number(value)) && Number(value) > 1000)) {
+    const serial = Number(value);
+    // Excel epoch is Dec 30, 1899 (day 0)
+    // JS epoch is Jan 1, 1970
+    // Difference: 25569 days
+    const msPerDay = 86400 * 1000;
+    const date = new Date((serial - 25569) * msPerDay);
+    if (!isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+      return date.toISOString();
+    }
+  }
+
+  // Try parsing as date string
+  const parsed = new Date(String(value));
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 1900 && parsed.getFullYear() < 2100) {
+    return parsed.toISOString();
+  }
+
+  // Fallback to current date
+  return new Date().toISOString();
+}
+
+// Get the Monday of the week for a given date
+function getWeekStart(dateStr: string): string {
+  const date = new Date(dateStr);
+  // Validate the date
+  if (isNaN(date.getTime()) || date.getFullYear() < 1900 || date.getFullYear() > 2100) {
+    return new Date().toISOString().split("T")[0]; // Fallback to today
+  }
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(date.setDate(diff));
+  return monday.toISOString().split("T")[0];
+}
+
+// Format week label (e.g., "Jan 6")
+function formatWeekLabel(weekStart: string): string {
+  const date = new Date(weekStart);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Calculate weekly performance data for top performers (CUMULATIVE conversion rate)
+function calculateWeeklyPerformance(
+  data: UploadedRecord[],
+  providerStats: ProviderPerformance[]
+): { weeklyData: ProviderWeeklyData[]; allWeeks: string[] } {
+  // Get top 3 performers by conversion rate (with at least 3 leads)
+  const topPerformers = providerStats
+    .filter(p => p.totalLeads >= 3)
+    .sort((a, b) => b.conversionRate - a.conversionRate)
+    .slice(0, 3);
+
+  const colors = ["#1e3a5f", "#10b981", "#f59e0b"];
+
+  // Group all records by week
+  const weekSet = new Set<string>();
+  data.forEach(record => {
+    if (record.date) {
+      weekSet.add(getWeekStart(record.date));
+    }
+  });
+  const allWeeks = Array.from(weekSet).sort();
+
+  // Calculate weekly data for each top performer with CUMULATIVE conversion rate
+  const weeklyData: ProviderWeeklyData[] = topPerformers.map((performer, i) => {
+    const providerRecords = data.filter(
+      r => (r.individualSender || r.providerName) === performer.name
+    );
+
+    // Sort records by date for cumulative calculation
+    const sortedRecords = [...providerRecords].sort((a, b) => {
+      const dateA = new Date(a.date || 0).getTime();
+      const dateB = new Date(b.date || 0).getTime();
+      return dateA - dateB;
+    });
+
+    // Group by week first to get per-week counts
+    const weekMap = new Map<string, { total: number; sold: number }>();
+    sortedRecords.forEach(record => {
+      if (record.date) {
+        const week = getWeekStart(record.date);
+        const existing = weekMap.get(week) || { total: 0, sold: 0 };
+        existing.total++;
+        if (record.sold) existing.sold++;
+        weekMap.set(week, existing);
+      }
+    });
+
+    // Now calculate CUMULATIVE totals across weeks
+    let cumulativeTotal = 0;
+    let cumulativeSold = 0;
+
+    return {
+      providerName: performer.name,
+      color: colors[i],
+      overallConversionRate: performer.conversionRate,
+      weeks: allWeeks.map(week => {
+        const stats = weekMap.get(week) || { total: 0, sold: 0 };
+        // Add this week's numbers to running total
+        cumulativeTotal += stats.total;
+        cumulativeSold += stats.sold;
+
+        return {
+          weekStart: week,
+          weekLabel: formatWeekLabel(week),
+          totalLeads: stats.total,
+          soldLeads: stats.sold,
+          // CUMULATIVE conversion rate: all sold so far / all leads so far
+          conversionRate: cumulativeTotal > 0 ? (cumulativeSold / cumulativeTotal) * 100 : 0,
+          // Store cumulative values for tooltip
+          cumulativeTotal,
+          cumulativeSold,
+        };
+      }),
+    };
+  });
+
+  return { weeklyData, allWeeks };
 }
 
 function AnalyticsTab({
@@ -1483,49 +2073,99 @@ function AnalyticsTab({
 
   // Calculate analytics from uploaded data
   const calculateAnalytics = (data: UploadedRecord[]): AnalyticsData => {
-    const totalCustomers = data.length;
-    const boundPolicies = data.filter(r => r.policyStatus === "bound" || r.policyStatus === "renewed").length;
-    const renewedPolicies = data.filter(r => r.policyStatus === "renewed").length;
-    const lapsedPolicies = data.filter(r => r.policyStatus === "lapsed" || r.policyStatus === "cancelled").length;
+    // New format metrics
+    const totalLeads = data.length;
+    const totalContacted = data.filter(r => r.contactMade).length;
+    const totalSold = data.filter(r => r.sold).length;
+    const totalPaid = data.filter(r => r.paidGenerator).length;
 
-    // Retention = renewed / (renewed + lapsed)
-    const eligibleForRenewal = renewedPolicies + lapsedPolicies;
-    const retentionRate = eligibleForRenewal > 0 ? (renewedPolicies / eligibleForRenewal) * 100 : 0;
+    const overallContactRate = totalLeads > 0 ? (totalContacted / totalLeads) * 100 : 0;
+    const overallConversionRate = totalLeads > 0 ? (totalSold / totalLeads) * 100 : 0;
+    const overallPaymentRate = totalLeads > 0 ? (totalPaid / totalLeads) * 100 : 0;
 
+    // Group by individual sender (lead provider)
+    const providerMap = new Map<string, {
+      businessName: string;
+      totalLeads: number;
+      contactedLeads: number;
+      soldLeads: number;
+      paidLeads: number;
+    }>();
+
+    data.forEach(record => {
+      const key = record.individualSender || record.providerName || "Unknown";
+      const existing = providerMap.get(key) || {
+        businessName: record.businessSender || "",
+        totalLeads: 0,
+        contactedLeads: 0,
+        soldLeads: 0,
+        paidLeads: 0
+      };
+      existing.totalLeads++;
+      if (record.contactMade) existing.contactedLeads++;
+      if (record.sold) existing.soldLeads++;
+      if (record.paidGenerator) existing.paidLeads++;
+      providerMap.set(key, existing);
+    });
+
+    const providerStats: ProviderPerformance[] = Array.from(providerMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        businessName: stats.businessName,
+        totalLeads: stats.totalLeads,
+        contactedLeads: stats.contactedLeads,
+        soldLeads: stats.soldLeads,
+        paidLeads: stats.paidLeads,
+        contactRate: stats.totalLeads > 0 ? (stats.contactedLeads / stats.totalLeads) * 100 : 0,
+        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
+        paymentRate: stats.totalLeads > 0 ? (stats.paidLeads / stats.totalLeads) * 100 : 0,
+        unpaidAmount: stats.totalLeads - stats.paidLeads,
+      }))
+      .sort((a, b) => b.totalLeads - a.totalLeads);
+
+    // Group by business sender
+    const businessMap = new Map<string, { totalLeads: number; soldLeads: number }>();
+    data.forEach(record => {
+      const key = record.businessSender || "Unknown";
+      const existing = businessMap.get(key) || { totalLeads: 0, soldLeads: 0 };
+      existing.totalLeads++;
+      if (record.sold) existing.soldLeads++;
+      businessMap.set(key, existing);
+    });
+
+    const businessStats = Array.from(businessMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        totalLeads: stats.totalLeads,
+        soldLeads: stats.soldLeads,
+        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalLeads - a.totalLeads);
+
+    // Legacy metrics for backward compatibility
+    const boundPolicies = totalSold;
+    const totalCustomers = totalLeads;
     const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
     const avgPremium = boundPolicies > 0 ? totalPremium / boundPolicies : 0;
 
-    // Group by provider
-    const providerMap = new Map<string, { leads: number; bound: number; revenue: number }>();
-    data.forEach(record => {
-      const existing = providerMap.get(record.providerName) || { leads: 0, bound: 0, revenue: 0 };
-      existing.leads++;
-      if (record.policyStatus === "bound" || record.policyStatus === "renewed") {
-        existing.bound++;
-        existing.revenue += record.premium || 0;
-      }
-      providerMap.set(record.providerName, existing);
-    });
-
-    const providerStats = Array.from(providerMap.entries())
-      .map(([name, stats]) => ({
-        name,
-        leads: stats.leads,
-        bound: stats.bound,
-        closingRate: stats.leads > 0 ? (stats.bound / stats.leads) * 100 : 0,
-        revenue: stats.revenue,
-      }))
-      .sort((a, b) => b.leads - a.leads);
-
     return {
+      totalLeads,
+      totalContacted,
+      totalSold,
+      totalPaid,
+      overallContactRate,
+      overallConversionRate,
+      overallPaymentRate,
+      providerStats,
+      businessStats,
+      // Legacy
       totalCustomers,
       boundPolicies,
-      renewedPolicies,
-      lapsedPolicies,
-      retentionRate,
+      renewedPolicies: 0,
+      lapsedPolicies: 0,
+      retentionRate: overallConversionRate,
       totalPremium,
       avgPremium,
-      providerStats,
     };
   };
 
@@ -1543,34 +2183,109 @@ function AnalyticsTab({
       const sheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
 
-      // Map columns to our format (flexible mapping)
-      const records: UploadedRecord[] = jsonData.map((row) => {
-        // Try to find provider name in various column names
-        const providerName = (row["Provider Name"] || row["Provider"] || row["Salesperson"] || row["Agent"] || row["provider_name"] || "Unknown") as string;
-        const customerName = (row["Customer Name"] || row["Customer"] || row["Name"] || row["customer_name"] || "Unknown") as string;
-        const customerEmail = (row["Email"] || row["Customer Email"] || row["email"] || "") as string;
+      // Helper to find column value with flexible matching (handles whitespace, case variations)
+      const getColumn = (row: Record<string, unknown>, ...possibleNames: string[]): unknown => {
+        // First try exact matches
+        for (const name of possibleNames) {
+          if (row[name] !== undefined) return row[name];
+        }
+        // Then try case-insensitive matching with trimmed keys
+        const rowKeys = Object.keys(row);
+        for (const name of possibleNames) {
+          const normalizedName = name.toLowerCase().trim();
+          for (const key of rowKeys) {
+            if (key.toLowerCase().trim() === normalizedName) {
+              return row[key];
+            }
+          }
+        }
+        // Try partial matching for common patterns
+        for (const name of possibleNames) {
+          const normalizedName = name.toLowerCase().replace(/[^a-z]/g, "");
+          for (const key of rowKeys) {
+            const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
+            if (normalizedKey.includes(normalizedName) || normalizedName.includes(normalizedKey)) {
+              return row[key];
+            }
+          }
+        }
+        return undefined;
+      };
 
-        // Parse status
-        const rawStatus = ((row["Status"] || row["Policy Status"] || row["status"] || row["policy_status"] || "lead") as string).toLowerCase();
+      // Helper to parse Y/N values - handles text, boolean, and numeric
+      const parseYesNo = (value: unknown): boolean => {
+        if (value === undefined || value === null || value === "") return false;
+        if (typeof value === "boolean") return value;
+        if (typeof value === "number") return value === 1 || value > 0;
+        const str = String(value).toLowerCase().trim();
+        return str === "y" || str === "yes" || str === "true" || str === "1";
+      };
+
+      // Debug: log first row to see actual column names
+      if (jsonData.length > 0) {
+        console.log("[File Parser] Column names found:", Object.keys(jsonData[0]));
+        console.log("[File Parser] First row values:", jsonData[0]);
+      }
+
+      // Map columns to our format (flexible mapping for new format)
+      const records: UploadedRecord[] = jsonData.map((row, index) => {
+        const customerName = String(
+          getColumn(row, "Name of Person", "Insurance Seeker", "Customer Name", "Customer", "Name") || "Unknown"
+        );
+
+        const businessSender = String(
+          getColumn(row, "Business Sender", "Company", "Dealership", "Business") || ""
+        );
+
+        const individualSender = String(
+          getColumn(row, "Individual Sender", "Car Salesman", "Salesperson", "Provider", "Provider Name", "Agent") || "Unknown"
+        );
+
+        // Get raw Y/N values for debugging
+        const rawPaid = getColumn(row, "Paid (Y/N)", "Paid the Lead Generator", "Paid", "Payment Made", "Paid Generator");
+        const rawContact = getColumn(row, "Contact Made (Y/N)", "Contact Made", "Contacted", "Contact");
+        const rawSold = getColumn(row, "Sold (Y/N)", "Sold Lead Business", "Sold", "Converted", "Policy Sold");
+
+        // Debug first few rows
+        if (index < 3) {
+          console.log(`[File Parser] Row ${index + 1}: Paid raw="${rawPaid}" Contact raw="${rawContact}" Sold raw="${rawSold}"`);
+        }
+
+        const paidGenerator = parseYesNo(rawPaid);
+        const contactMade = parseYesNo(rawContact);
+        const sold = parseYesNo(rawSold);
+
+        if (index < 3) {
+          console.log(`[File Parser] Row ${index + 1}: Paid=${paidGenerator} Contact=${contactMade} Sold=${sold}`);
+        }
+
+        // Legacy format columns (for backward compatibility)
+        const providerName = individualSender;
+        const customerEmail = String(getColumn(row, "Email", "Customer Email") || "");
+
+        const rawStatus = String(getColumn(row, "Status", "Policy Status") || "lead").toLowerCase();
         let policyStatus: UploadedRecord["policyStatus"] = "lead";
-        if (rawStatus.includes("bound") || rawStatus.includes("sold") || rawStatus.includes("active")) policyStatus = "bound";
+        if (sold || rawStatus.includes("bound") || rawStatus.includes("sold")) policyStatus = "bound";
         else if (rawStatus.includes("renew")) policyStatus = "renewed";
         else if (rawStatus.includes("lapse") || rawStatus.includes("cancel")) policyStatus = "lapsed";
         else if (rawStatus.includes("quote")) policyStatus = "quoted";
 
-        // Parse premium
-        const rawPremium = row["Premium"] || row["Annual Premium"] || row["premium"] || row["Amount"] || 0;
+        const rawPremium = getColumn(row, "Premium", "Annual Premium", "Amount") || 0;
         const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
 
-        // Parse date
-        const rawDate = row["Date"] || row["Created"] || row["date"] || row["created_at"] || new Date().toISOString();
-        const date = String(rawDate);
+        const date = parseExcelDate(getColumn(row, "Date", "Created"));
 
-        const carrier = (row["Carrier"] || row["Insurance Company"] || row["carrier"] || "") as string;
+        const carrier = String(getColumn(row, "Carrier", "Insurance Company") || "");
 
         return {
-          providerName,
           customerName,
+          businessSender,
+          individualSender,
+          paidGenerator,
+          contactMade,
+          sold,
+          // Legacy fields
+          providerName,
           customerEmail,
           policyStatus,
           premium,
@@ -1578,6 +2293,12 @@ function AnalyticsTab({
           carrier,
         };
       });
+
+      // Debug: summary
+      const soldCount = records.filter(r => r.sold).length;
+      const contactCount = records.filter(r => r.contactMade).length;
+      const paidCount = records.filter(r => r.paidGenerator).length;
+      console.log(`[File Parser] Summary: ${records.length} records, ${contactCount} contacted, ${soldCount} sold, ${paidCount} paid`);
 
       setUploadedData(records);
       setAnalytics(calculateAnalytics(records));
@@ -1760,61 +2481,110 @@ function AnalyticsTab({
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <p className="text-gray-600 text-sm font-medium mb-2">Expected columns:</p>
           <div className="flex flex-wrap gap-2">
-            {["Provider Name", "Customer Name", "Status", "Premium", "Date", "Carrier"].map(col => (
+            {["Name of Person", "Business Sender", "Individual Sender", "Paid (Y/N)", "Contact Made (Y/N)", "Sold (Y/N)"].map(col => (
               <span key={col} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600">{col}</span>
             ))}
           </div>
-          <p className="text-gray-400 text-xs mt-2">Status values: lead, quoted, bound, renewed, lapsed, cancelled</p>
+          <p className="text-gray-400 text-xs mt-2">Use Y/N or Yes/No for boolean columns</p>
         </div>
       </div>
 
       {/* Uploaded Data Analytics */}
       {analytics && (
         <div className="space-y-6">
-          <h3 className="text-lg font-semibold text-[#1e3a5f]">CRM Data Analytics</h3>
+          <h3 className="text-lg font-semibold text-[#1e3a5f]">Lead Performance Analytics</h3>
 
-          {/* Key Metrics */}
+          {/* Key Metrics - Funnel */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <p className="text-gray-500 text-sm">Retention Rate</p>
-              <p className="text-3xl font-bold text-emerald-600">{analytics.retentionRate.toFixed(1)}%</p>
-              <p className="text-gray-400 text-xs mt-1">{analytics.renewedPolicies} renewed / {analytics.renewedPolicies + analytics.lapsedPolicies} eligible</p>
+              <p className="text-gray-500 text-sm">Total Leads</p>
+              <p className="text-3xl font-bold text-[#1e3a5f]">{analytics.totalLeads}</p>
+              <p className="text-gray-400 text-xs mt-1">From uploaded data</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <p className="text-gray-500 text-sm">Total Policies</p>
-              <p className="text-3xl font-bold text-[#1e3a5f]">{analytics.boundPolicies}</p>
-              <p className="text-gray-400 text-xs mt-1">Bound + Renewed</p>
+              <p className="text-gray-500 text-sm">Contact Rate</p>
+              <p className="text-3xl font-bold text-blue-600">{analytics.overallContactRate.toFixed(1)}%</p>
+              <p className="text-gray-400 text-xs mt-1">{analytics.totalContacted} / {analytics.totalLeads} contacted</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <p className="text-gray-500 text-sm">Total Premium</p>
-              <p className="text-3xl font-bold text-blue-600">${analytics.totalPremium.toLocaleString()}</p>
-              <p className="text-gray-400 text-xs mt-1">Annual revenue</p>
+              <p className="text-gray-500 text-sm">Conversion Rate</p>
+              <p className="text-3xl font-bold text-emerald-600">{analytics.overallConversionRate.toFixed(1)}%</p>
+              <p className="text-gray-400 text-xs mt-1">{analytics.totalSold} / {analytics.totalLeads} sold</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <p className="text-gray-500 text-sm">Avg Premium</p>
-              <p className="text-3xl font-bold text-amber-600">${analytics.avgPremium.toFixed(0)}</p>
-              <p className="text-gray-400 text-xs mt-1">Per policy</p>
+              <p className="text-gray-500 text-sm">Payment Rate</p>
+              <p className="text-3xl font-bold text-amber-600">{analytics.overallPaymentRate.toFixed(1)}%</p>
+              <p className="text-gray-400 text-xs mt-1">{analytics.totalPaid} / {analytics.totalLeads} paid</p>
             </div>
           </div>
 
-          {/* Provider Performance from Uploaded Data */}
+          {/* Conversion Funnel Visualization */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Provider Performance (from CRM data)</h4>
+            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Lead Funnel</h4>
+            <div className="space-y-4">
+              {/* Total Leads */}
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-600">Total Leads</span>
+                  <span className="font-medium text-[#1e3a5f]">{analytics.totalLeads}</span>
+                </div>
+                <div className="h-8 bg-[#1e3a5f] rounded-lg"></div>
+              </div>
+              {/* Contacted */}
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-600">Contacted</span>
+                  <span className="font-medium text-blue-600">{analytics.totalContacted} ({analytics.overallContactRate.toFixed(0)}%)</span>
+                </div>
+                <div className="h-8 bg-gray-200 rounded-lg overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-lg" style={{ width: `${analytics.overallContactRate}%` }}></div>
+                </div>
+              </div>
+              {/* Sold */}
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-600">Sold</span>
+                  <span className="font-medium text-emerald-600">{analytics.totalSold} ({analytics.overallConversionRate.toFixed(0)}%)</span>
+                </div>
+                <div className="h-8 bg-gray-200 rounded-lg overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-lg" style={{ width: `${analytics.overallConversionRate}%` }}></div>
+                </div>
+              </div>
+              {/* Paid */}
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-gray-600">Paid to Providers</span>
+                  <span className="font-medium text-amber-600">{analytics.totalPaid} ({analytics.overallPaymentRate.toFixed(0)}%)</span>
+                </div>
+                <div className="h-8 bg-gray-200 rounded-lg overflow-hidden">
+                  <div className="h-full bg-amber-500 rounded-lg" style={{ width: `${analytics.overallPaymentRate}%` }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Provider Performance Table */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Individual Provider Performance</h4>
+            <p className="text-gray-500 text-sm mb-4">Use this data to adjust payment rates or lead caps for each provider</p>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-gray-500 border-b border-gray-200">
                     <th className="pb-3 font-medium">Rank</th>
                     <th className="pb-3 font-medium">Provider</th>
+                    <th className="pb-3 font-medium">Business</th>
                     <th className="pb-3 font-medium">Leads</th>
-                    <th className="pb-3 font-medium">Bound</th>
-                    <th className="pb-3 font-medium">Closing Rate</th>
-                    <th className="pb-3 font-medium">Revenue</th>
+                    <th className="pb-3 font-medium">Contacted</th>
+                    <th className="pb-3 font-medium">Sold</th>
+                    <th className="pb-3 font-medium">Conv. Rate</th>
+                    <th className="pb-3 font-medium">Unpaid</th>
+                    <th className="pb-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {analytics.providerStats.map((provider, i) => (
-                    <tr key={provider.name} className="border-b border-gray-100">
+                    <tr key={provider.name} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4">
                         <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
                           i === 0 ? "bg-yellow-100 text-yellow-700" :
@@ -1826,20 +2596,61 @@ function AnalyticsTab({
                         </span>
                       </td>
                       <td className="py-4 font-medium text-gray-800">{provider.name}</td>
-                      <td className="py-4 text-gray-600">{provider.leads}</td>
-                      <td className="py-4 text-gray-600">{provider.bound}</td>
+                      <td className="py-4 text-gray-500 text-sm">{provider.businessName || "-"}</td>
+                      <td className="py-4 text-gray-600">{provider.totalLeads}</td>
+                      <td className="py-4 text-gray-600">{provider.contactedLeads}</td>
+                      <td className="py-4 text-gray-600">{provider.soldLeads}</td>
                       <td className="py-4">
-                        <span className={`font-medium ${provider.closingRate >= 30 ? "text-emerald-600" : provider.closingRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
-                          {provider.closingRate.toFixed(1)}%
+                        <span className={`font-medium ${provider.conversionRate >= 30 ? "text-emerald-600" : provider.conversionRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                          {provider.conversionRate.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="py-4 text-[#1e3a5f] font-medium">${provider.revenue.toLocaleString()}</td>
+                      <td className="py-4">
+                        {provider.unpaidAmount > 0 ? (
+                          <span className="text-red-600 font-medium">{provider.unpaidAmount}</span>
+                        ) : (
+                          <span className="text-emerald-600">✓</span>
+                        )}
+                      </td>
+                      <td className="py-4">
+                        <button className="text-xs px-2 py-1 bg-[#1e3a5f] text-white rounded hover:bg-[#2a4a6f] transition">
+                          Adjust Rate
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+
+          {/* Business Sender Breakdown */}
+          {analytics.businessStats && analytics.businessStats.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Performance by Business Source</h4>
+              <div className="space-y-4">
+                {analytics.businessStats.map((business, i) => (
+                  <div key={business.name} className="flex items-center gap-4">
+                    <div className="w-32 truncate font-medium text-gray-800">{business.name}</div>
+                    <div className="flex-1">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-500">{business.totalLeads} leads</span>
+                        <span className={`font-medium ${business.conversionRate >= 30 ? "text-emerald-600" : business.conversionRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                          {business.conversionRate.toFixed(1)}% conversion
+                        </span>
+                      </div>
+                      <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${business.conversionRate >= 30 ? "bg-emerald-500" : business.conversionRate >= 15 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.min(business.conversionRate * 2, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Retention Breakdown Chart */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -1993,27 +2804,44 @@ function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types"
 // Requests Tab - Manage connection requests from providers
 function RequestsTab({
   buyerId,
+  buyerBusinessName,
   pendingRequests,
   myConnections,
   setTermsForRequest,
   rejectRequest,
   updateConnectionTerms,
   terminateConnection,
+  sendInvitationToProvider,
   licensedStates,
 }: {
   buyerId: string;
+  buyerBusinessName: string;
   pendingRequests: ConnectionRequest[];
   myConnections: import("@/lib/connection-types").Connection[];
   setTermsForRequest: (requestId: string, terms: ContractTerms) => void;
   rejectRequest: (requestId: string) => void;
   updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
   terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
+  sendInvitationToProvider: (
+    buyerId: string,
+    buyerBusinessName: string,
+    providerEmail: string,
+    providerName: string,
+    terms: ContractTerms,
+    message?: string
+  ) => ConnectionRequest;
   licensedStates: string[];
 }) {
   const [selectedRequest, setSelectedRequest] = useState<ConnectionRequest | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<import("@/lib/connection-types").Connection | null>(null);
   const [showEditTermsModal, setShowEditTermsModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Invite form state
+  const [inviteProviderEmail, setInviteProviderEmail] = useState("");
+  const [inviteProviderName, setInviteProviderName] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
@@ -2138,11 +2966,89 @@ function RequestsTab({
     }
   };
 
+  const openInviteModal = () => {
+    // Reset form
+    setInviteProviderEmail("");
+    setInviteProviderName("");
+    setInviteMessage("");
+    setRatePerLead(50);
+    setPaymentTiming("per_lead");
+    setMinimumPayout(undefined);
+    setLeadTypes(["auto"]);
+    setExclusivity(false);
+    setTerminationDays(7);
+    setNotes("");
+    setEnableLeadCaps(false);
+    setWeeklyLeadCap(undefined);
+    setMonthlyLeadCap(undefined);
+    setPauseWhenCapReached(true);
+    setShowInviteModal(true);
+  };
+
+  const handleSendInvitation = () => {
+    if (!inviteProviderEmail || !inviteProviderName) {
+      alert("Please enter the provider's name and email");
+      return;
+    }
+
+    const terms: ContractTerms = {
+      paymentTerms: {
+        ratePerLead,
+        timing: paymentTiming,
+        minimumPayoutThreshold: minimumPayout,
+        paymentStructure: "per_lead",
+      },
+      leadTypes,
+      exclusivity,
+      terminationNoticeDays: terminationDays,
+      notes: notes || undefined,
+      leadCaps: enableLeadCaps ? {
+        weeklyLimit: weeklyLeadCap,
+        monthlyLimit: monthlyLeadCap,
+        pauseWhenCapReached,
+      } : undefined,
+      licensedStates,
+      complianceAcknowledged: true,
+      agreementVersion: "1.0.0",
+    };
+
+    sendInvitationToProvider(
+      buyerId,
+      buyerBusinessName,
+      inviteProviderEmail,
+      inviteProviderName,
+      terms,
+      inviteMessage || undefined
+    );
+
+    setShowInviteModal(false);
+    alert(`Invitation sent to ${inviteProviderName}! They will see your offer when they sign in.`);
+  };
+
   const activeConnections = myConnections.filter(c => c.status === "active");
   const terminatedConnections = myConnections.filter(c => c.status === "terminated");
 
   return (
     <div className="space-y-6">
+      {/* Invite Provider Button */}
+      <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-xl p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold mb-1">Invite a Lead Provider</h3>
+            <p className="text-white/80 text-sm">Send an invitation with your terms to a car salesperson or dealership</p>
+          </div>
+          <button
+            onClick={openInviteModal}
+            className="bg-white text-[#1e3a5f] px-5 py-2.5 rounded-lg font-semibold hover:bg-gray-100 transition flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Invite Provider
+          </button>
+        </div>
+      </div>
+
       {/* Pending Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-6">
@@ -2340,6 +3246,165 @@ function RequestsTab({
           onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
           saveButtonText="Update Terms"
         />
+      )}
+
+      {/* Invite Provider Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-[#1e3a5f]">Invite a Lead Provider</h3>
+              <p className="text-gray-500 text-sm mt-1">Enter the provider&apos;s details and set your terms. They will receive your offer when they sign in.</p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Provider Info */}
+              <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                <h4 className="font-medium text-[#1e3a5f] mb-3">Provider Information</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">Provider Name</label>
+                    <input
+                      type="text"
+                      value={inviteProviderName}
+                      onChange={(e) => setInviteProviderName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                      placeholder="John Smith"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">Provider Email</label>
+                    <input
+                      type="email"
+                      value={inviteProviderEmail}
+                      onChange={(e) => setInviteProviderEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                      placeholder="john@dealership.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-1">Message (optional)</label>
+                    <textarea
+                      value={inviteMessage}
+                      onChange={(e) => setInviteMessage(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                      rows={2}
+                      placeholder="Hi! I'd like to partner with you for insurance leads..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Rate Per Lead */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[#1e3a5f] text-xl">$</span>
+                  <input
+                    type="number"
+                    value={ratePerLead}
+                    onChange={(e) => setRatePerLead(Number(e.target.value))}
+                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                    min={5}
+                    max={500}
+                  />
+                  <span className="text-gray-500 text-sm">per qualified lead</span>
+                </div>
+              </div>
+
+              {/* Payment Timing */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
+                <select
+                  value={paymentTiming}
+                  onChange={(e) => setPaymentTiming(e.target.value as "per_lead" | "weekly" | "biweekly" | "monthly")}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                >
+                  <option value="per_lead">Per Lead (Immediate)</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+
+              {/* Lead Caps */}
+              <div className="border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="font-medium text-gray-800">Lead Volume Caps</h4>
+                    <p className="text-xs text-gray-500">Protect yourself from unlimited lead obligations</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableLeadCaps}
+                      onChange={(e) => setEnableLeadCaps(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#1e3a5f]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
+                  </label>
+                </div>
+                {enableLeadCaps && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-600 text-sm mb-1">Weekly Cap</label>
+                      <input
+                        type="number"
+                        value={weeklyLeadCap || ""}
+                        onChange={(e) => setWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
+                        placeholder="No limit"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-600 text-sm mb-1">Monthly Cap</label>
+                      <input
+                        type="number"
+                        value={monthlyLeadCap || ""}
+                        onChange={(e) => setMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
+                        placeholder="No limit"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Termination Notice */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Termination Notice</label>
+                <select
+                  value={terminationDays}
+                  onChange={(e) => setTerminationDays(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                >
+                  <option value={0}>Immediate (No notice required)</option>
+                  <option value={7}>7 days notice</option>
+                  <option value={14}>14 days notice</option>
+                  <option value={30}>30 days notice</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendInvitation}
+                className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition"
+              >
+                Send Invitation
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

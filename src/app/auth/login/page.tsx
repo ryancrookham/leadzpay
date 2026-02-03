@@ -13,6 +13,7 @@ function LoginContent() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [staySignedIn, setStaySignedIn] = useState(false);
   const [error, setError] = useState("");
   const [debugInfo, setDebugInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,7 +38,7 @@ function LoginContent() {
       // Show what we're attempting
       setDebugInfo(`Attempting login for: ${email.trim()}`);
 
-      const result = await login(email.trim(), password);
+      const result = await login(email.trim(), password, staySignedIn);
 
       if (result.success && result.role) {
         setDebugInfo(`Login successful! Role: ${result.role}. Redirecting...`);
@@ -53,23 +54,6 @@ function LoginContent() {
       setError("Login failed. Please try again.");
       setDebugInfo(`Exception: ${message}`);
       setIsSubmitting(false);
-    }
-  };
-
-  // Check localStorage status for debugging
-  const checkStorage = () => {
-    try {
-      const credentials = localStorage.getItem("leadzpay_credentials");
-      const users = localStorage.getItem("leadzpay_users");
-      const session = localStorage.getItem("leadzpay_session");
-
-      const credCount = credentials ? JSON.parse(credentials).length : 0;
-      const userCount = users ? JSON.parse(users).length : 0;
-      const hasSession = !!session;
-
-      setDebugInfo(`Storage: ${credCount} credentials, ${userCount} users, session: ${hasSession ? "yes" : "no"}`);
-    } catch (err) {
-      setDebugInfo(`Storage check error: ${err}`);
     }
   };
 
@@ -153,6 +137,17 @@ function LoginContent() {
             />
           </div>
 
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={staySignedIn}
+              onChange={(e) => setStaySignedIn(e.target.checked)}
+              disabled={isSubmitting}
+              className="w-4 h-4 text-[#1e3a5f] rounded border-gray-300 focus:ring-[#1e3a5f]"
+            />
+            Stay signed in for 30 days
+          </label>
+
           <button
             type="submit"
             disabled={isSubmitting}
@@ -168,14 +163,6 @@ function LoginContent() {
             )}
           </button>
         </form>
-
-        {/* Debug button */}
-        <button
-          onClick={checkStorage}
-          className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-600 transition"
-        >
-          Check Storage Status
-        </button>
 
         <div className="mt-8 pt-6 border-t border-gray-100">
           <p className="text-center text-gray-500 text-sm mb-4">
