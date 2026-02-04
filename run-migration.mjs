@@ -1,6 +1,15 @@
 import { neon } from '@neondatabase/serverless';
+import { readFileSync } from 'fs';
 
-const sql = neon(process.env.DATABASE_URL);
+// Load DATABASE_URL from .env.local
+const envContent = readFileSync('.env.local', 'utf-8');
+const dbUrlMatch = envContent.match(/DATABASE_URL=(.+)/);
+if (!dbUrlMatch) {
+  console.error('DATABASE_URL not found in .env.local');
+  process.exit(1);
+}
+
+const sql = neon(dbUrlMatch[1].trim());
 
 async function runMigration() {
   try {
