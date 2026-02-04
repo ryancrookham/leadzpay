@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { validateSession } from "@/lib/server/session";
-import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { executeSql as sql, isDatabaseConfigured } from "@/lib/db";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -17,9 +17,8 @@ function getStripe() {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Validate session
-    const session = await validateSession();
-    if (!session) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
@@ -27,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Only providers can create Connect accounts
-    if (session.role !== "provider") {
+    if (session.user.role !== "provider") {
       return NextResponse.json(
         { error: "Only providers can connect Stripe accounts" },
         { status: 403 }
@@ -47,15 +46,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already has a Stripe account
-    let stripeAccountId = session.stripeAccountId;
+    let stripeAccountId = session.user.stripeAccountId;
 
     if (!stripeAccountId) {
       // Create a new Connect Express account
       const account = await stripe.accounts.create({
         type: "express",
-        email: email || session.email,
+        email: email || session.user.email,
         metadata: {
-          providerId: session.userId,
+          providerId: session.user.id,
           womlUser: "true",
         },
         capabilities: {
@@ -74,19 +73,16 @@ export async function POST(request: NextRequest) {
       stripeAccountId = account.id;
 
       // Save to database
-      if (isSupabaseServerConfigured()) {
-        const supabase = getSupabaseServerClient();
-        await supabase
-          .from("users")
-          .update({
-            stripe_account_id: stripeAccountId,
-            stripe_onboarding_complete: false,
-          })
-          .eq("id", session.userId);
+      if (isDatabaseConfigured()) {
+        await sql`
+          UPDATE users
+          SET stripe_account_id = ${stripeAccountId}, stripe_onboarding_complete = false
+          WHERE id = ${session.user.id}
+        `;
       }
     }
 
-    // Create account link for onboarding (or re-onboarding)
+    // Create account link for onboarding
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://leadzpay.vercel.app";
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
@@ -115,15 +111,15 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   try {
-    const session = await validateSession();
-    if (!session) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    if (session.role !== "provider") {
+    if (session.user.role !== "provider") {
       return NextResponse.json(
         { error: "Only providers have Connect accounts" },
         { status: 403 }
@@ -131,7 +127,7 @@ export async function GET() {
     }
 
     const stripe = getStripe();
-    if (!stripe || !session.stripeAccountId) {
+    if (!stripe || !session.user.stripeAccountId) {
       return NextResponse.json({
         connected: false,
         onboardingComplete: false,
@@ -140,11 +136,11 @@ export async function GET() {
     }
 
     // Get account details from Stripe
-    const account = await stripe.accounts.retrieve(session.stripeAccountId);
+    const account = await stripe.accounts.retrieve(session.user.stripeAccountId);
 
     return NextResponse.json({
       connected: true,
-      accountId: session.stripeAccountId,
+      accountId: session.user.stripeAccountId,
       onboardingComplete: account.charges_enabled && account.payouts_enabled,
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,

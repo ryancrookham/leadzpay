@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { validateSession } from "@/lib/server/session";
-import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { executeSql as sql, isDatabaseConfigured, getUserById, getTransactionsByUserId, createTransaction } from "@/lib/db";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -13,20 +13,18 @@ function getStripe() {
 
 /**
  * Process a direct transfer/payout to a provider's connected Stripe account
- * This is used for manual payouts or batch payouts
  */
 export async function POST(request: NextRequest) {
   try {
-    // Validate session - only buyers or admins can initiate payouts
-    const session = await validateSession();
-    if (!session) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    if (session.role !== "buyer" && session.role !== "admin") {
+    if (session.user.role !== "buyer" && session.user.role !== "admin") {
       return NextResponse.json(
         { error: "Only buyers or admins can initiate payouts" },
         { status: 403 }
@@ -58,13 +56,8 @@ export async function POST(request: NextRequest) {
     // Get provider's Stripe account ID
     let providerStripeAccountId: string | null = null;
 
-    if (isSupabaseServerConfigured()) {
-      const supabase = getSupabaseServerClient();
-      const { data: provider } = await supabase
-        .from("users")
-        .select("stripe_account_id, stripe_onboarding_complete, display_name")
-        .eq("id", providerId)
-        .single();
+    if (isDatabaseConfigured()) {
+      const provider = await getUserById(providerId);
 
       if (!provider?.stripe_account_id) {
         return NextResponse.json(
@@ -82,7 +75,6 @@ export async function POST(request: NextRequest) {
 
       providerStripeAccountId = provider.stripe_account_id;
     } else {
-      // Fallback for testing - use the provided account ID
       providerStripeAccountId = body.providerStripeAccountId;
     }
 
@@ -93,10 +85,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert amount to cents
     const amountInCents = Math.round(amount * 100);
 
-    // Create a transfer to the provider's connected account
     const transfer = await stripe.transfers.create({
       amount: amountInCents,
       currency: "usd",
@@ -104,52 +94,43 @@ export async function POST(request: NextRequest) {
       metadata: {
         leadId: leadId || "",
         providerId,
-        buyerId: session.userId,
+        buyerId: session.user.id,
         transactionId: transactionId || "",
         type: "lead_payout",
       },
     });
 
     // Update database records
-    if (isSupabaseServerConfigured()) {
-      const supabase = getSupabaseServerClient();
-
-      // Update lead payout status
+    if (isDatabaseConfigured()) {
       if (leadId) {
-        await supabase
-          .from("leads")
-          .update({
-            stripe_transfer_id: transfer.id,
-            payout_status: "completed",
-            payout_completed_at: new Date().toISOString(),
-          })
-          .eq("id", leadId);
+        await sql`
+          UPDATE leads
+          SET stripe_transfer_id = ${transfer.id},
+              payout_status = 'completed',
+              payout_completed_at = NOW()
+          WHERE id = ${leadId}
+        `;
       }
 
-      // Update or create transaction record
       if (transactionId) {
-        await supabase
-          .from("transactions")
-          .update({
-            status: "completed",
-            stripe_transfer_id: transfer.id,
-            completed_at: new Date().toISOString(),
-          })
-          .eq("id", transactionId);
+        await sql`
+          UPDATE transactions
+          SET status = 'completed',
+              stripe_transfer_id = ${transfer.id},
+              completed_at = NOW()
+          WHERE id = ${transactionId}
+        `;
       } else {
-        // Create new transaction record
-        await supabase.from("transactions").insert({
+        await createTransaction({
           type: "lead_payout",
-          status: "completed",
           amount: amount,
           fee_amount: 0,
           net_amount: amount,
-          from_account_id: session.userId,
+          from_account_id: session.user.id,
           to_account_id: providerId,
           lead_id: leadId,
-          stripe_transfer_id: transfer.id,
+          stripe_payment_id: transfer.id,
           description: leadId ? `Lead payout for ${leadId}` : "Direct payout",
-          completed_at: new Date().toISOString(),
         });
       }
     }
@@ -164,7 +145,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Payout error:", error);
 
-    // Check for specific Stripe errors
     if (error instanceof Stripe.errors.StripeError) {
       return NextResponse.json(
         {
@@ -188,42 +168,26 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   try {
-    const session = await validateSession();
-    if (!session) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return NextResponse.json({
         payouts: [],
         message: "Database not configured",
       });
     }
 
-    const supabase = getSupabaseServerClient();
-
-    // Get transactions for this user
-    const { data: transactions, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .or(`from_account_id.eq.${session.userId},to_account_id.eq.${session.userId}`)
-      .eq("type", "lead_payout")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      console.error("Failed to fetch payouts:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch payout history" },
-        { status: 500 }
-      );
-    }
+    const transactions = await getTransactionsByUserId(session.user.id, 50);
+    const payouts = transactions.filter(t => t.type === "lead_payout");
 
     return NextResponse.json({
-      payouts: transactions || [],
+      payouts,
     });
   } catch (error) {
     console.error("Get payouts error:", error);

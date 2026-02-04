@@ -1,12 +1,9 @@
 /**
  * Transaction Ledger for complete financial audit trail
- *
- * This module provides both server-side (Supabase) and client-side (API) access
- * to the transaction ledger. Server-side operations write directly to the database,
- * while client-side operations go through API endpoints.
+ * Uses Neon PostgreSQL for persistent storage
  */
 
-import { getSupabaseServerClient, isSupabaseServerConfigured, DbTransaction } from "./db";
+import { executeSql as sql, isDatabaseConfigured, getTransactionsByUserId, createTransaction, type DbTransaction } from "./db";
 
 export interface Transaction {
   id: string;
@@ -18,7 +15,7 @@ export interface Transaction {
   currency: "USD";
 
   // Parties involved
-  fromAccount: string | null; // null for platform-initiated
+  fromAccount: string | null;
   toAccount: string | null;
 
   // Reference data
@@ -63,169 +60,73 @@ function dbToTransaction(row: DbTransaction): Transaction {
     currency: "USD",
     fromAccount: row.from_account_id || null,
     toAccount: row.to_account_id || null,
-    leadId: row.lead_id,
-    connectionId: row.connection_id,
-    stripePaymentId: row.stripe_payment_id,
-    stripeTransferId: row.stripe_transfer_id,
-    stripePayoutId: row.stripe_payout_id,
+    leadId: row.lead_id || undefined,
+    connectionId: row.connection_id || undefined,
+    stripePaymentId: row.stripe_payment_id || undefined,
+    stripeTransferId: row.stripe_transfer_id || undefined,
     description: row.description || "",
     createdAt: row.created_at,
-    completedAt: row.completed_at,
-    reversedAt: row.reversed_at,
-    reversalReason: row.reversal_reason,
-    reversalTransactionId: row.reversal_transaction_id,
-    metadata: row.metadata as Record<string, unknown>,
-  };
-}
-
-// Convert Transaction to database insert format
-function transactionToDb(
-  transaction: Omit<Transaction, "id" | "createdAt">
-): Omit<DbTransaction, "id" | "created_at"> {
-  return {
-    type: transaction.type,
-    status: transaction.status,
-    amount: transaction.amount,
-    fee_amount: transaction.feeAmount,
-    net_amount: transaction.netAmount,
-    from_account_id: transaction.fromAccount || undefined,
-    to_account_id: transaction.toAccount || undefined,
-    lead_id: transaction.leadId,
-    connection_id: transaction.connectionId,
-    stripe_payment_id: transaction.stripePaymentId,
-    stripe_transfer_id: transaction.stripeTransferId,
-    stripe_payout_id: transaction.stripePayoutId,
-    description: transaction.description,
-    completed_at: transaction.completedAt,
-    reversed_at: transaction.reversedAt,
-    reversal_reason: transaction.reversalReason,
-    reversal_transaction_id: transaction.reversalTransactionId,
-    metadata: transaction.metadata,
+    completedAt: row.completed_at || undefined,
   };
 }
 
 /**
  * Server-side Transaction Ledger
- * Uses Supabase for persistent storage
  */
 class ServerTransactionLedger {
-  // Get all transactions (with optional limit)
   async getAll(limit: number = 100): Promise<Transaction[]> {
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return [];
     }
 
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
+    try {
+      const result = await sql`
+        SELECT * FROM transactions
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.map(row => dbToTransaction(row as DbTransaction));
+    } catch (error) {
       console.error("Failed to fetch transactions:", error);
       return [];
     }
-
-    return (data || []).map(dbToTransaction);
   }
 
-  // Get transactions for a specific account
   async getByAccount(accountId: string, limit: number = 50): Promise<Transaction[]> {
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return [];
     }
 
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .or(`from_account_id.eq.${accountId},to_account_id.eq.${accountId}`)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
+    try {
+      const result = await getTransactionsByUserId(accountId, limit);
+      return result.map(dbToTransaction);
+    } catch (error) {
       console.error("Failed to fetch account transactions:", error);
       return [];
     }
-
-    return (data || []).map(dbToTransaction);
   }
 
-  // Get transactions by type
-  async getByType(type: Transaction["type"], limit: number = 50): Promise<Transaction[]> {
-    if (!isSupabaseServerConfigured()) {
-      return [];
-    }
-
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("type", type)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error("Failed to fetch transactions by type:", error);
-      return [];
-    }
-
-    return (data || []).map(dbToTransaction);
-  }
-
-  // Get transactions for a date range
-  async getByDateRange(
-    startDate: Date,
-    endDate: Date,
-    limit: number = 100
-  ): Promise<Transaction[]> {
-    if (!isSupabaseServerConfigured()) {
-      return [];
-    }
-
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      console.error("Failed to fetch transactions by date range:", error);
-      return [];
-    }
-
-    return (data || []).map(dbToTransaction);
-  }
-
-  // Get transaction by ID
   async getById(transactionId: string): Promise<Transaction | null> {
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return null;
     }
 
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("id", transactionId)
-      .single();
-
-    if (error || !data) {
+    try {
+      const result = await sql`
+        SELECT * FROM transactions WHERE id = ${transactionId} LIMIT 1
+      `;
+      if (!result[0]) return null;
+      return dbToTransaction(result[0] as DbTransaction);
+    } catch (error) {
+      console.error("Failed to fetch transaction:", error);
       return null;
     }
-
-    return dbToTransaction(data);
   }
 
-  // Record a new transaction
   async record(
     transaction: Omit<Transaction, "id" | "createdAt" | "status"> & { status?: Transaction["status"] }
   ): Promise<Transaction | null> {
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       // Fallback: return simulated transaction
       return {
         ...transaction,
@@ -241,126 +142,66 @@ class ServerTransactionLedger {
       };
     }
 
-    const supabase = getSupabaseServerClient();
-    const dbData = transactionToDb({
-      ...transaction,
-      status: transaction.status || "pending",
-      feeAmount: transaction.feeAmount || 0,
-      netAmount: transaction.netAmount || transaction.amount,
-    });
-
-    const { data, error } = await supabase
-      .from("transactions")
-      .insert(dbData)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      const result = await createTransaction({
+        type: transaction.type,
+        amount: transaction.amount,
+        fee_amount: transaction.feeAmount || 0,
+        net_amount: transaction.netAmount || transaction.amount,
+        from_account_id: transaction.fromAccount || undefined,
+        to_account_id: transaction.toAccount || undefined,
+        lead_id: transaction.leadId,
+        connection_id: transaction.connectionId,
+        stripe_payment_id: transaction.stripePaymentId,
+        description: transaction.description,
+      });
+      return dbToTransaction(result);
+    } catch (error) {
       console.error("Failed to record transaction:", error);
       return null;
     }
-
-    return dbToTransaction(data);
   }
 
-  // Complete a transaction
   async complete(transactionId: string): Promise<Transaction | null> {
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return null;
     }
 
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", transactionId)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      const result = await sql`
+        UPDATE transactions
+        SET status = 'completed', completed_at = NOW()
+        WHERE id = ${transactionId}
+        RETURNING *
+      `;
+      if (!result[0]) return null;
+      return dbToTransaction(result[0] as DbTransaction);
+    } catch (error) {
       console.error("Failed to complete transaction:", error);
       return null;
     }
-
-    return dbToTransaction(data);
   }
 
-  // Mark transaction as failed
-  async fail(transactionId: string, reason?: string): Promise<Transaction | null> {
-    if (!isSupabaseServerConfigured()) {
+  async fail(transactionId: string, _reason?: string): Promise<Transaction | null> {
+    if (!isDatabaseConfigured()) {
       return null;
     }
 
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .update({
-        status: "failed",
-        reversal_reason: reason,
-      })
-      .eq("id", transactionId)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      const result = await sql`
+        UPDATE transactions
+        SET status = 'failed'
+        WHERE id = ${transactionId}
+        RETURNING *
+      `;
+      if (!result[0]) return null;
+      return dbToTransaction(result[0] as DbTransaction);
+    } catch (error) {
       console.error("Failed to mark transaction as failed:", error);
       return null;
     }
-
-    return dbToTransaction(data);
   }
 
-  // Reverse a transaction
-  async reverse(transactionId: string, reason: string): Promise<Transaction | null> {
-    if (!isSupabaseServerConfigured()) {
-      return null;
-    }
-
-    const supabase = getSupabaseServerClient();
-
-    // Get original transaction
-    const original = await this.getById(transactionId);
-    if (!original) {
-      return null;
-    }
-
-    // Create reversal transaction
-    const reversal = await this.record({
-      type: "adjustment",
-      amount: -original.amount,
-      feeAmount: 0,
-      netAmount: -original.amount,
-      currency: "USD",
-      fromAccount: original.toAccount,
-      toAccount: original.fromAccount,
-      leadId: original.leadId,
-      connectionId: original.connectionId,
-      description: `Reversal: ${reason}`,
-      metadata: { originalTransactionId: transactionId },
-    });
-
-    if (!reversal) {
-      return null;
-    }
-
-    // Mark original as reversed
-    await supabase
-      .from("transactions")
-      .update({
-        status: "reversed",
-        reversed_at: new Date().toISOString(),
-        reversal_reason: reason,
-        reversal_transaction_id: reversal.id,
-      })
-      .eq("id", transactionId);
-
-    return reversal;
-  }
-
-  // Get account balance from view
   async getBalance(accountId: string): Promise<AccountBalance> {
     const defaultBalance: AccountBalance = {
       accountId,
@@ -372,113 +213,56 @@ class ServerTransactionLedger {
       lastUpdated: new Date().toISOString(),
     };
 
-    if (!isSupabaseServerConfigured()) {
+    if (!isDatabaseConfigured()) {
       return defaultBalance;
     }
 
-    const supabase = getSupabaseServerClient();
+    try {
+      const transactions = await this.getByAccount(accountId, 1000);
 
-    // Try to get from the view first
-    const { data: viewData } = await supabase
-      .from("account_balances")
-      .select("*")
-      .eq("user_id", accountId)
-      .single();
+      let totalEarnings = 0;
+      let totalPayouts = 0;
+      let pendingBalance = 0;
 
-    if (viewData) {
-      return {
-        accountId,
-        accountType: viewData.account_type || "provider",
-        availableBalance: viewData.available_balance || 0,
-        pendingBalance: viewData.pending_balance || 0,
-        totalEarnings: viewData.total_earnings || 0,
-        totalPayouts: viewData.total_payouts || 0,
-        lastUpdated: new Date().toISOString(),
-      };
-    }
-
-    // Calculate from transactions
-    const transactions = await this.getByAccount(accountId, 1000);
-
-    let totalEarnings = 0;
-    let totalPayouts = 0;
-    let pendingBalance = 0;
-
-    for (const t of transactions) {
-      if (t.toAccount === accountId) {
-        if (t.status === "completed") {
-          totalEarnings += t.netAmount;
-        } else if (t.status === "pending") {
-          pendingBalance += t.netAmount;
+      for (const t of transactions) {
+        if (t.toAccount === accountId) {
+          if (t.status === "completed") {
+            totalEarnings += t.netAmount;
+          } else if (t.status === "pending") {
+            pendingBalance += t.netAmount;
+          }
+        }
+        if (t.fromAccount === accountId && t.status === "completed") {
+          totalPayouts += t.amount;
         }
       }
-      if (t.fromAccount === accountId && t.status === "completed") {
-        totalPayouts += t.amount;
-      }
+
+      return {
+        accountId,
+        accountType: "provider",
+        availableBalance: totalEarnings - totalPayouts,
+        pendingBalance,
+        totalEarnings,
+        totalPayouts,
+        lastUpdated: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error("Failed to get balance:", error);
+      return defaultBalance;
     }
-
-    return {
-      accountId,
-      accountType: "provider",
-      availableBalance: totalEarnings - totalPayouts,
-      pendingBalance,
-      totalEarnings,
-      totalPayouts,
-      lastUpdated: new Date().toISOString(),
-    };
-  }
-
-  // Generate financial report
-  async generateReport(startDate: Date, endDate: Date) {
-    const transactions = await this.getByDateRange(startDate, endDate, 10000);
-
-    const completedTransactions = transactions.filter((t) => t.status === "completed");
-
-    const report = {
-      period: {
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      },
-      summary: {
-        totalTransactions: transactions.length,
-        totalVolume: completedTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0),
-        totalFees: completedTransactions.reduce((sum, t) => sum + t.feeAmount, 0),
-        payouts: completedTransactions
-          .filter((t) => t.type === "lead_payout")
-          .reduce((sum, t) => sum + t.amount, 0),
-        commissions: completedTransactions
-          .filter((t) => t.type === "policy_commission")
-          .reduce((sum, t) => sum + t.amount, 0),
-        platformFees: completedTransactions
-          .filter((t) => t.type === "platform_fee")
-          .reduce((sum, t) => sum + t.amount, 0),
-        refunds: completedTransactions
-          .filter((t) => t.type === "refund")
-          .reduce((sum, t) => sum + t.amount, 0),
-      },
-      byStatus: {
-        completed: transactions.filter((t) => t.status === "completed").length,
-        pending: transactions.filter((t) => t.status === "pending").length,
-        failed: transactions.filter((t) => t.status === "failed").length,
-        reversed: transactions.filter((t) => t.status === "reversed").length,
-      },
-      transactions,
-    };
-
-    return report;
   }
 }
 
-// Export singleton instance for server-side use
+// Export singleton instance
 export const serverLedger = new ServerTransactionLedger();
+export const ledger = serverLedger;
 
 /**
  * Client-side Transaction Ledger
- * Fetches data via API endpoints (read-only from client)
  */
 class ClientTransactionLedger {
   private cache: Map<string, { data: Transaction[]; timestamp: number }> = new Map();
-  private cacheTimeout = 30000; // 30 seconds
+  private cacheTimeout = 30000;
 
   private isCacheValid(key: string): boolean {
     const cached = this.cache.get(key);
@@ -486,7 +270,6 @@ class ClientTransactionLedger {
     return Date.now() - cached.timestamp < this.cacheTimeout;
   }
 
-  // Get transactions for current user
   async getMyTransactions(): Promise<Transaction[]> {
     const cacheKey = "my_transactions";
     if (this.isCacheValid(cacheKey)) {
@@ -508,7 +291,6 @@ class ClientTransactionLedger {
     }
   }
 
-  // Get balance for current user
   async getMyBalance(): Promise<AccountBalance | null> {
     try {
       const response = await fetch("/api/transactions/balance");
@@ -523,20 +305,14 @@ class ClientTransactionLedger {
     }
   }
 
-  // Clear cache
   clearCache() {
     this.cache.clear();
   }
 }
 
-// Export singleton instance for client-side use
 export const clientLedger = new ClientTransactionLedger();
 
-// Legacy exports for backward compatibility
-export const ledger = serverLedger;
-
-// Helper to record a lead payout (server-side only)
-// No platform fee - provider receives 100% of the payment
+// Helper functions
 export async function recordLeadPayout(
   providerId: string,
   buyerId: string,
@@ -562,29 +338,26 @@ export async function recordLeadPayout(
   });
 }
 
-// Helper to record policy commission (server-side only)
 export async function recordPolicyCommission(
   providerId: string,
   leadId: string,
   policyNumber: string,
   amount: number
 ): Promise<Transaction | null> {
-  // Commission has no platform fee
   return serverLedger.record({
     type: "policy_commission",
     amount,
     feeAmount: 0,
     netAmount: amount,
     currency: "USD",
-    fromAccount: null, // From carrier/external
+    fromAccount: null,
     toAccount: providerId,
     leadId,
     description: `Commission for policy ${policyNumber}`,
-    metadata: { policyNumber },
+    policyNumber,
   });
 }
 
-// Helper to record platform fee (server-side only)
 export async function recordPlatformFee(
   fromAccount: string,
   amount: number,
@@ -598,7 +371,7 @@ export async function recordPlatformFee(
     netAmount: amount,
     currency: "USD",
     fromAccount,
-    toAccount: null, // To platform
+    toAccount: null,
     leadId,
     stripePaymentId,
     description: `Platform fee${leadId ? ` for lead ${leadId}` : ""}`,

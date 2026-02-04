@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { validateSession } from "@/lib/server/session";
-import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { executeSql as sql, isDatabaseConfigured, getUserById, createTransaction } from "@/lib/db";
 import { createPaymentSchema, validateInput } from "@/lib/validation";
 
 function getStripe() {
@@ -19,15 +19,15 @@ function getStripe() {
 export async function POST(request: NextRequest) {
   try {
     // Validate session - only buyers can create payments
-    const session = await validateSession();
-    if (!session) {
+    const session = await auth();
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    if (session.role !== "buyer") {
+    if (session.user.role !== "buyer") {
       return NextResponse.json(
         { error: "Only buyers can create payments" },
         { status: 403 }
@@ -64,14 +64,8 @@ export async function POST(request: NextRequest) {
     // Get provider's Stripe account ID from database
     let providerStripeAccountId: string | null = null;
 
-    if (isSupabaseServerConfigured()) {
-      const supabase = getSupabaseServerClient();
-      const { data: provider } = await supabase
-        .from("users")
-        .select("stripe_account_id, stripe_onboarding_complete")
-        .eq("id", providerId)
-        .single();
-
+    if (isDatabaseConfigured()) {
+      const provider = await getUserById(providerId);
       if (provider?.stripe_account_id && provider?.stripe_onboarding_complete) {
         providerStripeAccountId = provider.stripe_account_id;
       }
@@ -81,24 +75,22 @@ export async function POST(request: NextRequest) {
     const amountInCents = Math.round(amount * 100);
 
     // No platform fee - provider receives 100% of payment
-    // Create PaymentIntent with or without transfer
     const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
       amount: amountInCents,
       currency: "usd",
       metadata: {
         providerId,
         leadId,
-        buyerId: session.userId,
+        buyerId: session.user.id,
         type: "lead_payout",
         description: description || `Lead payout for ${leadId}`,
       },
-      // Automatic payment methods for flexibility
       automatic_payment_methods: {
         enabled: true,
       },
     };
 
-    // If provider has a connected Stripe account, set up transfer (full amount, no fee)
+    // If provider has a connected Stripe account, set up transfer
     if (providerStripeAccountId) {
       paymentIntentParams.transfer_data = {
         destination: providerStripeAccountId,
@@ -108,22 +100,17 @@ export async function POST(request: NextRequest) {
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
     // Record pending transaction in database
-    if (isSupabaseServerConfigured()) {
-      const supabase = getSupabaseServerClient();
-      await supabase.from("transactions").insert({
+    if (isDatabaseConfigured()) {
+      await createTransaction({
         type: "lead_payout",
-        status: "pending",
         amount: amount,
         fee_amount: 0,
         net_amount: amount,
-        from_account_id: session.userId,
+        from_account_id: session.user.id,
         to_account_id: providerId,
         lead_id: leadId,
         stripe_payment_id: paymentIntent.id,
         description: description || `Lead payout for ${leadId}`,
-        metadata: {
-          has_connected_account: !!providerStripeAccountId,
-        },
       });
     }
 
