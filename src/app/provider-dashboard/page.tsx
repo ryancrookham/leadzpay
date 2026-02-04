@@ -101,7 +101,7 @@ function checkLeadCaps(connection: ApiConnection): {
 
 export default function ProviderDashboard() {
   const router = useRouter();
-  const { currentUser, isAuthenticated, isLoading, logout, updateUser, getUsersByRole } = useAuth();
+  const { currentUser, isAuthenticated, isLoading, logout, updateUser } = useAuth();
   const currentProvider = useCurrentProvider();
   const { leads, addLead } = useLeads();
   const {
@@ -112,6 +112,7 @@ export default function ProviderDashboard() {
     acceptTerms,
     declineTerms,
     updateConnectionStats,
+    fetchUsersByRole,
   } = useConnections();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
@@ -332,7 +333,7 @@ export default function ProviderDashboard() {
             pendingInvitation={pendingInvitation}
             pendingRequest={pendingRequest}
             myRequests={myRequests}
-            getUsersByRole={getUsersByRole}
+            fetchUsersByRole={fetchUsersByRole}
             sendConnectionRequest={sendConnectionRequest}
             acceptTerms={acceptTerms}
             declineTerms={declineTerms}
@@ -514,7 +515,7 @@ function ConnectionTab({
   pendingInvitation,
   pendingRequest,
   myRequests,
-  getUsersByRole,
+  fetchUsersByRole,
   sendConnectionRequest,
   acceptTerms,
   declineTerms,
@@ -528,7 +529,7 @@ function ConnectionTab({
   pendingInvitation: ApiConnection | null;
   pendingRequest: ApiConnection | undefined;
   myRequests: ApiConnection[];
-  getUsersByRole: (role: "buyer" | "provider") => import("@/lib/auth-types").User[];
+  fetchUsersByRole: (role: "buyer" | "provider") => Promise<import("@/lib/connection-context").DiscoveryUser[]>;
   sendConnectionRequest: (buyerId: string, message?: string) => Promise<ApiConnection | null>;
   acceptTerms: (connectionId: string) => Promise<boolean>;
   declineTerms: (connectionId: string) => Promise<boolean>;
@@ -536,7 +537,16 @@ function ConnectionTab({
   updateConnectionStats: (connectionId: string, leadPayout: number) => void;
 }) {
   const [requestMessage, setRequestMessage] = useState("");
-  const [selectedBuyer, setSelectedBuyer] = useState<LeadBuyer | null>(null);
+  const [selectedBuyer, setSelectedBuyer] = useState<{
+    id: string;
+    email: string;
+    displayName: string;
+    businessName: string;
+    location: string;
+    licensedStates: string[];
+    isConnected: boolean;
+    connectionStatus?: string;
+  } | null>(null);
   const [, setShowBuyerList] = useState(false);
 
   // Multi-step lead submission state
@@ -617,7 +627,44 @@ function ConnectionTab({
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
 
-  const buyers = getUsersByRole("buyer") as LeadBuyer[];
+  // Fetch buyers from API
+  type DiscoveryBuyer = {
+    id: string;
+    email: string;
+    displayName: string;
+    businessName: string;
+    location: string;
+    licensedStates: string[];
+    isConnected: boolean;
+    connectionStatus?: string;
+  };
+  const [buyers, setBuyers] = useState<DiscoveryBuyer[]>([]);
+  const [loadingBuyers, setLoadingBuyers] = useState(true);
+
+  useEffect(() => {
+    const loadBuyers = async () => {
+      setLoadingBuyers(true);
+      try {
+        const users = await fetchUsersByRole("buyer");
+        const buyerList = users.map((u) => ({
+          id: u.id,
+          email: u.email,
+          displayName: u.displayName || u.email,
+          businessName: u.businessName || "",
+          location: u.location || "",
+          licensedStates: u.licensedStates || [],
+          isConnected: u.isConnected,
+          connectionStatus: u.connectionStatus,
+        }));
+        setBuyers(buyerList);
+      } catch (err) {
+        console.error("Failed to fetch buyers:", err);
+      } finally {
+        setLoadingBuyers(false);
+      }
+    };
+    loadBuyers();
+  }, [fetchUsersByRole]);
 
   // Reset form when closing
   const resetForm = () => {
@@ -2119,7 +2166,7 @@ function ConnectionTab({
                         </div>
                         <div>
                           <p className="font-semibold text-gray-800">{buyer.businessName}</p>
-                          <p className="text-gray-500 text-sm capitalize">{buyer.businessType.replace("_", " ")}</p>
+                          <p className="text-gray-500 text-sm">{buyer.location || "Insurance Agency"}</p>
                         </div>
                       </div>
                       {existingRequest && (

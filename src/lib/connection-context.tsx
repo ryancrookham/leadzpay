@@ -42,6 +42,18 @@ export interface ApiConnection {
   createdAt: string;
 }
 
+// User type for discovery (from /api/users)
+export interface DiscoveryUser {
+  id: string;
+  displayName: string;
+  businessName: string | null;
+  location: string | null;
+  licensedStates: string[] | null;
+  email: string;
+  isConnected: boolean;
+  connectionStatus?: string;
+}
+
 // Transform API response to add camelCase aliases
 function transformConnection(conn: any): ApiConnection {
   return {
@@ -113,6 +125,9 @@ interface ConnectionContextType {
   getPendingRequestsForBuyer: (buyerId: string) => ApiConnection[];
   getPendingTermsForProvider: (providerId: string) => ApiConnection[];
 
+  // Discovery
+  fetchUsersByRole: (role: "buyer" | "provider") => Promise<DiscoveryUser[]>;
+
   // Legacy compatibility (used by existing dashboards)
   getRequestsForBuyer: (buyerId: string) => ApiConnection[];
   getRequestsForProvider: (providerId: string) => ApiConnection[];
@@ -158,6 +173,28 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshConnections();
   }, [refreshConnections]);
+
+  // Fetch users by role for discovery
+  const fetchUsersByRole = useCallback(
+    async (role: "buyer" | "provider"): Promise<DiscoveryUser[]> => {
+      if (!session?.user) {
+        return [];
+      }
+      try {
+        const response = await fetch(`/api/users?role=${role}`);
+        if (!response.ok) {
+          console.error("[ConnectionContext] Failed to fetch users:", response.status);
+          return [];
+        }
+        const data = await response.json();
+        return data.users || [];
+      } catch (err) {
+        console.error("[ConnectionContext] Error fetching users:", err);
+        return [];
+      }
+    },
+    [session]
+  );
 
   // Provider sends connection request to buyer
   const sendConnectionRequest = useCallback(
@@ -504,6 +541,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         getActiveConnectionForProvider,
         getPendingRequestsForBuyer,
         getPendingTermsForProvider,
+        // Discovery
+        fetchUsersByRole,
         // Legacy compatibility
         getRequestsForBuyer,
         getRequestsForProvider,
