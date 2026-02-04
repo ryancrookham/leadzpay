@@ -192,8 +192,9 @@ export async function registerUser(data: {
 
     return { success: true, user };
   } catch (error) {
-    console.error("[AUTH] Registration error:", error);
-    return { success: false, error: "Registration failed" };
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("[AUTH] Registration error:", errorMessage, error);
+    return { success: false, error: errorMessage };
   }
 }
 
