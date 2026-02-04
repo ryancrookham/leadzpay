@@ -6,9 +6,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth, useCurrentProvider } from "@/lib/auth-context";
 import { useLeads, type Lead, type CustomerProfile } from "@/lib/leads-context";
-import { useConnections } from "@/lib/connection-context";
+import { useConnections, type ApiConnection } from "@/lib/connection-context";
 import { isProvider, LeadBuyer } from "@/lib/auth-types";
-import { Connection, ConnectionRequest, formatPaymentTiming, checkLeadCaps, formatLeadCapStatus } from "@/lib/connection-types";
+import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
 import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
 import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
 
@@ -83,6 +83,22 @@ const US_STATES = [
 
 type Tab = "dashboard" | "connection" | "leads" | "earnings" | "profile";
 
+// Helper function to check lead caps for ApiConnection
+function checkLeadCaps(connection: ApiConnection): {
+  weeklyCapReached: boolean;
+  monthlyCapReached: boolean;
+  canSubmitLead: boolean;
+  message?: string;
+} {
+  // With the new API structure, we track total_leads but not per-period counts yet
+  // For now, allow submissions - cap enforcement can be added later with proper tracking
+  return {
+    weeklyCapReached: false,
+    monthlyCapReached: false,
+    canSubmitLead: true,
+  };
+}
+
 export default function ProviderDashboard() {
   const router = useRouter();
   const { currentUser, isAuthenticated, isLoading, logout, updateUser, getUsersByRole } = useAuth();
@@ -130,8 +146,8 @@ export default function ProviderDashboard() {
   const myRequests = getRequestsForProvider(currentUser.id);
   // Also get invitations from businesses (requests where provider email matches and terms are already set)
   const myInvitations = getInvitationsForProvider(currentUser.email);
-  const pendingTermsRequest = myRequests.find(r => r.status === "terms_set");
-  const pendingRequest = myRequests.find(r => r.status === "pending");
+  const pendingTermsRequest = myRequests.find(r => r.status === "pending_provider_accept");
+  const pendingRequest = myRequests.find(r => r.status === "pending_buyer_review");
   // Business invitations are also terms_set status but initiated by the business
   const pendingInvitation = myInvitations.length > 0 ? myInvitations[0] : null;
 
@@ -360,7 +376,7 @@ function DashboardTab({
   pendingEarnings,
   onNavigateToConnection,
 }: {
-  activeConnection: Connection | null;
+  activeConnection: ApiConnection | null;
   myLeads: Lead[];
   totalLeads: number;
   claimedLeads: number;
@@ -393,7 +409,7 @@ function DashboardTab({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">Submit New Lead</h3>
-                <p className="text-gray-500 text-sm">Earn ${activeConnection.terms.paymentTerms.ratePerLead} per lead</p>
+                <p className="text-gray-500 text-sm">Earn ${activeConnection.rate_per_lead} per lead</p>
               </div>
             </div>
           </button>
@@ -428,7 +444,7 @@ function DashboardTab({
               </div>
               <div>
                 <p className="font-semibold text-gray-800">{activeConnection.buyerBusinessName}</p>
-                <p className="text-gray-500 text-sm">${activeConnection.terms.paymentTerms.ratePerLead}/lead • {formatPaymentTiming(activeConnection.terms.paymentTerms.timing)}</p>
+                <p className="text-gray-500 text-sm">${activeConnection.rate_per_lead}/lead • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
           ) : (
@@ -507,22 +523,15 @@ function ConnectionTab({
 }: {
   currentUser: import("@/lib/auth-types").User;
   currentProvider: import("@/lib/auth-types").LeadProvider | null;
-  activeConnection: Connection | null;
-  pendingTermsRequest: ConnectionRequest | undefined;
-  pendingInvitation: ConnectionRequest | null;
-  pendingRequest: ConnectionRequest | undefined;
-  myRequests: ConnectionRequest[];
+  activeConnection: ApiConnection | null;
+  pendingTermsRequest: ApiConnection | undefined;
+  pendingInvitation: ApiConnection | null;
+  pendingRequest: ApiConnection | undefined;
+  myRequests: ApiConnection[];
   getUsersByRole: (role: "buyer" | "provider") => import("@/lib/auth-types").User[];
-  sendConnectionRequest: (
-    providerId: string,
-    providerName: string,
-    providerEmail: string,
-    buyerId: string,
-    buyerBusinessName: string,
-    message?: string
-  ) => ConnectionRequest;
-  acceptTerms: (requestId: string) => Connection | null;
-  declineTerms: (requestId: string) => void;
+  sendConnectionRequest: (buyerId: string, message?: string) => Promise<ApiConnection | null>;
+  acceptTerms: (connectionId: string) => Promise<boolean>;
+  declineTerms: (connectionId: string) => Promise<boolean>;
   addLead: (lead: Omit<Lead, "id" | "createdAt">) => Lead;
   updateConnectionStats: (connectionId: string, leadPayout: number) => void;
 }) {
@@ -729,7 +738,7 @@ function ConnectionTab({
     }
 
     setCallStatus("calling");
-    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+    const payout = activeConnection.rate_per_lead;
 
     // Create the lead
     const lead = addLead({
@@ -791,7 +800,7 @@ function ConnectionTab({
       return;
     }
 
-    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+    const payout = activeConnection.rate_per_lead;
 
     addLead({
       providerId: currentUser.id,
@@ -832,7 +841,7 @@ function ConnectionTab({
       return;
     }
 
-    const payout = activeConnection.terms.paymentTerms.ratePerLead;
+    const payout = activeConnection.rate_per_lead;
 
     // Use extracted name if available, otherwise placeholder
     const customerName = extractedLicenseData?.fullName || "License Holder";
@@ -955,31 +964,24 @@ function ConnectionTab({
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  const handleSendRequest = () => {
+  const handleSendRequest = async () => {
     if (!selectedBuyer || !currentProvider) return;
 
-    sendConnectionRequest(
-      currentUser.id,
-      currentProvider.displayName,
-      currentProvider.email,
-      selectedBuyer.id,
-      selectedBuyer.businessName,
-      requestMessage || undefined
-    );
+    await sendConnectionRequest(selectedBuyer.id, requestMessage || undefined);
 
     setSelectedBuyer(null);
     setRequestMessage("");
     setShowBuyerList(false);
   };
 
-  const handleAcceptTerms = () => {
+  const handleAcceptTerms = async () => {
     if (!pendingTermsRequest) return;
-    acceptTerms(pendingTermsRequest.id);
+    await acceptTerms(pendingTermsRequest.id);
   };
 
-  const handleDeclineTerms = () => {
+  const handleDeclineTerms = async () => {
     if (!pendingTermsRequest) return;
-    declineTerms(pendingTermsRequest.id);
+    await declineTerms(pendingTermsRequest.id);
   };
 
   // Show active connection
@@ -999,7 +1001,7 @@ function ConnectionTab({
                 <p className="text-xl font-bold text-emerald-800">
                   {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
                 </p>
-                <p className="text-emerald-600">You earned ${activeConnection.terms.paymentTerms.ratePerLead} for this lead.</p>
+                <p className="text-emerald-600">You earned ${activeConnection.rate_per_lead} for this lead.</p>
               </div>
             </div>
             {channel === "asap" && (
@@ -1074,47 +1076,39 @@ function ConnectionTab({
               </div>
               <div>
                 <h4 className="text-xl font-bold text-gray-800">{activeConnection.buyerBusinessName}</h4>
-                <p className="text-gray-500">Connected since {new Date(activeConnection.acceptedAt).toLocaleDateString()}</p>
+                <p className="text-gray-500">Connected since {new Date(activeConnection.accepted_at || activeConnection.created_at).toLocaleDateString()}</p>
               </div>
             </div>
 
             {/* Terms Display */}
             <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
               <h4 className="font-semibold text-gray-800 mb-4">Your Agreement Terms</h4>
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-gray-500 text-sm">Rate per Lead</p>
-                  <p className="text-2xl font-bold text-[#1e3a5f]">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+                  <p className="text-2xl font-bold text-[#1e3a5f]">${activeConnection.rate_per_lead}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Payment Schedule</p>
-                  <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(activeConnection.terms.paymentTerms.timing)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-sm">Lead Types</p>
-                  <p className="text-xl font-semibold text-gray-800 capitalize">{activeConnection.terms.leadTypes.join(", ")}</p>
+                  <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
                 </div>
               </div>
 
               {/* Lead Cap Status */}
-              {activeConnection.terms.leadCaps && (
+              {(activeConnection.weekly_lead_cap || activeConnection.monthly_lead_cap) && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   <p className="text-gray-500 text-sm mb-2">Lead Volume Limits</p>
                   <div className="flex flex-wrap gap-3">
-                    {activeConnection.terms.leadCaps.weeklyLimit && (
+                    {activeConnection.weekly_lead_cap && (
                       <div className="bg-white px-3 py-2 rounded-lg border border-gray-200">
-                        <p className="text-xs text-gray-500">Weekly</p>
-                        <p className="font-semibold text-gray-800">
-                          {activeConnection.stats.leadsThisWeek || 0} / {activeConnection.terms.leadCaps.weeklyLimit}
-                        </p>
+                        <p className="text-xs text-gray-500">Weekly Cap</p>
+                        <p className="font-semibold text-gray-800">{activeConnection.weekly_lead_cap} leads</p>
                       </div>
                     )}
-                    {activeConnection.terms.leadCaps.monthlyLimit && (
+                    {activeConnection.monthly_lead_cap && (
                       <div className="bg-white px-3 py-2 rounded-lg border border-gray-200">
-                        <p className="text-xs text-gray-500">Monthly</p>
-                        <p className="font-semibold text-gray-800">
-                          {activeConnection.stats.leadsThisMonth || 0} / {activeConnection.terms.leadCaps.monthlyLimit}
-                        </p>
+                        <p className="text-xs text-gray-500">Monthly Cap</p>
+                        <p className="font-semibold text-gray-800">{activeConnection.monthly_lead_cap} leads</p>
                       </div>
                     )}
                   </div>
@@ -1125,11 +1119,11 @@ function ConnectionTab({
             {/* Stats */}
             <div className="grid grid-cols-2 gap-4 mt-6">
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-[#1e3a5f]">{activeConnection.stats.totalLeads}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">{activeConnection.total_leads}</p>
                 <p className="text-gray-500 text-sm">Total Leads</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-emerald-600">${activeConnection.stats.totalPaid}</p>
+                <p className="text-3xl font-bold text-emerald-600">${activeConnection.total_paid}</p>
                 <p className="text-gray-500 text-sm">Total Earned</p>
               </div>
             </div>
@@ -1227,7 +1221,7 @@ function ConnectionTab({
                     High-value passive lead! Upload license to auto-extract customer info.
                   </p>
                   <p className="text-blue-600 text-xs mt-1">
-                    You&apos;ll earn ${activeConnection?.terms.paymentTerms.ratePerLead || 50} for this lead. Data is sent to CRM automatically.
+                    You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead. Data is sent to CRM automatically.
                   </p>
                 </div>
 
@@ -1422,7 +1416,7 @@ function ConnectionTab({
                 </button>
 
                 <p className="text-center text-gray-500 text-xs">
-                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${activeConnection?.terms.paymentTerms.ratePerLead || 50} once they process it.
+                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${activeConnection?.rate_per_lead || 50} once they process it.
                 </p>
               </div>
             )}
@@ -1434,7 +1428,7 @@ function ConnectionTab({
                   <p className={`${channel === "asap" ? "text-red-700" : "text-blue-700"} text-sm font-medium`}>
                     {channel === "asap"
                       ? "Get the essentials - agent will call within 60 seconds"
-                      : `You'll earn $${activeConnection.terms.paymentTerms.ratePerLead} when this lead converts`}
+                      : `You'll earn $${activeConnection.rate_per_lead} when this lead converts`}
                   </p>
                 </div>
 
@@ -1913,7 +1907,7 @@ function ConnectionTab({
   }
 
   // Show pending invitation from business
-  if (pendingInvitation && pendingInvitation.proposedTerms) {
+  if (pendingInvitation) {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-xl border-2 border-emerald-200 p-6 shadow-sm">
@@ -1942,53 +1936,43 @@ function ConnectionTab({
           {/* Proposed Terms */}
           <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200 mb-6">
             <h4 className="font-semibold text-gray-800 mb-4">Offered Agreement Terms</h4>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingInvitation.proposedTerms.paymentTerms.ratePerLead}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingInvitation.rate_per_lead}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
-                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(pendingInvitation.proposedTerms.paymentTerms.timing)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 text-sm">Lead Types</p>
-                <p className="text-xl font-semibold text-gray-800 capitalize">{pendingInvitation.proposedTerms.leadTypes.join(", ")}</p>
+                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(pendingInvitation.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
-            {pendingInvitation.proposedTerms.leadCaps && (
+            {(pendingInvitation.weekly_lead_cap || pendingInvitation.monthly_lead_cap) && (
               <div className="mt-4 pt-4 border-t border-emerald-200 grid md:grid-cols-2 gap-4">
-                {pendingInvitation.proposedTerms.leadCaps.weeklyLimit && (
+                {pendingInvitation.weekly_lead_cap && (
                   <div>
                     <p className="text-gray-500 text-sm">Weekly Lead Cap</p>
-                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.proposedTerms.leadCaps.weeklyLimit} leads</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.weekly_lead_cap} leads</p>
                   </div>
                 )}
-                {pendingInvitation.proposedTerms.leadCaps.monthlyLimit && (
+                {pendingInvitation.monthly_lead_cap && (
                   <div>
                     <p className="text-gray-500 text-sm">Monthly Lead Cap</p>
-                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.proposedTerms.leadCaps.monthlyLimit} leads</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingInvitation.monthly_lead_cap} leads</p>
                   </div>
                 )}
-              </div>
-            )}
-            {pendingInvitation.proposedTerms.notes && (
-              <div className="mt-4 pt-4 border-t border-emerald-200">
-                <p className="text-gray-500 text-sm">Notes from Business</p>
-                <p className="text-gray-700">{pendingInvitation.proposedTerms.notes}</p>
               </div>
             )}
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${pendingInvitation.proposedTerms.paymentTerms.ratePerLead} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.proposedTerms.terminationNoticeDays} days notice.
+            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${pendingInvitation.rate_per_lead} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
             <button
-              onClick={() => {
-                const result = acceptTerms(pendingInvitation.id);
-                if (result) {
+              onClick={async () => {
+                const success = await acceptTerms(pendingInvitation.id);
+                if (success) {
                   alert(`Welcome! You are now connected with ${pendingInvitation.buyerBusinessName}. You can start submitting leads.`);
                 }
               }}
@@ -1997,9 +1981,9 @@ function ConnectionTab({
               Accept Invitation
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm("Are you sure you want to decline this invitation?")) {
-                  declineTerms(pendingInvitation.id);
+                  await declineTerms(pendingInvitation.id);
                 }
               }}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold transition border border-gray-200"
@@ -2013,7 +1997,7 @@ function ConnectionTab({
   }
 
   // Show pending terms to review (from a request the provider initiated)
-  if (pendingTermsRequest && pendingTermsRequest.proposedTerms) {
+  if (pendingTermsRequest) {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-xl border-2 border-amber-200 p-6 shadow-sm">
@@ -2035,36 +2019,36 @@ function ConnectionTab({
           {/* Proposed Terms */}
           <div className="bg-amber-50 rounded-xl p-6 border border-amber-200 mb-6">
             <h4 className="font-semibold text-gray-800 mb-4">Proposed Agreement Terms</h4>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingTermsRequest.proposedTerms.paymentTerms.ratePerLead}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingTermsRequest.rate_per_lead}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
-                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(pendingTermsRequest.proposedTerms.paymentTerms.timing)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 text-sm">Lead Types</p>
-                <p className="text-xl font-semibold text-gray-800 capitalize">{pendingTermsRequest.proposedTerms.leadTypes.join(", ")}</p>
+                <p className="text-xl font-semibold text-gray-800">{formatPaymentTiming(pendingTermsRequest.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
-            {pendingTermsRequest.proposedTerms.paymentTerms.minimumPayoutThreshold && (
-              <div className="mt-4">
-                <p className="text-gray-500 text-sm">Minimum Payout Threshold</p>
-                <p className="text-lg font-semibold text-gray-800">${pendingTermsRequest.proposedTerms.paymentTerms.minimumPayoutThreshold}</p>
-              </div>
-            )}
-            {pendingTermsRequest.proposedTerms.notes && (
-              <div className="mt-4 pt-4 border-t border-amber-200">
-                <p className="text-gray-500 text-sm">Notes from Business</p>
-                <p className="text-gray-700">{pendingTermsRequest.proposedTerms.notes}</p>
+            {(pendingTermsRequest.weekly_lead_cap || pendingTermsRequest.monthly_lead_cap) && (
+              <div className="mt-4 pt-4 border-t border-amber-200 grid md:grid-cols-2 gap-4">
+                {pendingTermsRequest.weekly_lead_cap && (
+                  <div>
+                    <p className="text-gray-500 text-sm">Weekly Lead Cap</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingTermsRequest.weekly_lead_cap} leads</p>
+                  </div>
+                )}
+                {pendingTermsRequest.monthly_lead_cap && (
+                  <div>
+                    <p className="text-gray-500 text-sm">Monthly Lead Cap</p>
+                    <p className="text-lg font-semibold text-gray-800">{pendingTermsRequest.monthly_lead_cap} leads</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${pendingTermsRequest.proposedTerms.paymentTerms.ratePerLead} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.proposedTerms.terminationNoticeDays} days notice.
+            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${pendingTermsRequest.rate_per_lead} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
@@ -2213,7 +2197,7 @@ function ConnectionTab({
 }
 
 // Leads Tab
-function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLeads: Lead[]; activeConnection: Connection | null; onNavigateToConnection: () => void }) {
+function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLeads: Lead[]; activeConnection: ApiConnection | null; onNavigateToConnection: () => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
@@ -2285,7 +2269,7 @@ function EarningsTab({
   totalLeads: number;
   totalEarnings: number;
   pendingEarnings: number;
-  activeConnection: Connection | null;
+  activeConnection: ApiConnection | null;
 }) {
   return (
     <div className="space-y-6">
@@ -2302,7 +2286,7 @@ function EarningsTab({
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
           <p className="text-3xl font-bold text-[#1e3a5f]">
-            ${totalLeads > 0 ? Math.round(totalEarnings / totalLeads) : activeConnection?.terms.paymentTerms.ratePerLead || 0}
+            ${totalLeads > 0 ? Math.round(totalEarnings / totalLeads) : activeConnection?.rate_per_lead || 0}
           </p>
         </div>
       </div>

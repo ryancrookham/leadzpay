@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useLeads, type Provider } from "@/lib/leads-context";
-import { useConnections } from "@/lib/connection-context";
-import { Connection, formatPaymentTiming } from "@/lib/connection-types";
+import { useConnections, type ApiConnection } from "@/lib/connection-context";
+import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
 import {
   calculateMultiCarrierQuotes,
   type QuoteResult,
@@ -120,8 +120,8 @@ export default function SubmitLead() {
   const { addLead, getProvider, getProviderByEmail, addProvider, updateProvider } = useLeads();
   const { getConnectionsByProviderEmail, updateConnectionStats } = useConnections();
   const [step, setStep] = useState<"provider" | "select_connection" | "form" | "questions" | "chatbot" | "quote" | "coverage" | "purchase" | "success" | "no_connection">("provider");
-  const [activeConnection, setActiveConnection] = useState<Connection | null>(null);
-  const [providerConnections, setProviderConnections] = useState<Connection[]>([]);
+  const [activeConnection, setActiveConnection] = useState<ApiConnection | null>(null);
+  const [providerConnections, setProviderConnections] = useState<ApiConnection[]>([]);
 
   // Provider info
   const [providerData, setProviderData] = useState({
@@ -144,7 +144,7 @@ export default function SubmitLead() {
         setCurrentProvider(provider);
         // Check for active connections using email (consistent across auth & leads systems)
         const allConnections = getConnectionsByProviderEmail(provider.email);
-        const activeConnections = allConnections.filter((c: Connection) => c.status === "active");
+        const activeConnections = allConnections.filter((c: ApiConnection) => c.status === "active");
         setProviderConnections(activeConnections);
 
         if (activeConnections.length > 0) {
@@ -416,7 +416,7 @@ export default function SubmitLead() {
     // Submit the lead when customer purchases
     if (activeConnection) {
       const provider = currentProvider || getProvider("provider-1");
-      const payout = activeConnection.terms.paymentTerms.ratePerLead;
+      const payout = activeConnection.rate_per_lead;
       const yearMatch = formData.carModel.match(/\b(19|20)\d{2}\b/);
       const carYear = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
 
@@ -557,9 +557,9 @@ export default function SubmitLead() {
           {activeConnection && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
               <p className="text-green-700 text-sm mb-1">Your Earnings</p>
-              <p className="text-green-800 text-2xl font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+              <p className="text-green-800 text-2xl font-bold">${activeConnection.rate_per_lead}</p>
               <p className="text-green-600 text-xs mt-1">
-                Paid {formatPaymentTiming(activeConnection.terms.paymentTerms.timing).toLowerCase()} via {activeConnection.buyerBusinessName}
+                Paid {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming).toLowerCase()} via {activeConnection.buyerBusinessName}
               </p>
             </div>
           )}
@@ -607,7 +607,7 @@ export default function SubmitLead() {
           {activeConnection && (
             <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
               <p className="text-gray-500 text-sm mb-1">Estimated Payout</p>
-              <p className="text-3xl font-bold text-[#1e3a5f]">${activeConnection.terms.paymentTerms.ratePerLead}</p>
+              <p className="text-3xl font-bold text-[#1e3a5f]">${activeConnection.rate_per_lead}</p>
             </div>
           )}
           <div className="flex gap-4 justify-center">
@@ -670,7 +670,7 @@ export default function SubmitLead() {
 
   // Connection Selection Screen - Choose which buyer to submit lead to
   if (step === "select_connection") {
-    const handleSelectConnection = (connection: Connection) => {
+    const handleSelectConnection = (connection: ApiConnection) => {
       setActiveConnection(connection);
       setStep("form");
     };
@@ -728,7 +728,7 @@ export default function SubmitLead() {
                         {connection.buyerBusinessName}
                       </h3>
                       <p className="text-gray-500 text-sm">
-                        Connected since {new Date(connection.acceptedAt).toLocaleDateString()}
+                        Connected since {new Date(connection.accepted_at || connection.created_at).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
@@ -744,27 +744,19 @@ export default function SubmitLead() {
                       </svg>
                       Agreed Terms
                     </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-gray-500 text-xs uppercase tracking-wide">Rate Per Lead</p>
-                        <p className="text-[#1e3a5f] text-xl font-bold">${connection.terms.paymentTerms.ratePerLead}</p>
+                        <p className="text-[#1e3a5f] text-xl font-bold">${connection.rate_per_lead}</p>
                       </div>
                       <div>
                         <p className="text-gray-500 text-xs uppercase tracking-wide">Payment</p>
-                        <p className="text-gray-800 font-medium">{formatPaymentTiming(connection.terms.paymentTerms.timing)}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 text-xs uppercase tracking-wide">Lead Types</p>
-                        <p className="text-gray-800 font-medium capitalize">{connection.terms.leadTypes.join(", ")}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 text-xs uppercase tracking-wide">Exclusivity</p>
-                        <p className="text-gray-800 font-medium">{connection.terms.exclusivity ? "Yes" : "No"}</p>
+                        <p className="text-gray-800 font-medium">{formatPaymentTiming(connection.payment_timing as PaymentTiming)}</p>
                       </div>
                     </div>
-                    {connection.terms.notes && (
+                    {connection.message && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <p className="text-gray-600 text-sm italic">&quot;{connection.terms.notes}&quot;</p>
+                        <p className="text-gray-600 text-sm italic">&quot;{connection.message}&quot;</p>
                       </div>
                     )}
                   </div>
@@ -774,11 +766,11 @@ export default function SubmitLead() {
                     <div className="flex gap-6">
                       <div>
                         <p className="text-gray-500 text-xs">Leads Sent</p>
-                        <p className="text-gray-800 font-semibold">{connection.stats.totalLeads}</p>
+                        <p className="text-gray-800 font-semibold">{connection.total_leads}</p>
                       </div>
                       <div>
                         <p className="text-gray-500 text-xs">Total Earned</p>
-                        <p className="text-gray-800 font-semibold">${connection.stats.totalPaid.toFixed(2)}</p>
+                        <p className="text-gray-800 font-semibold">${connection.total_paid.toFixed(2)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-[#1e3a5f] font-medium group-hover:translate-x-1 transition-transform">
@@ -1396,7 +1388,7 @@ export default function SubmitLead() {
 
       // Check for active connections using email (consistent across auth & leads systems)
       const allConnections = getConnectionsByProviderEmail(providerData.email);
-      const activeConnections = allConnections.filter((c: Connection) => c.status === "active");
+      const activeConnections = allConnections.filter((c: ApiConnection) => c.status === "active");
       setProviderConnections(activeConnections);
 
       if (activeConnections.length > 0) {
@@ -1645,7 +1637,7 @@ export default function SubmitLead() {
                 Sending to: <span className="font-semibold">{activeConnection.buyerBusinessName}</span>
               </p>
               <p className="text-[#1e3a5f] text-sm">
-                You&apos;ll earn: <span className="font-bold">${activeConnection.terms.paymentTerms.ratePerLead}</span> per qualified lead
+                You&apos;ll earn: <span className="font-bold">${activeConnection.rate_per_lead}</span> per qualified lead
               </p>
               <button
                 onClick={() => setStep("select_connection")}

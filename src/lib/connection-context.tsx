@@ -8,465 +8,507 @@ import {
   ReactNode,
   useCallback,
 } from "react";
-import {
-  Connection,
-  ConnectionRequest,
-  ContractTerms,
-  getWeekStartDate,
-  getMonthStartDate,
-} from "./connection-types";
+import { useSession } from "next-auth/react";
 
-const STORAGE_KEYS = {
-  REQUESTS: "leadzpay_connection_requests",
-  CONNECTIONS: "leadzpay_connections",
-};
+// Connection type matching API response with camelCase aliases for dashboard compatibility
+export interface ApiConnection {
+  id: string;
+  provider_id: string;
+  buyer_id: string;
+  status: string;
+  rate_per_lead: number;
+  payment_timing: string;
+  weekly_lead_cap: number | null;
+  monthly_lead_cap: number | null;
+  total_leads: number;
+  total_paid: number;
+  termination_notice_days: number;
+  terms_updated_at: string | null;
+  initiator: string;
+  message: string | null;
+  created_at: string;
+  accepted_at: string | null;
+  // Enriched fields from API
+  provider_name?: string;
+  provider_email?: string;
+  buyer_name?: string;
+  buyer_email?: string;
+  // CamelCase aliases for dashboard compatibility
+  providerId: string;
+  providerName: string;
+  providerEmail: string;
+  buyerId: string;
+  buyerBusinessName: string;
+  createdAt: string;
+}
+
+// Transform API response to add camelCase aliases
+function transformConnection(conn: any): ApiConnection {
+  return {
+    ...conn,
+    providerId: conn.provider_id,
+    providerName: conn.provider_name || "",
+    providerEmail: conn.provider_email || "",
+    buyerId: conn.buyer_id,
+    buyerBusinessName: conn.buyer_name || "",
+    createdAt: conn.created_at,
+  };
+}
 
 interface ConnectionContextType {
-  // Connection Requests
-  requests: ConnectionRequest[];
-  getRequestsForBuyer: (buyerId: string) => ConnectionRequest[];
-  getRequestsForProvider: (providerId: string) => ConnectionRequest[];
-  getInvitationsForProvider: (providerEmail: string) => ConnectionRequest[];
+  // State
+  connections: ApiConnection[];
+  loading: boolean;
+  error: string | null;
+
+  // Refresh data from API
+  refreshConnections: () => Promise<void>;
 
   // Provider actions
-  sendConnectionRequest: (
-    providerId: string,
-    providerName: string,
-    providerEmail: string,
-    buyerId: string,
-    buyerBusinessName: string,
-    message?: string
-  ) => ConnectionRequest;
-  acceptTerms: (requestId: string) => Connection | null;
-  declineTerms: (requestId: string) => void;
+  sendConnectionRequest: (buyerId: string, message?: string) => Promise<ApiConnection | null>;
+  acceptTerms: (connectionId: string) => Promise<boolean>;
+  declineTerms: (connectionId: string) => Promise<boolean>;
 
-  // Buyer actions - including initiating connections
+  // Buyer actions
   sendInvitationToProvider: (
-    buyerId: string,
-    buyerBusinessName: string,
     providerEmail: string,
-    providerName: string,
-    terms: ContractTerms,
+    terms: {
+      ratePerLead: number;
+      paymentTiming?: string;
+      weeklyLeadCap?: number;
+      monthlyLeadCap?: number;
+      terminationNoticeDays?: number;
+    },
     message?: string
-  ) => ConnectionRequest;
-  setTermsForRequest: (requestId: string, terms: ContractTerms) => void;
-  rejectRequest: (requestId: string) => void;
+  ) => Promise<ApiConnection | null>;
+  setTermsForRequest: (
+    connectionId: string,
+    terms: {
+      ratePerLead: number;
+      paymentTiming?: string;
+      weeklyLeadCap?: number;
+      monthlyLeadCap?: number;
+      terminationNoticeDays?: number;
+    }
+  ) => Promise<boolean>;
+  rejectRequest: (connectionId: string) => Promise<boolean>;
+  updateConnectionTerms: (
+    connectionId: string,
+    terms: {
+      ratePerLead?: number;
+      paymentTiming?: string;
+      weeklyLeadCap?: number | null;
+      monthlyLeadCap?: number | null;
+      terminationNoticeDays?: number;
+    }
+  ) => Promise<boolean>;
 
-  // Connections
-  connections: Connection[];
-  getConnectionsForBuyer: (buyerId: string) => Connection[];
-  getConnectionsForProvider: (providerId: string) => Connection[];
-  getConnectionsByProviderEmail: (email: string) => Connection[];
-  getActiveConnectionForProvider: (providerId: string) => Connection | null;
-  terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
-  updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
+  // Shared actions
+  terminateConnection: (connectionId: string) => Promise<boolean>;
 
-  // Stats
+  // Helpers
+  getConnectionsForBuyer: (buyerId: string) => ApiConnection[];
+  getConnectionsForProvider: (providerId: string) => ApiConnection[];
+  getActiveConnectionForProvider: (providerId: string) => ApiConnection | null;
+  getPendingRequestsForBuyer: (buyerId: string) => ApiConnection[];
+  getPendingTermsForProvider: (providerId: string) => ApiConnection[];
+
+  // Legacy compatibility (used by existing dashboards)
+  getRequestsForBuyer: (buyerId: string) => ApiConnection[];
+  getRequestsForProvider: (providerId: string) => ApiConnection[];
+  getInvitationsForProvider: (providerEmail: string) => ApiConnection[];
+  getConnectionsByProviderEmail: (email: string) => ApiConnection[];
   updateConnectionStats: (connectionId: string, leadPayout: number) => void;
 }
 
 const ConnectionContext = createContext<ConnectionContextType | undefined>(undefined);
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
-  const [requests, setRequests] = useState<ConnectionRequest[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const { data: session } = useSession();
+  const [connections, setConnections] = useState<ApiConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Demo companies to filter out (these were accidentally created during testing)
-  const DEMO_COMPANIES_TO_REMOVE = [
-    "ABC Insurance Agency",
-    "Premier Auto Insurance",
-    "SafeGuard Insurance Co.",
-  ];
-
-  // Load from localStorage on mount and filter out demo data
-  useEffect(() => {
-    try {
-      const savedRequests = localStorage.getItem(STORAGE_KEYS.REQUESTS);
-      const savedConnections = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
-
-      if (savedRequests) {
-        try {
-          const parsed = JSON.parse(savedRequests);
-          if (Array.isArray(parsed)) {
-            // Filter out demo companies
-            const filtered = parsed.filter((r: ConnectionRequest) =>
-              !DEMO_COMPANIES_TO_REMOVE.includes(r.buyerBusinessName)
-            );
-            setRequests(filtered);
-            // Also clean up localStorage
-            if (filtered.length !== parsed.length) {
-              localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(filtered));
-            }
-          }
-        } catch (e) {
-          console.error("[ConnectionContext] Failed to parse requests:", e);
-          localStorage.removeItem(STORAGE_KEYS.REQUESTS);
-        }
-      }
-      if (savedConnections) {
-        try {
-          const parsed = JSON.parse(savedConnections);
-          if (Array.isArray(parsed)) {
-            // Filter out demo companies
-            const filtered = parsed.filter((c: Connection) =>
-              !DEMO_COMPANIES_TO_REMOVE.includes(c.buyerBusinessName)
-            );
-            setConnections(filtered);
-            // Also clean up localStorage
-            if (filtered.length !== parsed.length) {
-              localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(filtered));
-            }
-          }
-        } catch (e) {
-          console.error("[ConnectionContext] Failed to parse connections:", e);
-          localStorage.removeItem(STORAGE_KEYS.CONNECTIONS);
-        }
-      }
-    } catch (e) {
-      console.error("[ConnectionContext] localStorage error:", e);
+  // Fetch connections from API
+  const refreshConnections = useCallback(async () => {
+    if (!session?.user) {
+      setConnections([]);
+      setLoading(false);
+      return;
     }
-  }, []);
 
-  // Save to localStorage on change
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/connections");
+      if (!response.ok) {
+        throw new Error("Failed to fetch connections");
+      }
+      const data = await response.json();
+      setConnections((data.connections || []).map(transformConnection));
+    } catch (err) {
+      console.error("[ConnectionContext] Error fetching connections:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  // Load connections on mount and when session changes
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
-  }, [requests]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(connections));
-  }, [connections]);
-
-  // Get requests for a buyer
-  const getRequestsForBuyer = useCallback(
-    (buyerId: string) => {
-      return requests.filter((r) => r.buyerId === buyerId);
-    },
-    [requests]
-  );
-
-  // Get requests for a provider
-  const getRequestsForProvider = useCallback(
-    (providerId: string) => {
-      return requests.filter((r) => r.providerId === providerId);
-    },
-    [requests]
-  );
+    refreshConnections();
+  }, [refreshConnections]);
 
   // Provider sends connection request to buyer
   const sendConnectionRequest = useCallback(
-    (
-      providerId: string,
-      providerName: string,
-      providerEmail: string,
-      buyerId: string,
-      buyerBusinessName: string,
-      message?: string
-    ): ConnectionRequest => {
-      // Check if request already exists
-      const existingRequest = requests.find(
-        (r) => r.providerId === providerId && r.buyerId === buyerId && r.status === "pending"
-      );
-      if (existingRequest) {
-        return existingRequest;
+    async (buyerId: string, message?: string): Promise<ApiConnection | null> => {
+      try {
+        const response = await fetch("/api/connections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ buyerId, message }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to send request");
+        }
+
+        const data = await response.json();
+        await refreshConnections();
+        return data.connection;
+      } catch (err) {
+        console.error("[ConnectionContext] sendConnectionRequest error:", err);
+        return null;
       }
-
-      const newRequest: ConnectionRequest = {
-        id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        providerId,
-        providerName,
-        providerEmail,
-        buyerId,
-        buyerBusinessName,
-        message,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      };
-
-      setRequests((prev) => [...prev, newRequest]);
-      return newRequest;
     },
-    [requests]
+    [refreshConnections]
   );
 
-  // Buyer sets terms for a request
-  const setTermsForRequest = useCallback(
-    (requestId: string, terms: ContractTerms) => {
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId
-            ? {
-                ...r,
-                status: "terms_set" as const,
-                proposedTerms: terms,
-                reviewedAt: new Date().toISOString(),
-              }
-            : r
-        )
-      );
+  // Buyer sends invitation to provider with pre-set terms
+  const sendInvitationToProvider = useCallback(
+    async (
+      providerEmail: string,
+      terms: {
+        ratePerLead: number;
+        paymentTiming?: string;
+        weeklyLeadCap?: number;
+        monthlyLeadCap?: number;
+        terminationNoticeDays?: number;
+      },
+      message?: string
+    ): Promise<ApiConnection | null> => {
+      try {
+        const response = await fetch("/api/connections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ providerEmail, terms, message }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to send invitation");
+        }
+
+        const data = await response.json();
+        await refreshConnections();
+        return data.connection;
+      } catch (err) {
+        console.error("[ConnectionContext] sendInvitationToProvider error:", err);
+        return null;
+      }
     },
-    []
+    [refreshConnections]
+  );
+
+  // Buyer sets terms for a pending request
+  const setTermsForRequest = useCallback(
+    async (
+      connectionId: string,
+      terms: {
+        ratePerLead: number;
+        paymentTiming?: string;
+        weeklyLeadCap?: number;
+        monthlyLeadCap?: number;
+        terminationNoticeDays?: number;
+      }
+    ): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set_terms", ...terms }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to set terms");
+        }
+
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] setTermsForRequest error:", err);
+        return false;
+      }
+    },
+    [refreshConnections]
   );
 
   // Buyer rejects a request
-  const rejectRequest = useCallback((requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              status: "rejected" as const,
-              reviewedAt: new Date().toISOString(),
-            }
-          : r
-      )
-    );
-  }, []);
+  const rejectRequest = useCallback(
+    async (connectionId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reject" }),
+        });
 
-  // Get invitations for a provider (buyer-initiated requests with terms already set)
-  const getInvitationsForProvider = useCallback(
-    (providerEmail: string) => {
-      return requests.filter(
-        (r) =>
-          r.providerEmail.toLowerCase() === providerEmail.toLowerCase() &&
-          r.status === "terms_set"
-      );
-    },
-    [requests]
-  );
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to reject request");
+        }
 
-  // Buyer sends invitation to provider with terms pre-set
-  const sendInvitationToProvider = useCallback(
-    (
-      buyerId: string,
-      buyerBusinessName: string,
-      providerEmail: string,
-      providerName: string,
-      terms: ContractTerms,
-      message?: string
-    ): ConnectionRequest => {
-      // Check if invitation already exists
-      const existingRequest = requests.find(
-        (r) =>
-          r.providerEmail.toLowerCase() === providerEmail.toLowerCase() &&
-          r.buyerId === buyerId &&
-          (r.status === "pending" || r.status === "terms_set")
-      );
-      if (existingRequest) {
-        return existingRequest;
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] rejectRequest error:", err);
+        return false;
       }
-
-      const now = new Date().toISOString();
-      const newRequest: ConnectionRequest = {
-        id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        providerId: "", // Will be filled when provider accepts
-        providerName,
-        providerEmail,
-        buyerId,
-        buyerBusinessName,
-        message,
-        status: "terms_set", // Skip pending - terms are already set by buyer
-        proposedTerms: terms,
-        createdAt: now,
-        reviewedAt: now, // Terms set at creation time
-      };
-
-      setRequests((prev) => [...prev, newRequest]);
-      return newRequest;
     },
-    [requests]
+    [refreshConnections]
   );
 
-  // Provider accepts terms - creates connection
+  // Provider accepts terms
   const acceptTerms = useCallback(
-    (requestId: string): Connection | null => {
-      const request = requests.find((r) => r.id === requestId);
-      if (!request || request.status !== "terms_set" || !request.proposedTerms) {
-        return null;
+    async (connectionId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "accept" }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to accept terms");
+        }
+
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] acceptTerms error:", err);
+        return false;
       }
-
-      // Create the connection
-      const now = new Date().toISOString();
-      const newConnection: Connection = {
-        id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        providerId: request.providerId,
-        providerName: request.providerName,
-        providerEmail: request.providerEmail,
-        buyerId: request.buyerId,
-        buyerBusinessName: request.buyerBusinessName,
-        status: "active",
-        terms: request.proposedTerms,
-        requestedAt: request.createdAt,
-        termsSetAt: request.reviewedAt || now,
-        acceptedAt: now,
-        stats: {
-          totalLeads: 0,
-          totalPaid: 0,
-          leadsThisWeek: 0,
-          leadsThisMonth: 0,
-          weekStartDate: getWeekStartDate(),
-          monthStartDate: getMonthStartDate(),
-        },
-      };
-
-      setConnections((prev) => [...prev, newConnection]);
-
-      // Update request status
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId
-            ? {
-                ...r,
-                status: "accepted" as const,
-                respondedAt: now,
-              }
-            : r
-        )
-      );
-
-      return newConnection;
     },
-    [requests]
+    [refreshConnections]
   );
 
   // Provider declines terms
-  const declineTerms = useCallback((requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              status: "declined" as const,
-              respondedAt: new Date().toISOString(),
-            }
-          : r
-      )
-    );
-  }, []);
+  const declineTerms = useCallback(
+    async (connectionId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "decline" }),
+        });
 
-  // Get connections for buyer
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to decline terms");
+        }
+
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] declineTerms error:", err);
+        return false;
+      }
+    },
+    [refreshConnections]
+  );
+
+  // Terminate a connection (either party)
+  const terminateConnection = useCallback(
+    async (connectionId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "terminate" }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to terminate connection");
+        }
+
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] terminateConnection error:", err);
+        return false;
+      }
+    },
+    [refreshConnections]
+  );
+
+  // Buyer updates terms on active connection
+  const updateConnectionTerms = useCallback(
+    async (
+      connectionId: string,
+      terms: {
+        ratePerLead?: number;
+        paymentTiming?: string;
+        weeklyLeadCap?: number | null;
+        monthlyLeadCap?: number | null;
+        terminationNoticeDays?: number;
+      }
+    ): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/connections/${connectionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update_terms", ...terms }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update terms");
+        }
+
+        await refreshConnections();
+        return true;
+      } catch (err) {
+        console.error("[ConnectionContext] updateConnectionTerms error:", err);
+        return false;
+      }
+    },
+    [refreshConnections]
+  );
+
+  // Helper: Get connections for buyer
   const getConnectionsForBuyer = useCallback(
     (buyerId: string) => {
-      return connections.filter((c) => c.buyerId === buyerId);
+      return connections.filter((c) => c.buyer_id === buyerId);
     },
     [connections]
   );
 
-  // Get connections for provider
+  // Helper: Get connections for provider
   const getConnectionsForProvider = useCallback(
     (providerId: string) => {
-      return connections.filter((c) => c.providerId === providerId);
+      return connections.filter((c) => c.provider_id === providerId);
     },
     [connections]
   );
 
-  // Get connections by provider email (for cross-system compatibility)
+  // Helper: Get active connection for provider
+  const getActiveConnectionForProvider = useCallback(
+    (providerId: string): ApiConnection | null => {
+      return (
+        connections.find(
+          (c) => c.provider_id === providerId && c.status === "active"
+        ) || null
+      );
+    },
+    [connections]
+  );
+
+  // Helper: Get pending requests for buyer to review
+  const getPendingRequestsForBuyer = useCallback(
+    (buyerId: string) => {
+      return connections.filter(
+        (c) => c.buyer_id === buyerId && c.status === "pending_buyer_review"
+      );
+    },
+    [connections]
+  );
+
+  // Helper: Get pending terms for provider to accept/decline
+  const getPendingTermsForProvider = useCallback(
+    (providerId: string) => {
+      return connections.filter(
+        (c) => c.provider_id === providerId && c.status === "pending_provider_accept"
+      );
+    },
+    [connections]
+  );
+
+  // Legacy compatibility: Get all requests for buyer (any status)
+  const getRequestsForBuyer = useCallback(
+    (buyerId: string) => {
+      return connections.filter((c) => c.buyer_id === buyerId);
+    },
+    [connections]
+  );
+
+  // Legacy compatibility: Get all requests for provider (any status)
+  const getRequestsForProvider = useCallback(
+    (providerId: string) => {
+      return connections.filter((c) => c.provider_id === providerId);
+    },
+    [connections]
+  );
+
+  // Legacy compatibility: Get invitations for provider (terms already set by buyer)
+  const getInvitationsForProvider = useCallback(
+    (providerEmail: string) => {
+      return connections.filter(
+        (c) =>
+          c.provider_email?.toLowerCase() === providerEmail.toLowerCase() &&
+          c.status === "pending_provider_accept"
+      );
+    },
+    [connections]
+  );
+
+  // Legacy compatibility: Get connections by provider email
   const getConnectionsByProviderEmail = useCallback(
     (email: string) => {
-      return connections.filter((c) => c.providerEmail.toLowerCase() === email.toLowerCase());
+      return connections.filter(
+        (c) => c.provider_email?.toLowerCase() === email.toLowerCase()
+      );
     },
     [connections]
   );
 
-  // Get active connection for provider
-  const getActiveConnectionForProvider = useCallback(
-    (providerId: string): Connection | null => {
-      return connections.find(
-        (c) => c.providerId === providerId && c.status === "active"
-      ) || null;
-    },
-    [connections]
-  );
-
-  // Terminate a connection
-  const terminateConnection = useCallback(
-    (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => {
-      setConnections((prev) =>
-        prev.map((c) =>
-          c.id === connectionId
-            ? {
-                ...c,
-                status: "terminated" as const,
-                terminatedAt: new Date().toISOString(),
-                terminatedBy,
-                terminationReason: reason,
-              }
-            : c
-        )
-      );
-    },
-    []
-  );
-
-  // Update connection terms (buyer only)
-  const updateConnectionTerms = useCallback(
-    (connectionId: string, terms: ContractTerms) => {
-      setConnections((prev) =>
-        prev.map((c) =>
-          c.id === connectionId
-            ? {
-                ...c,
-                terms,
-              }
-            : c
-        )
-      );
-    },
-    []
-  );
-
-  // Update connection stats when lead is submitted
+  // Legacy compatibility: Update connection stats (currently just refreshes from API)
   const updateConnectionStats = useCallback(
     (connectionId: string, leadPayout: number) => {
-      const currentWeekStart = getWeekStartDate();
-      const currentMonthStart = getMonthStartDate();
-
-      setConnections((prev) =>
-        prev.map((c) => {
-          if (c.id !== connectionId) return c;
-
-          // Check if we need to reset weekly/monthly counters
-          const resetWeekly = c.stats.weekStartDate !== currentWeekStart;
-          const resetMonthly = c.stats.monthStartDate !== currentMonthStart;
-
-          return {
-            ...c,
-            stats: {
-              totalLeads: c.stats.totalLeads + 1,
-              totalPaid: c.stats.totalPaid + leadPayout,
-              lastLeadAt: new Date().toISOString(),
-              lastPaymentAt: new Date().toISOString(),
-              leadsThisWeek: resetWeekly ? 1 : c.stats.leadsThisWeek + 1,
-              leadsThisMonth: resetMonthly ? 1 : c.stats.leadsThisMonth + 1,
-              weekStartDate: currentWeekStart,
-              monthStartDate: currentMonthStart,
-            },
-          };
-        })
-      );
+      // Stats are tracked server-side, just refresh to get latest
+      refreshConnections();
     },
-    []
+    [refreshConnections]
   );
 
   return (
     <ConnectionContext.Provider
       value={{
-        requests,
-        getRequestsForBuyer,
-        getRequestsForProvider,
-        getInvitationsForProvider,
+        connections,
+        loading,
+        error,
+        refreshConnections,
         sendConnectionRequest,
-        acceptTerms,
-        declineTerms,
         sendInvitationToProvider,
         setTermsForRequest,
         rejectRequest,
-        connections,
-        getConnectionsForBuyer,
-        getConnectionsForProvider,
-        getConnectionsByProviderEmail,
-        getActiveConnectionForProvider,
+        acceptTerms,
+        declineTerms,
         terminateConnection,
         updateConnectionTerms,
+        getConnectionsForBuyer,
+        getConnectionsForProvider,
+        getActiveConnectionForProvider,
+        getPendingRequestsForBuyer,
+        getPendingTermsForProvider,
+        // Legacy compatibility
+        getRequestsForBuyer,
+        getRequestsForProvider,
+        getInvitationsForProvider,
+        getConnectionsByProviderEmail,
         updateConnectionStats,
       }}
     >

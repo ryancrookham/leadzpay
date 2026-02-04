@@ -6,9 +6,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useLeads, type Lead, type Provider } from "@/lib/leads-context";
 import { useAuth, useCurrentBuyer } from "@/lib/auth-context";
-import { useConnections } from "@/lib/connection-context";
+import { useConnections, type ApiConnection } from "@/lib/connection-context";
 import { isBuyer } from "@/lib/auth-types";
-import { ConnectionRequest, ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
+import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 
 type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
 
@@ -2062,7 +2062,7 @@ function AnalyticsTab({
 }: {
   leads: Lead[];
   providers: Provider[];
-  myConnections: import("@/lib/connection-types").Connection[];
+  myConnections: ApiConnection[];
 }) {
   const [uploadedData, setUploadedData] = useState<UploadedRecord[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -2816,25 +2816,18 @@ function RequestsTab({
 }: {
   buyerId: string;
   buyerBusinessName: string;
-  pendingRequests: ConnectionRequest[];
-  myConnections: import("@/lib/connection-types").Connection[];
-  setTermsForRequest: (requestId: string, terms: ContractTerms) => void;
-  rejectRequest: (requestId: string) => void;
-  updateConnectionTerms: (connectionId: string, terms: ContractTerms) => void;
-  terminateConnection: (connectionId: string, terminatedBy: "buyer" | "provider", reason?: string) => void;
-  sendInvitationToProvider: (
-    buyerId: string,
-    buyerBusinessName: string,
-    providerEmail: string,
-    providerName: string,
-    terms: ContractTerms,
-    message?: string
-  ) => ConnectionRequest;
+  pendingRequests: ApiConnection[];
+  myConnections: ApiConnection[];
+  setTermsForRequest: (requestId: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }) => Promise<boolean>;
+  rejectRequest: (requestId: string) => Promise<boolean>;
+  updateConnectionTerms: (connectionId: string, terms: { ratePerLead?: number; paymentTiming?: string; weeklyLeadCap?: number | null; monthlyLeadCap?: number | null; terminationNoticeDays?: number }) => Promise<boolean>;
+  terminateConnection: (connectionId: string) => Promise<boolean>;
+  sendInvitationToProvider: (providerEmail: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }, message?: string) => Promise<ApiConnection | null>;
   licensedStates: string[];
 }) {
-  const [selectedRequest, setSelectedRequest] = useState<ConnectionRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ApiConnection | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [selectedConnection, setSelectedConnection] = useState<import("@/lib/connection-types").Connection | null>(null);
+  const [selectedConnection, setSelectedConnection] = useState<ApiConnection | null>(null);
   const [showEditTermsModal, setShowEditTermsModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
 
@@ -2858,7 +2851,7 @@ function RequestsTab({
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
   const [pauseWhenCapReached, setPauseWhenCapReached] = useState(true);
 
-  const openTermsModal = (request: ConnectionRequest) => {
+  const openTermsModal = (request: ApiConnection) => {
     setSelectedRequest(request);
     // Reset form to defaults
     setRatePerLead(50);
@@ -2879,26 +2872,13 @@ function RequestsTab({
   const handleSetTerms = () => {
     if (!selectedRequest) return;
 
-    const terms: ContractTerms = {
-      paymentTerms: {
-        ratePerLead,
-        timing: paymentTiming,
-        minimumPayoutThreshold: minimumPayout,
-        paymentStructure: "per_lead", // Required for compliance - per lead, not per conversion
-      },
-      leadTypes,
-      exclusivity,
+    // Simplified terms for API
+    const terms = {
+      ratePerLead,
+      paymentTiming,
+      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : undefined,
+      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : undefined,
       terminationNoticeDays: terminationDays,
-      notes: notes || undefined,
-      // Lead caps - buyer protection from unlimited lead obligations
-      leadCaps: enableLeadCaps ? {
-        weeklyLimit: weeklyLeadCap,
-        monthlyLimit: monthlyLeadCap,
-        pauseWhenCapReached,
-      } : undefined,
-      licensedStates, // States where buyer is licensed
-      complianceAcknowledged: true, // Buyer sets terms = acknowledges compliance
-      agreementVersion: "1.0.0",
     };
 
     setTermsForRequest(selectedRequest.id, terms);
@@ -2912,47 +2892,33 @@ function RequestsTab({
     }
   };
 
-  const openEditTermsModal = (connection: import("@/lib/connection-types").Connection) => {
+  const openEditTermsModal = (connection: ApiConnection) => {
     setSelectedConnection(connection);
-    setRatePerLead(connection.terms.paymentTerms.ratePerLead);
-    setPaymentTiming(connection.terms.paymentTerms.timing);
-    setMinimumPayout(connection.terms.paymentTerms.minimumPayoutThreshold);
-    setLeadTypes(connection.terms.leadTypes);
-    setExclusivity(connection.terms.exclusivity);
-    setTerminationDays(connection.terms.terminationNoticeDays);
-    setNotes(connection.terms.notes || "");
+    setRatePerLead(connection.rate_per_lead);
+    setPaymentTiming(connection.payment_timing as "per_lead" | "weekly" | "biweekly" | "monthly");
+    setMinimumPayout(undefined);
+    setLeadTypes(["auto"]);
+    setExclusivity(false);
+    setTerminationDays(connection.termination_notice_days);
+    setNotes("");
     // Load lead caps
-    const caps = connection.terms.leadCaps;
-    setEnableLeadCaps(!!caps);
-    setWeeklyLeadCap(caps?.weeklyLimit);
-    setMonthlyLeadCap(caps?.monthlyLimit);
-    setPauseWhenCapReached(caps?.pauseWhenCapReached ?? true);
+    setEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
+    setWeeklyLeadCap(connection.weekly_lead_cap || undefined);
+    setMonthlyLeadCap(connection.monthly_lead_cap || undefined);
+    setPauseWhenCapReached(true);
     setShowEditTermsModal(true);
   };
 
   const handleUpdateTerms = () => {
     if (!selectedConnection) return;
 
-    const terms: ContractTerms = {
-      paymentTerms: {
-        ratePerLead,
-        timing: paymentTiming,
-        minimumPayoutThreshold: minimumPayout,
-        paymentStructure: "per_lead", // Required for compliance - per lead, not per conversion
-      },
-      leadTypes,
-      exclusivity,
+    // Simplified terms for API
+    const terms = {
+      ratePerLead,
+      paymentTiming,
+      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : null,
+      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : null,
       terminationNoticeDays: terminationDays,
-      notes: notes || undefined,
-      // Lead caps - buyer protection from unlimited lead obligations
-      leadCaps: enableLeadCaps ? {
-        weeklyLimit: weeklyLeadCap,
-        monthlyLimit: monthlyLeadCap,
-        pauseWhenCapReached,
-      } : undefined,
-      licensedStates, // States where buyer is licensed
-      complianceAcknowledged: true,
-      agreementVersion: "1.0.0",
     };
 
     updateConnectionTerms(selectedConnection.id, terms);
@@ -2962,7 +2928,7 @@ function RequestsTab({
 
   const handleTerminate = (connectionId: string, providerName: string) => {
     if (confirm(`Are you sure you want to terminate your connection with ${providerName}? They will no longer be able to submit leads.`)) {
-      terminateConnection(connectionId, "buyer", "Terminated by business");
+      terminateConnection(connectionId);
     }
   };
 
@@ -2985,44 +2951,33 @@ function RequestsTab({
     setShowInviteModal(true);
   };
 
-  const handleSendInvitation = () => {
+  const handleSendInvitation = async () => {
     if (!inviteProviderEmail || !inviteProviderName) {
       alert("Please enter the provider's name and email");
       return;
     }
 
-    const terms: ContractTerms = {
-      paymentTerms: {
-        ratePerLead,
-        timing: paymentTiming,
-        minimumPayoutThreshold: minimumPayout,
-        paymentStructure: "per_lead",
-      },
-      leadTypes,
-      exclusivity,
+    // Simplified terms for API
+    const terms = {
+      ratePerLead,
+      paymentTiming,
+      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : undefined,
+      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : undefined,
       terminationNoticeDays: terminationDays,
-      notes: notes || undefined,
-      leadCaps: enableLeadCaps ? {
-        weeklyLimit: weeklyLeadCap,
-        monthlyLimit: monthlyLeadCap,
-        pauseWhenCapReached,
-      } : undefined,
-      licensedStates,
-      complianceAcknowledged: true,
-      agreementVersion: "1.0.0",
     };
 
-    sendInvitationToProvider(
-      buyerId,
-      buyerBusinessName,
+    const result = await sendInvitationToProvider(
       inviteProviderEmail,
-      inviteProviderName,
       terms,
       inviteMessage || undefined
     );
 
     setShowInviteModal(false);
-    alert(`Invitation sent to ${inviteProviderName}! They will see your offer when they sign in.`);
+    if (result) {
+      alert(`Invitation sent to ${inviteProviderName}! They will see your offer when they sign in.`);
+    } else {
+      alert("Failed to send invitation. Provider may not be registered.");
+    }
   };
 
   const activeConnections = myConnections.filter(c => c.status === "active");
@@ -3122,9 +3077,9 @@ function RequestsTab({
                       <p className="font-semibold text-gray-800">{connection.providerName}</p>
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[#1e3a5f] font-medium">${connection.terms.paymentTerms.ratePerLead}/lead</span>
+                        <span className="text-[#1e3a5f] font-medium">${connection.rate_per_lead}/lead</span>
                         <span className="text-gray-400">•</span>
-                        <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.terms.paymentTerms.timing)}</span>
+                        <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>
                     </div>
                   </div>
@@ -3144,18 +3099,18 @@ function RequestsTab({
                       </button>
                     </div>
                     <p className="text-gray-400 text-xs">
-                      Connected since {new Date(connection.acceptedAt).toLocaleDateString()}
+                      Connected since {new Date(connection.accepted_at || connection.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
                   <div>
                     <p className="text-gray-500 text-sm">Total Leads</p>
-                    <p className="text-xl font-bold text-[#1e3a5f]">{connection.stats.totalLeads}</p>
+                    <p className="text-xl font-bold text-[#1e3a5f]">{connection.total_leads}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 text-sm">Total Paid</p>
-                    <p className="text-xl font-bold text-emerald-600">${connection.stats.totalPaid}</p>
+                    <p className="text-xl font-bold text-emerald-600">${connection.total_paid}</p>
                   </div>
                 </div>
               </div>
@@ -3175,7 +3130,7 @@ function RequestsTab({
               <div key={connection.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg opacity-60">
                 <div>
                   <p className="font-medium text-gray-600">{connection.providerName}</p>
-                  <p className="text-gray-400 text-sm">Terminated {connection.terminatedAt ? new Date(connection.terminatedAt).toLocaleDateString() : ""}</p>
+                  <p className="text-gray-400 text-sm">Terminated</p>
                 </div>
                 <span className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded-full">Terminated</span>
               </div>

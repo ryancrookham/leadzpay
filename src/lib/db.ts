@@ -35,18 +35,31 @@ export interface DbUser {
   updated_at: string;
 }
 
+export type ConnectionStatus =
+  | 'pending_buyer_review'
+  | 'pending_provider_accept'
+  | 'active'
+  | 'declined_by_provider'
+  | 'rejected_by_buyer'
+  | 'terminated';
+
 export interface DbConnection {
   id: string;
   provider_id: string;
   buyer_id: string;
-  status: 'pending' | 'accepted' | 'declined' | 'terminated';
+  status: ConnectionStatus;
   rate_per_lead: number;
   payment_timing: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
   weekly_lead_cap: number | null;
   monthly_lead_cap: number | null;
   total_leads: number;
   total_paid: number;
+  termination_notice_days: number;
+  terms_updated_at: string | null;
+  initiator: 'provider' | 'buyer';
+  message: string | null;
   created_at: string;
+  accepted_at: string | null;
 }
 
 export interface DbLead {
@@ -178,6 +191,146 @@ export async function getConnectionsByUserId(userId: string, role: 'provider' | 
       SELECT * FROM connections WHERE buyer_id = ${userId} ORDER BY created_at DESC
     `;
     return result as unknown as DbConnection[];
+  }
+}
+
+export async function getConnectionById(id: string): Promise<DbConnection | null> {
+  const sql = getSql();
+  const result = await sql`SELECT * FROM connections WHERE id = ${id} LIMIT 1`;
+  return first<DbConnection>(result);
+}
+
+export async function getConnectionByProviderAndBuyer(providerId: string, buyerId: string): Promise<DbConnection | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connections
+    WHERE provider_id = ${providerId} AND buyer_id = ${buyerId}
+    LIMIT 1
+  `;
+  return first<DbConnection>(result);
+}
+
+export async function getActiveConnectionForProvider(providerId: string): Promise<DbConnection | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connections
+    WHERE provider_id = ${providerId} AND status = 'active'
+    LIMIT 1
+  `;
+  return first<DbConnection>(result);
+}
+
+export async function getPendingRequestsForBuyer(buyerId: string): Promise<DbConnection[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connections
+    WHERE buyer_id = ${buyerId} AND status = 'pending_buyer_review'
+    ORDER BY created_at DESC
+  `;
+  return result as unknown as DbConnection[];
+}
+
+export async function getPendingTermsForProvider(providerId: string): Promise<DbConnection[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connections
+    WHERE provider_id = ${providerId} AND status = 'pending_provider_accept'
+    ORDER BY created_at DESC
+  `;
+  return result as unknown as DbConnection[];
+}
+
+export async function createConnection(data: {
+  provider_id: string;
+  buyer_id: string;
+  initiator: 'provider' | 'buyer';
+  message?: string;
+  status?: ConnectionStatus;
+  rate_per_lead?: number;
+  payment_timing?: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
+  weekly_lead_cap?: number;
+  monthly_lead_cap?: number;
+  termination_notice_days?: number;
+}): Promise<DbConnection> {
+  const sql = getSql();
+  const status = data.status || (data.initiator === 'provider' ? 'pending_buyer_review' : 'pending_provider_accept');
+  const result = await sql`
+    INSERT INTO connections (
+      provider_id, buyer_id, initiator, message, status,
+      rate_per_lead, payment_timing, weekly_lead_cap, monthly_lead_cap, termination_notice_days
+    ) VALUES (
+      ${data.provider_id},
+      ${data.buyer_id},
+      ${data.initiator},
+      ${data.message || null},
+      ${status},
+      ${data.rate_per_lead || 50},
+      ${data.payment_timing || 'per_lead'},
+      ${data.weekly_lead_cap || null},
+      ${data.monthly_lead_cap || null},
+      ${data.termination_notice_days || 7}
+    )
+    RETURNING *
+  `;
+  return first<DbConnection>(result)!;
+}
+
+export async function updateConnection(id: string, updates: {
+  status?: ConnectionStatus;
+  rate_per_lead?: number;
+  payment_timing?: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
+  weekly_lead_cap?: number | null;
+  monthly_lead_cap?: number | null;
+  termination_notice_days?: number;
+  total_leads?: number;
+  total_paid?: number;
+  accepted_at?: string;
+}): Promise<DbConnection | null> {
+  const sql = getSql();
+
+  // Build the update - we'll track if terms changed
+  const termsChanged = updates.rate_per_lead !== undefined ||
+                       updates.weekly_lead_cap !== undefined ||
+                       updates.monthly_lead_cap !== undefined ||
+                       updates.termination_notice_days !== undefined;
+
+  const result = await sql`
+    UPDATE connections SET
+      status = COALESCE(${updates.status || null}, status),
+      rate_per_lead = COALESCE(${updates.rate_per_lead || null}, rate_per_lead),
+      payment_timing = COALESCE(${updates.payment_timing || null}, payment_timing),
+      weekly_lead_cap = CASE WHEN ${updates.weekly_lead_cap !== undefined} THEN ${updates.weekly_lead_cap ?? null} ELSE weekly_lead_cap END,
+      monthly_lead_cap = CASE WHEN ${updates.monthly_lead_cap !== undefined} THEN ${updates.monthly_lead_cap ?? null} ELSE monthly_lead_cap END,
+      termination_notice_days = COALESCE(${updates.termination_notice_days || null}, termination_notice_days),
+      total_leads = COALESCE(${updates.total_leads || null}, total_leads),
+      total_paid = COALESCE(${updates.total_paid || null}, total_paid),
+      accepted_at = COALESCE(${updates.accepted_at || null}, accepted_at),
+      terms_updated_at = CASE WHEN ${termsChanged} THEN NOW() ELSE terms_updated_at END
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbConnection>(result);
+}
+
+// User discovery queries
+export async function getUsersByRole(role: 'provider' | 'buyer', excludeUserId?: string): Promise<DbUser[]> {
+  const sql = getSql();
+  if (excludeUserId) {
+    const result = await sql`
+      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, created_at
+      FROM users
+      WHERE role = ${role} AND is_active = true AND id != ${excludeUserId}
+      ORDER BY created_at DESC
+    `;
+    return result as unknown as DbUser[];
+  } else {
+    const result = await sql`
+      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, created_at
+      FROM users
+      WHERE role = ${role} AND is_active = true
+      ORDER BY created_at DESC
+    `;
+    return result as unknown as DbUser[];
   }
 }
 
