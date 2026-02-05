@@ -1369,8 +1369,8 @@ function ConnectionTab({
                   <h4 className="text-lg font-bold text-gray-800 mb-2">Get Quote - Quick & Easy</h4>
                   <p className="text-gray-600 text-sm mb-4">Customer might need insurance. High-value passive lead.</p>
                   <ul className="text-sm text-gray-500 space-y-1">
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Just upload driver&apos;s license</li>
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email &amp; phone only</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email &amp; phone contact info</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Verify vehicle with plate photo</li>
                     <li className="flex items-center gap-2"><span className="text-blue-500">•</span> High retention potential</li>
                   </ul>
                 </button>
