@@ -27,6 +27,15 @@ export interface CRMLeadData {
   licenseExpiration: string;
   licenseValid: boolean;
 
+  // Vehicle Info (from plate verification)
+  plateNumber?: string;
+  plateState?: string;
+  plateVerified?: boolean;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleYear?: number;
+  vehicleColor?: string;
+
   // Lead Source
   source: string;
   leadType: string;
@@ -60,6 +69,14 @@ interface EZLinksPayload {
       gender: string;
       lead_source: string;
       provider_name: string;
+      // Vehicle fields
+      license_plate?: string;
+      plate_state?: string;
+      plate_verified?: string;
+      vehicle_make?: string;
+      vehicle_model?: string;
+      vehicle_year?: string;
+      vehicle_color?: string;
     };
   };
   tags?: string[];
@@ -90,9 +107,22 @@ function transformToEZLinksFormat(data: CRMLeadData): EZLinksPayload {
         gender: data.gender,
         lead_source: data.source,
         provider_name: data.providerName || "WOML",
+        // Vehicle fields
+        license_plate: data.plateNumber,
+        plate_state: data.plateState,
+        plate_verified: data.plateVerified ? "Yes" : "No",
+        vehicle_make: data.vehicleMake,
+        vehicle_model: data.vehicleModel,
+        vehicle_year: data.vehicleYear?.toString(),
+        vehicle_color: data.vehicleColor,
       },
     },
-    tags: ["auto_insurance", "leadzpay", data.licenseValid ? "valid_license" : "expired_license"],
+    tags: [
+      "auto_insurance",
+      "leadzpay",
+      data.licenseValid ? "valid_license" : "expired_license",
+      data.plateVerified ? "plate_verified" : "plate_unverified",
+    ],
     source: "leadzpay_api",
   };
 }
@@ -106,7 +136,12 @@ export async function POST(request: NextRequest) {
       phone,
       providerId,
       providerName,
-      leadType = "quote"
+      leadType = "quote",
+      // Plate verification data
+      plateNumber,
+      plateState,
+      plateVerified,
+      vehicle,
     } = body as {
       licenseData: ExtractedLicenseData;
       email: string;
@@ -114,6 +149,15 @@ export async function POST(request: NextRequest) {
       providerId?: string;
       providerName?: string;
       leadType?: string;
+      plateNumber?: string;
+      plateState?: string;
+      plateVerified?: boolean;
+      vehicle?: {
+        make?: string;
+        model?: string;
+        year?: number;
+        color?: string;
+      };
     };
 
     if (!licenseData || !email || !phone) {
@@ -145,6 +189,15 @@ export async function POST(request: NextRequest) {
       licenseState: licenseData.licenseState,
       licenseExpiration: licenseData.expirationDate,
       licenseValid: licenseData.isValid && !licenseData.isExpired,
+      // Vehicle/Plate data
+      plateNumber,
+      plateState,
+      plateVerified,
+      vehicleMake: vehicle?.make,
+      vehicleModel: vehicle?.model,
+      vehicleYear: vehicle?.year,
+      vehicleColor: vehicle?.color,
+      // Source
       source: "WOML",
       leadType,
       providerId,

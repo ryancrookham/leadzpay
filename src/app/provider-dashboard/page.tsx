@@ -57,8 +57,8 @@ type LeadChannel = "asap" | "quote";
 
 // Form step type
 // ASAP flow: channel -> basic_info -> success (agent calls)
-// Quote flow: channel -> license_upload -> success (simple 3-field form)
-type FormStep = "channel" | "basic_info" | "license_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
+// Quote flow: channel -> license_upload -> plate_upload -> success (with plate verification)
+type FormStep = "channel" | "basic_info" | "license_upload" | "plate_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
 
 // US States list
 const US_STATES = [
@@ -627,6 +627,20 @@ function ConnectionTab({
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
 
+  // License plate verification state
+  const [plateImage, setPlateImage] = useState<string | null>(null);
+  const [plateNumber, setPlateNumber] = useState("");
+  const [plateState, setPlateState] = useState("");
+  const [isVerifyingPlate, setIsVerifyingPlate] = useState(false);
+  const [plateVerificationResult, setPlateVerificationResult] = useState<{
+    success: boolean;
+    extractedPlate?: { plateNumber: string; state?: string; confidence: number };
+    matchesManualEntry: boolean;
+    mismatchDetails?: string;
+    vehicle?: { verified: boolean; make?: string; model?: string; year?: number; color?: string };
+  } | null>(null);
+  const [plateError, setPlateError] = useState<string | null>(null);
+
   // Fetch buyers from API
   type DiscoveryBuyer = {
     id: string;
@@ -691,6 +705,13 @@ function ConnectionTab({
     setExtractedLicenseData(null);
     setIsExtracting(false);
     setExtractionError(null);
+    // Reset plate verification
+    setPlateImage(null);
+    setPlateNumber("");
+    setPlateState("");
+    setIsVerifyingPlate(false);
+    setPlateVerificationResult(null);
+    setPlateError(null);
   };
 
   // Generate quotes using the insurance calculator
@@ -879,7 +900,8 @@ function ConnectionTab({
   // Handle simple quote submission (license upload flow)
   const handleSimpleQuoteSubmit = async () => {
     if (!activeConnection || !currentProvider) return;
-    if (!licenseImage || !quoteEmail || !quotePhone) return;
+    if (!quoteEmail || !quotePhone) return;
+    if (!plateImage || !plateNumber || !plateState) return;
 
     // Check lead caps before submission
     const capStatus = checkLeadCaps(activeConnection);
@@ -890,8 +912,16 @@ function ConnectionTab({
 
     const payout = activeConnection.rate_per_lead;
 
-    // Use extracted name if available, otherwise placeholder
-    const customerName = extractedLicenseData?.fullName || "License Holder";
+    // Use extracted name if available, otherwise use email prefix as placeholder
+    const customerName = extractedLicenseData?.fullName || quoteEmail.split("@")[0] || "Customer";
+
+    // Build vehicle description from verification
+    let carModel = "Pending Verification";
+    let carYear = new Date().getFullYear();
+    if (plateVerificationResult?.vehicle?.verified) {
+      carModel = `${plateVerificationResult.vehicle.make || ""} ${plateVerificationResult.vehicle.model || ""}`.trim() || "Pending Verification";
+      carYear = plateVerificationResult.vehicle.year || carYear;
+    }
 
     // Create the lead
     const newLead = addLead({
@@ -901,13 +931,13 @@ function ConnectionTab({
       customerName,
       email: quoteEmail,
       phone: quotePhone,
-      carYear: new Date().getFullYear(),
-      carModel: extractedLicenseData ? `Vehicle from ${extractedLicenseData.licenseState}` : "See License",
+      carYear,
+      carModel,
       quoteType: "quote",
       payout,
       connectionId: activeConnection.id,
       status: "pending",
-      licenseImage,
+      licenseImage: licenseImage || undefined,
       extractedLicenseData: extractedLicenseData ? {
         firstName: extractedLicenseData.firstName,
         lastName: extractedLicenseData.lastName,
@@ -922,27 +952,52 @@ function ConnectionTab({
         isExpired: extractedLicenseData.isExpired,
         isValid: extractedLicenseData.isValid,
       } : undefined,
+      // Plate verification data
+      plateImage,
+      plateNumber,
+      plateState,
+      extractedPlateData: plateVerificationResult?.extractedPlate ? {
+        plateNumber: plateVerificationResult.extractedPlate.plateNumber,
+        confidence: plateVerificationResult.extractedPlate.confidence,
+        matchesManualEntry: plateVerificationResult.matchesManualEntry,
+      } : undefined,
+      vehicleVerification: plateVerificationResult?.vehicle ? {
+        verified: plateVerificationResult.vehicle.verified,
+        make: plateVerificationResult.vehicle.make,
+        model: plateVerificationResult.vehicle.model,
+        year: plateVerificationResult.vehicle.year,
+        color: plateVerificationResult.vehicle.color,
+        lookupSource: "Plate Recognizer",
+      } : undefined,
     });
 
-    // Push to CRM if extracted data is available
-    if (extractedLicenseData) {
-      try {
-        await fetch("/api/crm/push-lead", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            licenseData: extractedLicenseData,
-            email: quoteEmail,
-            phone: quotePhone,
-            providerId: currentUser.id,
-            providerName: currentProvider.displayName,
-            leadType: "quote",
-          }),
-        });
-      } catch (err) {
-        console.error("CRM push failed:", err);
-        // Continue - lead is still saved locally
-      }
+    // Push to CRM with plate data
+    try {
+      await fetch("/api/crm/push-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseData: extractedLicenseData,
+          email: quoteEmail,
+          phone: quotePhone,
+          providerId: currentUser.id,
+          providerName: currentProvider.displayName,
+          leadType: "quote",
+          // Plate verification data for CRM
+          plateNumber,
+          plateState,
+          plateVerified: plateVerificationResult?.matchesManualEntry || false,
+          vehicle: plateVerificationResult?.vehicle?.verified ? {
+            make: plateVerificationResult.vehicle.make,
+            model: plateVerificationResult.vehicle.model,
+            year: plateVerificationResult.vehicle.year,
+            color: plateVerificationResult.vehicle.color,
+          } : undefined,
+        }),
+      });
+    } catch (err) {
+      console.error("CRM push failed:", err);
+      // Continue - lead is still saved locally
     }
 
     updateConnectionStats(activeConnection.id, payout);
@@ -1004,6 +1059,66 @@ function ConnectionTab({
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle plate image upload
+  const handlePlateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please upload an image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be less than 5MB");
+      return;
+    }
+
+    setPlateError(null);
+    setPlateVerificationResult(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPlateImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Verify plate (OCR + vehicle lookup)
+  const handleVerifyPlate = async () => {
+    if (!plateImage || !plateNumber || !plateState) {
+      setPlateError("Please upload a plate photo and enter the plate number and state");
+      return;
+    }
+
+    setIsVerifyingPlate(true);
+    setPlateError(null);
+
+    try {
+      const response = await fetch("/api/verify-plate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plateImage,
+          plateNumber,
+          plateState,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setPlateVerificationResult(result);
+      } else {
+        setPlateError(result.error || "Failed to verify plate");
+      }
+    } catch {
+      setPlateError("Failed to verify plate. Please try again.");
+    } finally {
+      setIsVerifyingPlate(false);
+    }
   };
 
   // Scroll chat to bottom
@@ -1188,6 +1303,7 @@ function ConnectionTab({
                     onClick={() => {
                       if (formStep === "basic_info") setFormStep("channel");
                       else if (formStep === "license_upload") setFormStep("channel");
+                      else if (formStep === "plate_upload") setFormStep("license_upload");
                       else if (formStep === "state_confirm") setFormStep("basic_info");
                       else if (formStep === "extended_info") setFormStep("state_confirm");
                       else if (formStep === "chatbot") setFormStep("extended_info");
@@ -1204,7 +1320,8 @@ function ConnectionTab({
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">
                   {formStep === "channel" && "How can we help your customer?"}
                   {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
-                  {formStep === "license_upload" && "Quick Quote - 3 Easy Steps"}
+                  {formStep === "license_upload" && "Step 1: Customer Contact Info"}
+                  {formStep === "plate_upload" && "Step 2: Vehicle Verification"}
                   {formStep === "state_confirm" && "Confirm State of Residence"}
                   {formStep === "extended_info" && "Driver Profile Details"}
                   {formStep === "chatbot" && "Insurance Quote Assistant"}
@@ -1260,156 +1377,22 @@ function ConnectionTab({
               </div>
             )}
 
-            {/* Simple Quote Flow: License Upload */}
+            {/* Simple Quote Flow: Contact Info */}
             {formStep === "license_upload" && (
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-blue-700 text-sm font-medium">
-                    High-value passive lead! Upload license to auto-extract customer info.
+                    Step 1: Customer Contact Info
                   </p>
                   <p className="text-blue-600 text-xs mt-1">
                     You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead. Data is sent to CRM automatically.
                   </p>
                 </div>
 
-                {/* Driver's License Upload */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    1. Driver&apos;s License Photo *
-                  </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData?.isExpired ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
-                    {isExtracting ? (
-                      <div className="space-y-3">
-                        <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-                        <p className="text-blue-600 font-medium">Analyzing license...</p>
-                        <p className="text-gray-500 text-sm">Extracting name, address, DOB, and validating expiration</p>
-                      </div>
-                    ) : licenseImage ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isValid && !extractedLicenseData?.isExpired ? (
-                            <span className="text-green-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                              </svg>
-                              <span className="font-medium">Valid License</span>
-                            </span>
-                          ) : extractedLicenseData?.isExpired ? (
-                            <span className="text-red-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              <span className="font-medium">License Expired</span>
-                            </span>
-                          ) : (
-                            <span className="text-yellow-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="font-medium">License Uploaded</span>
-                            </span>
-                          )}
-                        </div>
-                        <img src={licenseImage} alt="License preview" className="max-h-24 mx-auto rounded-lg shadow-sm" />
-                        <button
-                          onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
-                          className="text-sm text-red-600 hover:text-red-700 underline"
-                        >
-                          Remove and upload different image
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer block">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLicenseUpload}
-                          className="hidden"
-                        />
-                        <div className="space-y-2">
-                          <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto">
-                            <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </div>
-                          <p className="text-gray-700 font-medium">Click to upload or take a photo</p>
-                          <p className="text-gray-500 text-sm">JPG, PNG up to 5MB - AI extracts data automatically</p>
-                        </div>
-                      </label>
-                    )}
-                  </div>
-                </div>
-
-                {/* Extraction Error */}
-                {extractionError && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-yellow-700 text-sm">{extractionError}</p>
-                  </div>
-                )}
-
-                {/* Extracted License Data Display */}
-                {extractedLicenseData && (
-                  <div className={`border rounded-xl p-4 ${extractedLicenseData.isExpired ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200"}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className={`font-semibold ${extractedLicenseData.isExpired ? "text-red-800" : "text-emerald-800"}`}>
-                        Extracted License Data
-                      </h4>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        extractedLicenseData.confidence === "high" ? "bg-green-200 text-green-800" :
-                        extractedLicenseData.confidence === "medium" ? "bg-yellow-200 text-yellow-800" :
-                        "bg-red-200 text-red-800"
-                      }`}>
-                        {extractedLicenseData.confidence} confidence
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-gray-500">Name:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.fullName}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">DOB:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.dateOfBirth} (Age {extractedLicenseData.age})</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">License #:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseNumber}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">State:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseState}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Address:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.address.fullAddress}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Expiration:</span>
-                        <p className={`font-medium ${extractedLicenseData.isExpired ? "text-red-600" : "text-gray-800"}`}>
-                          {extractedLicenseData.expirationDate}
-                          {extractedLicenseData.isExpired
-                            ? ` (Expired ${Math.abs(extractedLicenseData.daysUntilExpiration)} days ago)`
-                            : ` (${extractedLicenseData.daysUntilExpiration} days remaining)`}
-                        </p>
-                      </div>
-                    </div>
-                    {extractedLicenseData.validationNotes.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        {extractedLicenseData.validationNotes.map((note, i) => (
-                          <p key={i} className={`text-xs ${extractedLicenseData.isExpired ? "text-red-600" : "text-amber-600"}`}>
-                            • {note}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* Email */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
-                    2. Email Address *
+                    1. Email Address *
                   </label>
                   <input
                     type="email"
@@ -1424,7 +1407,7 @@ function ConnectionTab({
                 {/* Phone */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
-                    3. Phone Number *
+                    2. Phone Number *
                   </label>
                   <input
                     type="tel"
@@ -1446,12 +1429,196 @@ function ConnectionTab({
                   </div>
                 </div>
 
+                {/* Continue to Plate Upload Button */}
+                <button
+                  onClick={() => setFormStep("plate_upload")}
+                  disabled={!quoteEmail || !quotePhone}
+                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
+                >
+                  Continue to Vehicle Verification
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <p className="text-center text-gray-500 text-xs">
+                  Next: Upload vehicle license plate for verification
+                </p>
+              </div>
+            )}
+
+            {/* Step: Plate Upload & Verification */}
+            {formStep === "plate_upload" && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-blue-700 text-sm font-medium">
+                    Step 2: Vehicle Verification - Upload license plate photo and enter plate number
+                  </p>
+                </div>
+
+                {/* Plate Photo Upload */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    1. Take a photo of the license plate *
+                  </label>
+                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePlateUpload}
+                      className="hidden"
+                    />
+                    {plateImage ? (
+                      <div className="relative w-full h-full">
+                        <img src={plateImage} alt="License Plate" className="w-full h-full object-contain rounded-lg" />
+                        <button
+                          onClick={(e) => { e.preventDefault(); setPlateImage(null); setPlateVerificationResult(null); }}
+                          className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 text-center">
+                        <svg className="w-12 h-12 text-gray-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <p className="text-gray-500">Tap to take photo of license plate</p>
+                        <p className="text-gray-400 text-xs">or upload from gallery</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
+
+                {/* Manual Plate Entry */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      2. State *
+                    </label>
+                    <select
+                      value={plateState}
+                      onChange={(e) => setPlateState(e.target.value)}
+                      className="w-full px-3 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition"
+                    >
+                      <option value="">Select</option>
+                      {US_STATES.map((s) => (
+                        <option key={s.value} value={s.value}>{s.value}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      3. Plate Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={plateNumber}
+                      onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+                      placeholder="ABC1234"
+                      className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition uppercase"
+                    />
+                  </div>
+                </div>
+
+                {/* Verify Button */}
+                <button
+                  onClick={handleVerifyPlate}
+                  disabled={!plateImage || !plateNumber || !plateState || isVerifyingPlate}
+                  className="w-full py-3 rounded-xl font-semibold transition flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isVerifyingPlate ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Verifying plate...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Verify Plate
+                    </>
+                  )}
+                </button>
+
+                {/* Verification Result */}
+                {plateVerificationResult && (
+                  <div className={`border rounded-xl p-4 ${
+                    plateVerificationResult.matchesManualEntry
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-amber-50 border-amber-200"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      {plateVerificationResult.matchesManualEntry ? (
+                        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      )}
+                      <span className={`font-semibold ${plateVerificationResult.matchesManualEntry ? "text-emerald-700" : "text-amber-700"}`}>
+                        {plateVerificationResult.matchesManualEntry ? "Plate Verified ✓" : "Plate Mismatch"}
+                      </span>
+                    </div>
+
+                    {plateVerificationResult.mismatchDetails && (
+                      <p className="text-amber-700 text-sm mb-3">{plateVerificationResult.mismatchDetails}</p>
+                    )}
+
+                    {plateVerificationResult.extractedPlate && (
+                      <div className="text-sm mb-3">
+                        <span className="text-gray-500">OCR detected: </span>
+                        <span className="font-mono font-bold">{plateVerificationResult.extractedPlate.plateNumber}</span>
+                        <span className="text-gray-400 ml-2">({Math.round(plateVerificationResult.extractedPlate.confidence * 100)}% confidence)</span>
+                      </div>
+                    )}
+
+                    {plateVerificationResult.vehicle?.verified && (
+                      <div className="bg-white rounded-lg p-3 border border-gray-200">
+                        <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Vehicle Information</p>
+                        <p className="font-bold text-gray-800 text-lg">
+                          {plateVerificationResult.vehicle.year} {plateVerificationResult.vehicle.make} {plateVerificationResult.vehicle.model}
+                        </p>
+                        {plateVerificationResult.vehicle.color && (
+                          <p className="text-gray-500 text-sm">Color: {plateVerificationResult.vehicle.color}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {plateError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-700 text-sm">{plateError}</p>
+                  </div>
+                )}
+
+                {/* CRM Push Info */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-gray-600 text-sm">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span>Lead + vehicle data will be pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
+                  </div>
+                </div>
+
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={!licenseImage || !quoteEmail || !quotePhone || isExtracting}
+                  disabled={!plateImage || !plateNumber || !plateState || isVerifyingPlate}
                   className={`w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 ${
-                    extractedLicenseData?.isExpired
+                    plateVerificationResult?.matchesManualEntry === false
                       ? "bg-amber-500 hover:bg-amber-600 text-white"
                       : "bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                   }`}
@@ -1459,7 +1626,7 @@ function ConnectionTab({
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  {extractedLicenseData?.isExpired ? "Submit Lead (Expired License)" : "Submit Lead"}
+                  {plateVerificationResult?.matchesManualEntry === false ? "Submit Lead (Plate Mismatch)" : "Submit Lead"}
                 </button>
 
                 <p className="text-center text-gray-500 text-xs">

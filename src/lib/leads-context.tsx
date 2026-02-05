@@ -76,6 +76,24 @@ export interface Lead {
   // CRM integration tracking
   crmPushed?: boolean;
   crmLeadId?: string;
+  // License plate verification
+  plateImage?: string;           // Base64 plate photo
+  plateNumber?: string;          // Manually entered plate
+  plateState?: string;           // State code (CA, TX, etc.)
+  extractedPlateData?: {
+    plateNumber: string;
+    confidence: number;
+    matchesManualEntry: boolean;
+  };
+  vehicleVerification?: {
+    verified: boolean;
+    make?: string;
+    model?: string;
+    year?: number;
+    color?: string;
+    type?: string;
+    lookupSource?: string;
+  };
 }
 
 export interface InsuranceQuote {

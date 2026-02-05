@@ -45,7 +45,11 @@ function BusinessPortalContent() {
 
   // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
   const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_buyer_review") : [];
+  // Connections awaiting provider response (terms sent, waiting for accept/decline)
+  const awaitingResponse = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_provider_accept") : [];
   const myConnections = currentUser ? getConnectionsForBuyer(currentUser.id) : [];
+  // Active connections (finalized, terms accepted)
+  const activeConnections = myConnections.filter(c => c.status === "active");
 
   // Redirect to login if not authenticated or not a buyer
   useEffect(() => {
@@ -917,6 +921,7 @@ function BusinessPortalContent() {
             buyerId={currentUser.id}
             buyerBusinessName={currentBuyer?.businessName || ""}
             pendingRequests={pendingRequests}
+            awaitingResponse={awaitingResponse}
             myConnections={myConnections}
             setTermsForRequest={setTermsForRequest}
             rejectRequest={rejectRequest}
@@ -977,7 +982,7 @@ function BusinessPortalContent() {
 
         {/* Providers Tab */}
         {activeTab === "providers" && (
-          <ProvidersTab providers={providers} leads={leads} updateProvider={updateProvider} addProvider={addProvider} />
+          <ProvidersTab providers={providers} leads={leads} updateProvider={updateProvider} addProvider={addProvider} activeConnections={activeConnections} />
         )}
 
         {/* Ledger Tab */}
@@ -987,7 +992,7 @@ function BusinessPortalContent() {
 
         {/* Rolodex Tab */}
         {activeTab === "rolodex" && (
-          <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} />
+          <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} activeConnections={activeConnections} />
         )}
 
         {/* Settings Tab */}
@@ -1051,11 +1056,13 @@ function ProvidersTab({
   leads,
   updateProvider,
   addProvider,
+  activeConnections,
 }: {
   providers: Provider[];
   leads: Lead[];
   updateProvider: (id: string, updates: Partial<Provider>) => void;
   addProvider: (provider: Omit<Provider, "id">) => Provider;
+  activeConnections: ApiConnection[];
 }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
@@ -1171,7 +1178,7 @@ function ProvidersTab({
       )}
 
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-[#1e3a5f]">Manage Providers ({providers.length})</h3>
+        <h3 className="text-lg font-semibold text-[#1e3a5f]">Manage Providers ({providers.length + activeConnections.length})</h3>
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-semibold shadow-md"
@@ -1430,11 +1437,62 @@ function ProvidersTab({
           );
         })}
 
-        {providers.length === 0 && (
+        {providers.length === 0 && activeConnections.length === 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <p className="text-gray-400">No providers yet. Add your first provider above.</p>
           </div>
         )}
+
+        {/* Active Connections from Database */}
+        {activeConnections.map((connection) => (
+          <div key={connection.id} className="bg-white rounded-xl border border-emerald-200 p-6 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-emerald-600 flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">
+                    {connection.providerName.charAt(0)}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-gray-800 font-semibold text-lg">{connection.providerName}</h4>
+                  <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
+                      Connected
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      Since {new Date(connection.accepted_at || connection.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-gray-500 text-sm mb-1">Payout Rate</div>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg">
+                  <span className="text-emerald-700 font-bold text-lg">${connection.rate_per_lead}</span>
+                  <span className="text-gray-500 text-sm">/lead</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-gray-200">
+              <div>
+                <p className="text-gray-500 text-sm">Total Leads</p>
+                <p className="text-gray-800 text-xl font-bold">{connection.total_leads}</p>
+              </div>
+              <div>
+                <p className="text-gray-500 text-sm">Total Paid</p>
+                <p className="text-emerald-600 text-xl font-bold">${connection.total_paid}</p>
+              </div>
+              <div className="flex items-end justify-end">
+                <span className="px-3 py-1 rounded-lg text-sm font-medium bg-emerald-100 text-emerald-700">
+                  Active Connection
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1565,11 +1623,13 @@ function PaymentMethodBadge({ method }: { method: string }) {
 function RolodexTab({
   providers,
   leads,
-  currentBuyer
+  currentBuyer,
+  activeConnections
 }: {
   providers: Provider[];
   leads: Lead[];
   currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
+  activeConnections: ApiConnection[];
 }) {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1578,6 +1638,12 @@ function RolodexTab({
   const filteredProviders = providers.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Filter active connections based on search
+  const filteredConnections = activeConnections.filter(c =>
+    c.providerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.providerEmail.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Calculate stats for each provider
@@ -1669,9 +1735,54 @@ function RolodexTab({
             </div>
           </div>
         ))}
+
+        {/* Active Connections Cards */}
+        {filteredConnections.map((connection) => (
+          <div
+            key={connection.id}
+            className="bg-white rounded-2xl border border-emerald-200 overflow-hidden shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer group"
+          >
+            {/* Card Header - Green gradient for connections */}
+            <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-xl font-bold">{connection.providerName.charAt(0)}</span>
+                </div>
+                <div>
+                  <h4 className="font-semibold">{connection.providerName}</h4>
+                  <p className="text-white/70 text-sm">@{connection.providerEmail.split("@")[0]}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#1e3a5f]">{connection.total_leads}</p>
+                  <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-emerald-600">${connection.total_paid}</p>
+                  <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
+                <div className="flex items-center gap-1 text-gray-500">
+                  <span className="font-medium text-emerald-600">${connection.rate_per_lead}</span>
+                  <span>/lead</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
+                  Connected
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {filteredProviders.length === 0 && (
+      {filteredProviders.length === 0 && filteredConnections.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -2806,6 +2917,7 @@ function RequestsTab({
   buyerId,
   buyerBusinessName,
   pendingRequests,
+  awaitingResponse,
   myConnections,
   setTermsForRequest,
   rejectRequest,
@@ -2817,6 +2929,7 @@ function RequestsTab({
   buyerId: string;
   buyerBusinessName: string;
   pendingRequests: ApiConnection[];
+  awaitingResponse: ApiConnection[];
   myConnections: ApiConnection[];
   setTermsForRequest: (requestId: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }) => Promise<boolean>;
   rejectRequest: (requestId: string) => Promise<boolean>;
@@ -3064,6 +3177,49 @@ function RequestsTab({
           <p className="text-center text-gray-400 py-8">No pending connection requests</p>
         )}
       </div>
+
+      {/* Awaiting Provider Response */}
+      {awaitingResponse.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-6">
+            <h3 className="text-lg font-semibold text-amber-700">Awaiting Provider Response</h3>
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+              {awaitingResponse.length} pending
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {awaitingResponse.map((connection) => (
+              <div key={connection.id} className="border border-amber-100 rounded-xl p-4 bg-amber-50/30">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
+                      <span className="text-xl font-bold text-amber-600">{connection.providerName.charAt(0)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{connection.providerName}</p>
+                      <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-amber-700 font-medium">${connection.rate_per_lead}/lead</span>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-500 text-sm">Terms sent {new Date(connection.terms_updated_at || connection.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-sm font-medium">
+                      <svg className="w-4 h-4 mr-1.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Waiting for response
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active Connections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
