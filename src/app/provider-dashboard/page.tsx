@@ -1275,7 +1275,6 @@ function ConnectionTab({
                     onClick={() => {
                       if (formStep === "basic_info") setFormStep("channel");
                       else if (formStep === "license_upload") setFormStep("channel");
-                      else if (formStep === "plate_upload") setFormStep("license_upload");
                       else if (formStep === "state_confirm") setFormStep("basic_info");
                       else if (formStep === "extended_info") setFormStep("state_confirm");
                       else if (formStep === "chatbot") setFormStep("extended_info");
@@ -1292,8 +1291,7 @@ function ConnectionTab({
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">
                   {formStep === "channel" && "How can we help your customer?"}
                   {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
-                  {formStep === "license_upload" && "Step 1: Customer Contact Info"}
-                  {formStep === "plate_upload" && "Step 2: Driver's License"}
+                  {formStep === "license_upload" && "Submit a Lead"}
                   {formStep === "state_confirm" && "Confirm State of Residence"}
                   {formStep === "extended_info" && "Driver Profile Details"}
                   {formStep === "chatbot" && "Insurance Quote Assistant"}
@@ -1341,20 +1339,20 @@ function ConnectionTab({
                   <h4 className="text-lg font-bold text-gray-800 mb-2">Get Quote - Quick & Easy</h4>
                   <p className="text-gray-600 text-sm mb-4">Customer might need insurance. High-value passive lead.</p>
                   <ul className="text-sm text-gray-500 space-y-1">
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email &amp; phone first</li>
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Then upload driver&apos;s license</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email, phone &amp; driver&apos;s license</li>
                     <li className="flex items-center gap-2"><span className="text-blue-500">•</span> AI extracts all customer info</li>
+                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> High retention potential</li>
                   </ul>
                 </button>
               </div>
             )}
 
-            {/* Simple Quote Flow: Contact Info */}
+            {/* Simple Quote Flow: Single Screen */}
             {formStep === "license_upload" && (
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-blue-700 text-sm font-medium">
-                    Step 1: Customer Contact Info
+                    Submit a Lead
                   </p>
                   <p className="text-blue-600 text-xs mt-1">
                     You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead. Data is sent to CRM automatically.
@@ -1364,7 +1362,7 @@ function ConnectionTab({
                 {/* Email */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
-                    1. Email Address *
+                    Email Address *
                   </label>
                   <input
                     type="email"
@@ -1379,7 +1377,7 @@ function ConnectionTab({
                 {/* Phone */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
-                    2. Phone Number *
+                    Phone Number *
                   </label>
                   <input
                     type="tel"
@@ -1391,47 +1389,10 @@ function ConnectionTab({
                   />
                 </div>
 
-                {/* CRM Push Info */}
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-gray-600 text-sm">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span>Lead data will be automatically pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
-                  </div>
-                </div>
-
-                {/* Continue to Plate Upload Button */}
-                <button
-                  onClick={() => setFormStep("plate_upload")}
-                  disabled={!quoteEmail || !quotePhone}
-                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
-                >
-                  Continue to Driver&apos;s License
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-
-                <p className="text-center text-gray-500 text-xs">
-                  Next: Upload driver&apos;s license to auto-extract customer info
-                </p>
-              </div>
-            )}
-
-            {/* Step 2: Driver's License Upload */}
-            {formStep === "plate_upload" && (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-blue-700 text-sm font-medium">
-                    Step 2: Driver&apos;s License - Upload to auto-extract customer info
-                  </p>
-                </div>
-
                 {/* Driver's License Upload */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Take a photo of the driver&apos;s license *
+                    Driver&apos;s License Photo *
                   </label>
                   <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData?.isExpired ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
                     {isExtracting ? (
@@ -1569,14 +1530,14 @@ function ConnectionTab({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    <span>Lead data will be pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
+                    <span>Lead data will be automatically pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
                   </div>
                 </div>
 
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={!licenseImage || isExtracting}
+                  disabled={!quoteEmail || !quotePhone || !licenseImage || isExtracting}
                   className={`w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 ${
                     extractedLicenseData?.isExpired
                       ? "bg-amber-500 hover:bg-amber-600 text-white"
@@ -1595,7 +1556,7 @@ function ConnectionTab({
               </div>
             )}
 
-            {/* Step 2: Basic Info Form */}
+            {/* Basic Info Form (ASAP flow) */}
             {formStep === "basic_info" && (
               <div className="space-y-4">
                 <div className={`${channel === "asap" ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"} border rounded-lg p-3 mb-4`}>
