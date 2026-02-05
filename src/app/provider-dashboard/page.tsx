@@ -1356,21 +1356,6 @@ function ConnectionTab({
                   </p>
                 </div>
 
-                {/* Email */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    value={quoteEmail}
-                    onChange={(e) => setQuoteEmail(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
-                    placeholder="customer@email.com"
-                  />
-                </div>
-
                 {/* Phone */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
@@ -1383,6 +1368,21 @@ function ConnectionTab({
                     required
                     className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
                     placeholder="(555) 123-4567"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    value={quoteEmail}
+                    onChange={(e) => setQuoteEmail(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    placeholder="customer@email.com"
                   />
                 </div>
 
