@@ -2869,7 +2869,7 @@ function RequestsTab({
     setShowTermsModal(true);
   };
 
-  const handleSetTerms = () => {
+  const handleSetTerms = async () => {
     if (!selectedRequest) return;
 
     // Simplified terms for API
@@ -2881,7 +2881,12 @@ function RequestsTab({
       terminationNoticeDays: terminationDays,
     };
 
-    setTermsForRequest(selectedRequest.id, terms);
+    const success = await setTermsForRequest(selectedRequest.id, terms);
+    if (success) {
+      alert(`Terms sent to provider! They will review and accept to finalize the connection.`);
+    } else {
+      alert("Failed to send terms. Please try again.");
+    }
     setShowTermsModal(false);
     setSelectedRequest(null);
   };
