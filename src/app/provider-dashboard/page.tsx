@@ -1275,7 +1275,6 @@ function ConnectionTab({
                     onClick={() => {
                       if (formStep === "basic_info") setFormStep("channel");
                       else if (formStep === "license_upload") setFormStep("channel");
-                      else if (formStep === "plate_upload") setFormStep("license_upload");
                       else if (formStep === "state_confirm") setFormStep("basic_info");
                       else if (formStep === "extended_info") setFormStep("state_confirm");
                       else if (formStep === "chatbot") setFormStep("extended_info");
@@ -1292,8 +1291,7 @@ function ConnectionTab({
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">
                   {formStep === "channel" && "How can we help your customer?"}
                   {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
-                  {formStep === "license_upload" && "Step 1: Contact Info"}
-                  {formStep === "plate_upload" && "Step 2: Driver's License"}
+                  {formStep === "license_upload" && "Submit a Lead"}
                   {formStep === "state_confirm" && "Confirm State of Residence"}
                   {formStep === "extended_info" && "Driver Profile Details"}
                   {formStep === "chatbot" && "Insurance Quote Assistant"}
@@ -1349,15 +1347,12 @@ function ConnectionTab({
               </div>
             )}
 
-            {/* Step 1: Customer Contact Info */}
+            {/* Submit a Lead - Single Screen */}
             {formStep === "license_upload" && (
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-blue-700 text-sm font-medium">
-                    Step 1: Customer Contact Info
-                  </p>
-                  <p className="text-blue-600 text-xs mt-1">
-                    You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead.
+                    You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead
                   </p>
                 </div>
 
@@ -1389,32 +1384,6 @@ function ConnectionTab({
                     className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
                     placeholder="(555) 123-4567"
                   />
-                </div>
-
-                {/* Continue Button */}
-                <button
-                  onClick={() => setFormStep("plate_upload")}
-                  disabled={!quoteEmail || !quotePhone}
-                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
-                >
-                  Continue to Driver&apos;s License
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
-            {/* Step 2: Driver's License */}
-            {formStep === "plate_upload" && (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-blue-700 text-sm font-medium">
-                    Step 2: Driver&apos;s License
-                  </p>
-                  <p className="text-blue-600 text-xs mt-1">
-                    Upload a photo to auto-extract customer info.
-                  </p>
                 </div>
 
                 {/* Driver's License Upload */}
@@ -1552,20 +1521,10 @@ function ConnectionTab({
                   </div>
                 )}
 
-                {/* CRM Push Info */}
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-gray-600 text-sm">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span>Lead data will be pushed to {activeConnection?.buyerBusinessName}&apos;s CRM</span>
-                  </div>
-                </div>
-
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={!licenseImage || isExtracting}
+                  disabled={!quoteEmail || !quotePhone || !licenseImage || isExtracting}
                   className={`w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 ${
                     extractedLicenseData?.isExpired
                       ? "bg-amber-500 hover:bg-amber-600 text-white"
