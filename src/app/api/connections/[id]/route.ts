@@ -36,25 +36,50 @@ export async function PATCH(
     switch (action) {
       case "set_terms": {
         // Buyer sets terms for a pending request
+        console.log("[CONNECTIONS] set_terms called:", { id, userId, role, data });
+        console.log("[CONNECTIONS] Current connection:", {
+          id: connection.id,
+          status: connection.status,
+          buyer_id: connection.buyer_id,
+          provider_id: connection.provider_id
+        });
+
         if (!isBuyer) {
+          console.log("[CONNECTIONS] REJECTED: User is not the buyer");
           return NextResponse.json({ error: "Only business can set terms" }, { status: 403 });
         }
         if (connection.status !== "pending_buyer_review") {
+          console.log("[CONNECTIONS] REJECTED: Wrong status, expected pending_buyer_review, got:", connection.status);
           return NextResponse.json({ error: "Connection not pending review" }, { status: 400 });
         }
 
         const { ratePerLead, paymentTiming, weeklyLeadCap, monthlyLeadCap, terminationNoticeDays } = data;
+        console.log("[CONNECTIONS] Extracted terms:", { ratePerLead, paymentTiming, weeklyLeadCap, monthlyLeadCap, terminationNoticeDays });
 
-        const updated = await updateConnection(id, {
-          status: "pending_provider_accept",
-          rate_per_lead: ratePerLead || connection.rate_per_lead,
-          payment_timing: paymentTiming || connection.payment_timing,
-          weekly_lead_cap: weeklyLeadCap,
-          monthly_lead_cap: monthlyLeadCap,
-          termination_notice_days: terminationNoticeDays || 7,
-        });
+        try {
+          const updateData = {
+            status: "pending_provider_accept" as const,
+            rate_per_lead: ratePerLead || connection.rate_per_lead,
+            payment_timing: paymentTiming || connection.payment_timing,
+            weekly_lead_cap: weeklyLeadCap,
+            monthly_lead_cap: monthlyLeadCap,
+            termination_notice_days: terminationNoticeDays || 7,
+          };
+          console.log("[CONNECTIONS] Calling updateConnection with:", updateData);
 
-        return NextResponse.json({ success: true, connection: updated });
+          const updated = await updateConnection(id, updateData);
+          console.log("[CONNECTIONS] updateConnection result:", updated);
+
+          if (!updated) {
+            console.log("[CONNECTIONS] ERROR: updateConnection returned null");
+            return NextResponse.json({ error: "Failed to update connection" }, { status: 500 });
+          }
+
+          return NextResponse.json({ success: true, connection: updated });
+        } catch (updateError) {
+          console.error("[CONNECTIONS] updateConnection threw error:", updateError);
+          throw updateError;
+        }
       }
 
       case "accept": {

@@ -286,6 +286,8 @@ export async function updateConnection(id: string, updates: {
   total_paid?: number;
   accepted_at?: string;
 }): Promise<DbConnection | null> {
+  console.log("[DB] updateConnection called:", { id, updates });
+
   const sql = getSql();
 
   // Build the update - we'll track if terms changed
@@ -294,22 +296,28 @@ export async function updateConnection(id: string, updates: {
                        updates.monthly_lead_cap !== undefined ||
                        updates.termination_notice_days !== undefined;
 
-  const result = await sql`
-    UPDATE connections SET
-      status = COALESCE(${updates.status || null}, status),
-      rate_per_lead = COALESCE(${updates.rate_per_lead || null}, rate_per_lead),
-      payment_timing = COALESCE(${updates.payment_timing || null}, payment_timing),
-      weekly_lead_cap = CASE WHEN ${updates.weekly_lead_cap !== undefined} THEN ${updates.weekly_lead_cap ?? null} ELSE weekly_lead_cap END,
-      monthly_lead_cap = CASE WHEN ${updates.monthly_lead_cap !== undefined} THEN ${updates.monthly_lead_cap ?? null} ELSE monthly_lead_cap END,
-      termination_notice_days = COALESCE(${updates.termination_notice_days || null}, termination_notice_days),
-      total_leads = COALESCE(${updates.total_leads || null}, total_leads),
-      total_paid = COALESCE(${updates.total_paid || null}, total_paid),
-      accepted_at = COALESCE(${updates.accepted_at || null}, accepted_at),
-      terms_updated_at = CASE WHEN ${termsChanged} THEN NOW() ELSE terms_updated_at END
-    WHERE id = ${id}
-    RETURNING *
-  `;
-  return first<DbConnection>(result);
+  try {
+    const result = await sql`
+      UPDATE connections SET
+        status = COALESCE(${updates.status ?? null}, status),
+        rate_per_lead = CASE WHEN ${updates.rate_per_lead !== undefined} THEN ${updates.rate_per_lead} ELSE rate_per_lead END,
+        payment_timing = COALESCE(${updates.payment_timing ?? null}, payment_timing),
+        weekly_lead_cap = CASE WHEN ${updates.weekly_lead_cap !== undefined} THEN ${updates.weekly_lead_cap ?? null} ELSE weekly_lead_cap END,
+        monthly_lead_cap = CASE WHEN ${updates.monthly_lead_cap !== undefined} THEN ${updates.monthly_lead_cap ?? null} ELSE monthly_lead_cap END,
+        termination_notice_days = CASE WHEN ${updates.termination_notice_days !== undefined} THEN ${updates.termination_notice_days} ELSE termination_notice_days END,
+        total_leads = COALESCE(${updates.total_leads ?? null}, total_leads),
+        total_paid = COALESCE(${updates.total_paid ?? null}, total_paid),
+        accepted_at = COALESCE(${updates.accepted_at ?? null}, accepted_at),
+        terms_updated_at = CASE WHEN ${termsChanged} THEN NOW() ELSE terms_updated_at END
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    console.log("[DB] updateConnection result:", result);
+    return first<DbConnection>(result);
+  } catch (error) {
+    console.error("[DB] updateConnection ERROR:", error);
+    throw error;
+  }
 }
 
 // User discovery queries
