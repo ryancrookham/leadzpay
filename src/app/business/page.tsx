@@ -43,8 +43,8 @@ function BusinessPortalContent() {
     sendInvitationToProvider,
   } = useConnections();
 
-  // Get connection requests for this buyer
-  const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending") : [];
+  // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
+  const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_buyer_review") : [];
   const myConnections = currentUser ? getConnectionsForBuyer(currentUser.id) : [];
 
   // Redirect to login if not authenticated or not a buyer
