@@ -116,6 +116,18 @@ export default function Home() {
             </div>
           ) : (
             <>
+              <Link
+                href="/auth/forgot-password"
+                className="text-gray-500 hover:text-[#1e3a5f] px-3 py-2 text-sm transition"
+              >
+                Forgot Password?
+              </Link>
+              <Link
+                href="/auth/login"
+                className="text-[#1e3a5f] hover:text-[#2a4a6f] px-3 py-2 font-medium transition"
+              >
+                Sign In
+              </Link>
               {/* Sign Up Dropdown */}
               <div className="relative" ref={signUpRef}>
                 <button
@@ -146,14 +158,6 @@ export default function Home() {
                         <div className="font-medium text-gray-900">Lead Provider</div>
                         <div className="text-xs text-gray-500">Car salesperson / Dealer</div>
                       </div>
-                    </Link>
-                    <div className="border-t border-gray-100 my-2"></div>
-                    <Link
-                      href="/auth/login"
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition text-gray-500"
-                      onClick={() => setShowSignUpMenu(false)}
-                    >
-                      <div className="text-xs">Business owner? <span className="text-[#1e3a5f]">Sign in here</span></div>
                     </Link>
                   </div>
                 )}

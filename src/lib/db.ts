@@ -393,3 +393,94 @@ export async function executeSql(strings: TemplateStringsArray, ...values: unkno
   const sql = getSql();
   return sql(strings, ...values);
 }
+
+// ===========================================
+// PASSWORD RESET TOKEN FUNCTIONS
+// ===========================================
+
+export interface DbPasswordResetToken {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Create a password reset token for a user
+ * @param userId The user's ID
+ * @param tokenHash The SHA-256 hash of the token (store hashed, not plain)
+ * @param expiresInHours How many hours until token expires (default 1)
+ */
+export async function createPasswordResetToken(
+  userId: string,
+  tokenHash: string,
+  expiresInHours: number = 1
+): Promise<DbPasswordResetToken> {
+  const sql = getSql();
+
+  // Calculate expiry time
+  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
+
+  // Invalidate any existing unused tokens for this user
+  await sql`
+    UPDATE password_reset_tokens
+    SET used_at = NOW()
+    WHERE user_id = ${userId} AND used_at IS NULL
+  `;
+
+  // Create new token
+  const result = await sql`
+    INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+    VALUES (
+      ${userId},
+      ${tokenHash},
+      ${expiresAt}
+    )
+    RETURNING *
+  `;
+
+  return first<DbPasswordResetToken>(result)!;
+}
+
+/**
+ * Get a valid (unexpired, unused) password reset token by its hash
+ */
+export async function getValidResetToken(tokenHash: string): Promise<(DbPasswordResetToken & { email: string }) | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT prt.*, u.email
+    FROM password_reset_tokens prt
+    JOIN users u ON u.id = prt.user_id
+    WHERE prt.token_hash = ${tokenHash}
+      AND prt.expires_at > NOW()
+      AND prt.used_at IS NULL
+    LIMIT 1
+  `;
+  return first<DbPasswordResetToken & { email: string }>(result);
+}
+
+/**
+ * Mark a password reset token as used
+ */
+export async function markTokenUsed(tokenId: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE password_reset_tokens
+    SET used_at = NOW()
+    WHERE id = ${tokenId}
+  `;
+}
+
+/**
+ * Update a user's password hash
+ */
+export async function updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE users
+    SET password_hash = ${passwordHash}, updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+}

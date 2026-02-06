@@ -132,16 +132,24 @@ function LoginContent() {
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={staySignedIn}
-              onChange={(e) => setStaySignedIn(e.target.checked)}
-              disabled={isSubmitting}
-              className="w-4 h-4 text-[#1e3a5f] rounded border-gray-300 focus:ring-[#1e3a5f]"
-            />
-            Stay signed in for 30 days
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={staySignedIn}
+                onChange={(e) => setStaySignedIn(e.target.checked)}
+                disabled={isSubmitting}
+                className="w-4 h-4 text-[#1e3a5f] rounded border-gray-300 focus:ring-[#1e3a5f]"
+              />
+              Stay signed in
+            </label>
+            <Link
+              href="/auth/forgot-password"
+              className="text-sm text-[#1e3a5f] hover:underline"
+            >
+              Forgot Password?
+            </Link>
+          </div>
 
           <button
             type="submit"
