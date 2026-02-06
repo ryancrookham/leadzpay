@@ -246,22 +246,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="bg-gray-50 rounded-2xl border border-gray-200 p-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: "Fast", label: "Lead Submission" },
-              { value: "10+", label: "Insurance Carriers" },
-              { value: "3", label: "Payout Methods" },
-              { value: "100%", label: "Transparent Tracking" },
-            ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="text-4xl font-bold text-[#1e3a5f]">{stat.value}</div>
-                <div className="text-gray-500 mt-2">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </main>
 
       {/* Footer */}
