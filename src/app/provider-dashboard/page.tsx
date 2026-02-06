@@ -57,8 +57,8 @@ type LeadChannel = "asap" | "quote";
 
 // Form step type
 // ASAP flow: channel -> basic_info -> success (agent calls)
-// Quote flow: channel -> license_upload -> plate_upload -> success (with plate verification)
-type FormStep = "channel" | "basic_info" | "license_upload" | "plate_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
+// Quote flow: channel -> license_upload -> success (single screen: phone, email, license)
+type FormStep = "channel" | "basic_info" | "license_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
 
 // US States list
 const US_STATES = [
