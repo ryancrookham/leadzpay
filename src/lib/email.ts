@@ -1,10 +1,20 @@
 import { Resend } from 'resend';
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialize Resend client to avoid build-time errors
+let resendInstance: Resend | null = null;
+
+function getResend(): Resend {
+  if (!resendInstance) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not set');
+    }
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
+}
 
 const FROM_EMAIL = 'WOML <noreply@womleads.com>';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://womleads.com';
 
 interface SendEmailResult {
   success: boolean;
@@ -18,9 +28,11 @@ export async function sendPasswordResetEmail(
   email: string,
   token: string
 ): Promise<SendEmailResult> {
-  const resetUrl = `${SITE_URL}/auth/reset-password?token=${token}`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://womleads.com';
+  const resetUrl = `${siteUrl}/auth/reset-password?token=${token}`;
 
   try {
+    const resend = getResend();
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
