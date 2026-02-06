@@ -14,7 +14,7 @@ function getResend(): Resend {
   return resendInstance;
 }
 
-const FROM_EMAIL = 'WOML <noreply@womleads.com>';
+const FROM_EMAIL = 'WOML <onboarding@resend.dev>';
 
 interface SendEmailResult {
   success: boolean;
