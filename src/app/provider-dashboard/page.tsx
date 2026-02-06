@@ -11,6 +11,7 @@ import { isProvider, LeadBuyer } from "@/lib/auth-types";
 import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
 import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
 import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
+import { MASTER_OPERATOR } from "@/lib/master-operator";
 
 // Lead form data interface (basic info)
 interface LeadFormData {
@@ -660,11 +661,15 @@ function ConnectionTab({
       setLoadingBuyers(true);
       try {
         const users = await fetchUsersByRole("buyer");
-        const buyerList = users.map((u) => ({
+        // Filter to only show Options Insurance Agency (master operator)
+        const filteredUsers = users.filter(
+          (u) => u.email.toLowerCase() === MASTER_OPERATOR.email.toLowerCase()
+        );
+        const buyerList = filteredUsers.map((u) => ({
           id: u.id,
           email: u.email,
           displayName: u.displayName || u.email,
-          businessName: u.businessName || "",
+          businessName: u.businessName || MASTER_OPERATOR.businessName,
           location: u.location || "",
           licensedStates: u.licensedStates || [],
           isConnected: u.isConnected,

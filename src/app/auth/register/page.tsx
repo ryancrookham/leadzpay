@@ -5,50 +5,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import { LeadBuyer } from "@/lib/auth-types";
-
-type RegistrationRole = "buyer" | "provider";
-
-// US States for licensing
-const US_STATES = [
-  { value: "AL", label: "Alabama" }, { value: "AK", label: "Alaska" }, { value: "AZ", label: "Arizona" },
-  { value: "AR", label: "Arkansas" }, { value: "CA", label: "California" }, { value: "CO", label: "Colorado" },
-  { value: "CT", label: "Connecticut" }, { value: "DE", label: "Delaware" }, { value: "FL", label: "Florida" },
-  { value: "GA", label: "Georgia" }, { value: "HI", label: "Hawaii" }, { value: "ID", label: "Idaho" },
-  { value: "IL", label: "Illinois" }, { value: "IN", label: "Indiana" }, { value: "IA", label: "Iowa" },
-  { value: "KS", label: "Kansas" }, { value: "KY", label: "Kentucky" }, { value: "LA", label: "Louisiana" },
-  { value: "ME", label: "Maine" }, { value: "MD", label: "Maryland" }, { value: "MA", label: "Massachusetts" },
-  { value: "MI", label: "Michigan" }, { value: "MN", label: "Minnesota" }, { value: "MS", label: "Mississippi" },
-  { value: "MO", label: "Missouri" }, { value: "MT", label: "Montana" }, { value: "NE", label: "Nebraska" },
-  { value: "NV", label: "Nevada" }, { value: "NH", label: "New Hampshire" }, { value: "NJ", label: "New Jersey" },
-  { value: "NM", label: "New Mexico" }, { value: "NY", label: "New York" }, { value: "NC", label: "North Carolina" },
-  { value: "ND", label: "North Dakota" }, { value: "OH", label: "Ohio" }, { value: "OK", label: "Oklahoma" },
-  { value: "OR", label: "Oregon" }, { value: "PA", label: "Pennsylvania" }, { value: "RI", label: "Rhode Island" },
-  { value: "SC", label: "South Carolina" }, { value: "SD", label: "South Dakota" }, { value: "TN", label: "Tennessee" },
-  { value: "TX", label: "Texas" }, { value: "UT", label: "Utah" }, { value: "VT", label: "Vermont" },
-  { value: "VA", label: "Virginia" }, { value: "WA", label: "Washington" }, { value: "WV", label: "West Virginia" },
-  { value: "WI", label: "Wisconsin" }, { value: "WY", label: "Wyoming" }, { value: "DC", label: "Washington DC" },
-];
 
 function RegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { registerBuyer, registerProvider, isAuthenticated, currentUser, isLoading } = useAuth();
+  const { registerProvider, isAuthenticated, currentUser, isLoading } = useAuth();
 
-  const preselectedRole = searchParams.get("role") as RegistrationRole | null;
-  const [activeRole, setActiveRole] = useState<RegistrationRole>(preselectedRole || "buyer");
+  // Provider-only registration - redirect if trying to access as buyer
+  const requestedRole = searchParams.get("role");
 
   // Common fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
-
-  // Buyer-specific fields
-  const [businessName, setBusinessName] = useState("");
-  const [businessType, setBusinessType] = useState<LeadBuyer["businessType"]>("insurance_agency");
-  const [buyerPhone, setBuyerPhone] = useState("");
-  const [licensedStates, setLicensedStates] = useState<string[]>([]);
 
   // Provider-specific fields
   const [displayName, setDisplayName] = useState("");
@@ -67,6 +37,13 @@ function RegisterContent() {
     }
   }, [isAuthenticated, currentUser, isLoading]);
 
+  // Redirect buyer registration attempts to login
+  useEffect(() => {
+    if (requestedRole === "buyer") {
+      router.replace("/auth/login");
+    }
+  }, [requestedRole, router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -78,46 +55,22 @@ function RegisterContent() {
       return;
     }
 
-    // Validate buyer-specific requirements
-    if (activeRole === "buyer") {
-      if (licensedStates.length === 0) {
-        setError("Please select at least one state where you are licensed");
-        return;
-      }
-    }
-
     setIsSubmitting(true);
-    setDebugInfo(`Registering as ${activeRole}...`);
-
-    let result;
+    setDebugInfo("Registering as provider...");
 
     try {
-      if (activeRole === "buyer") {
-        result = await registerBuyer({
-          email,
-          password,
-          username,
-          businessName,
-          businessType,
-          phone: buyerPhone,
-          licensedStates,
-          complianceAcknowledged: true,
-        });
-      } else {
-        result = await registerProvider({
-          email,
-          password,
-          username,
-          displayName,
-          phone: providerPhone || undefined,
-          location: location || undefined,
-        });
-      }
+      const result = await registerProvider({
+        email,
+        password,
+        username,
+        displayName,
+        phone: providerPhone || undefined,
+        location: location || undefined,
+      });
 
       if (result.success) {
-        setDebugInfo(`Registration successful! Redirecting to dashboard...`);
-        const targetUrl = activeRole === "buyer" ? "/business" : "/provider-dashboard";
-        window.location.href = targetUrl;
+        setDebugInfo("Registration successful! Redirecting to dashboard...");
+        window.location.href = "/provider-dashboard";
       } else {
         setError(result.error || "Registration failed. Please try again.");
         setDebugInfo(`Registration failed: ${result.error}`);
@@ -164,36 +117,8 @@ function RegisterContent() {
               className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Create Account</h1>
-          <p className="text-gray-500">Join the WOML marketplace</p>
-        </div>
-
-        {/* Role Tabs */}
-        <div className="flex mb-6 bg-gray-100 p-1 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setActiveRole("buyer")}
-            className={`flex-1 py-3 px-4 rounded-md font-medium transition ${
-              activeRole === "buyer"
-                ? "bg-white text-[#1e3a5f] shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <div className="text-xs uppercase tracking-wide opacity-70">I Buy Leads</div>
-            <div className="font-semibold">Business Owner</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveRole("provider")}
-            className={`flex-1 py-3 px-4 rounded-md font-medium transition ${
-              activeRole === "provider"
-                ? "bg-white text-[#1e3a5f] shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <div className="text-xs uppercase tracking-wide opacity-70">I Submit Leads</div>
-            <div className="font-semibold">Lead Provider</div>
-          </button>
+          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Become a Lead Provider</h1>
+          <p className="text-gray-500">Partner with Options Insurance Agency</p>
         </div>
 
         {error && (
@@ -241,140 +166,49 @@ function RegisterContent() {
             </div>
           </div>
 
-          {/* Role-Specific Fields */}
-          {activeRole === "buyer" ? (
-            <>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Business Name
-                </label>
-                <input
-                  type="text"
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                  placeholder="Acme Insurance Agency"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Business Type
-                  </label>
-                  <select
-                    value={businessType}
-                    onChange={(e) => setBusinessType(e.target.value as LeadBuyer["businessType"])}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition bg-white"
-                    required
-                    disabled={isSubmitting}
-                  >
-                    <option value="insurance_agency">Insurance Agency</option>
-                    <option value="dealership">Dealership</option>
-                    <option value="broker">Broker</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    value={buyerPhone}
-                    onChange={(e) => setBuyerPhone(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                    placeholder="(555) 123-4567"
-                    required
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
-
-              {/* Licensed States */}
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Licensed States <span className="text-red-500">*</span>
-                </label>
-                <p className="text-xs text-gray-500 mb-2">
-                  Select states where you hold valid insurance licenses.
-                </p>
-                <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {US_STATES.map((state) => (
-                      <label key={state.value} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded">
-                        <input
-                          type="checkbox"
-                          checked={licensedStates.includes(state.value)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setLicensedStates([...licensedStates, state.value]);
-                            } else {
-                              setLicensedStates(licensedStates.filter(s => s !== state.value));
-                            }
-                          }}
-                          disabled={isSubmitting}
-                          className="w-4 h-4 text-[#1e3a5f] rounded"
-                        />
-                        <span className="text-sm text-gray-700">{state.value}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                {licensedStates.length > 0 && (
-                  <p className="text-xs text-emerald-600 mt-2">
-                    Selected: {licensedStates.join(", ")}
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                  placeholder="John Doe"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Phone <span className="text-gray-400">(optional)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    value={providerPhone}
-                    onChange={(e) => setProviderPhone(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                    placeholder="(555) 123-4567"
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Location <span className="text-gray-400">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                    placeholder="Philadelphia, PA"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
-            </>
-          )}
+          {/* Provider Fields */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+              placeholder="John Doe"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Phone <span className="text-gray-400">(optional)</span>
+              </label>
+              <input
+                type="tel"
+                value={providerPhone}
+                onChange={(e) => setProviderPhone(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                placeholder="(555) 123-4567"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Location <span className="text-gray-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                placeholder="Philadelphia, PA"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
 
           {/* Password Fields */}
           <div className="grid grid-cols-2 gap-4">
@@ -423,7 +257,7 @@ function RegisterContent() {
                 Creating Account...
               </>
             ) : (
-              `Create ${activeRole === "buyer" ? "Business" : "Provider"} Account`
+              "Create Provider Account"
             )}
           </button>
         </form>

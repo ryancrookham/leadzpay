@@ -40,6 +40,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block buyer registration - single operator mode (Options Insurance Agency)
+    if (role === "buyer") {
+      return NextResponse.json(
+        { success: false, error: "Business registration is not available. This platform is exclusively for Options Insurance Agency." },
+        { status: 403 }
+      );
+    }
+
     // Register user
     const result = await registerUser({
       email,

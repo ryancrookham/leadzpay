@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
@@ -15,9 +14,7 @@ function isAdmin(email: string | undefined): boolean {
 }
 
 export default function Home() {
-  const router = useRouter();
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
-  const [selectedRole, setSelectedRole] = useState<"provider" | "receiver" | null>(null);
   const [showSignUpMenu, setShowSignUpMenu] = useState(false);
   const signUpRef = useRef<HTMLDivElement>(null);
 
@@ -34,14 +31,6 @@ export default function Home() {
 
   // Get dashboard URL based on user role
   const dashboardUrl = currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
-
-  const handleContinue = () => {
-    if (selectedRole === "provider") {
-      router.push("/auth/register?role=provider");
-    } else if (selectedRole === "receiver") {
-      router.push("/auth/register?role=buyer");
-    }
-  };
 
   // Show minimal loading state only while checking auth
   if (isLoading) {
@@ -144,21 +133,6 @@ export default function Home() {
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
                     <div className="px-4 py-2 text-xs font-medium text-gray-400 uppercase tracking-wider">Sign up as</div>
                     <Link
-                      href="/auth/register?role=buyer"
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
-                      onClick={() => setShowSignUpMenu(false)}
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-[#1e3a5f]/10 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900">Business</div>
-                        <div className="text-xs text-gray-500">Insurance agency / Lead buyer</div>
-                      </div>
-                    </Link>
-                    <Link
                       href="/auth/register?role=provider"
                       className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                       onClick={() => setShowSignUpMenu(false)}
@@ -169,9 +143,17 @@ export default function Home() {
                         </svg>
                       </div>
                       <div>
-                        <div className="font-medium text-gray-900">Provider</div>
-                        <div className="text-xs text-gray-500">Car salesperson / Lead provider</div>
+                        <div className="font-medium text-gray-900">Lead Provider</div>
+                        <div className="text-xs text-gray-500">Car salesperson / Dealer</div>
                       </div>
+                    </Link>
+                    <div className="border-t border-gray-100 my-2"></div>
+                    <Link
+                      href="/auth/login"
+                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition text-gray-500"
+                      onClick={() => setShowSignUpMenu(false)}
+                    >
+                      <div className="text-xs">Business owner? <span className="text-[#1e3a5f]">Sign in here</span></div>
                     </Link>
                   </div>
                 )}
@@ -183,7 +165,7 @@ export default function Home() {
 
       {/* Hero Section */}
       <main className="relative z-10 max-w-5xl mx-auto px-8 py-8">
-        <div className="text-center mb-2">
+        <div className="text-center mb-4">
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
@@ -191,168 +173,87 @@ export default function Home() {
             height={315}
             className="mx-auto w-full max-w-2xl h-auto object-contain"
           />
+          <p className="text-[#1e3a5f]/70 text-lg mt-2">
+            Powered by <span className="font-semibold text-[#1e3a5f]">Options Insurance Agency</span>
+          </p>
         </div>
 
-        {/* Role Selection */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-12">
-          {/* Lead Provider Card */}
-          <button
-            onClick={() => setSelectedRole("provider")}
-            className={`group p-8 rounded-2xl border-2 transition-all text-left ${
-              selectedRole === "provider"
-                ? "border-[#1e3a5f] bg-[#1e3a5f]/5 scale-[1.02] shadow-lg"
-                : "border-gray-200 bg-white hover:border-[#1e3a5f]/50 hover:shadow-md"
-            }`}
-          >
-            {selectedRole === "provider" && (
-              <div className="absolute top-4 right-4">
-                <div className="w-8 h-8 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+        {/* Provider Sign-Up Card - Single Focused Card */}
+        <div className="max-w-2xl mx-auto mb-12">
+          <div className="p-8 rounded-2xl border-2 border-[#1e3a5f] bg-[#1e3a5f]/5 shadow-lg text-left">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="h-16 w-16 rounded-2xl bg-[#1e3a5f] flex items-center justify-center">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-[#1e3a5f]">Become a Lead Provider</h3>
+                <p className="text-[#1e3a5f]/70 text-sm font-medium">Partner with Options Insurance Agency</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-6 text-lg">
+              Are you a car salesperson or dealer? Help your customers get insured and earn money for every qualified lead you send to Options Insurance Agency.
+            </p>
+            <div className="bg-white rounded-xl p-4 mb-6 border border-gray-200">
+              <h4 className="text-[#1e3a5f] font-semibold mb-3">How it works:</h4>
+              <ul className="text-gray-600 space-y-2">
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                </div>
-              </div>
-            )}
-
-            <div className="relative z-10">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="h-16 w-16 rounded-2xl bg-[#1e3a5f] flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  Sign up and connect with Options Insurance
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-[#1e3a5f]">I Have a Customer</h3>
-                  <p className="text-[#1e3a5f]/70 text-sm font-medium">Lead Provider / Car Salesperson</p>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-6 text-lg">
-                I&apos;m a car salesperson or dealer connecting a driver with insurance so they can legally drive their new vehicle.
-              </p>
-              <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
-                <h4 className="text-[#1e3a5f] font-semibold mb-3">What you&apos;ll do:</h4>
-                <ul className="text-gray-600 space-y-2">
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Submit customer info for instant quotes
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Get paid for every qualified lead
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Choose payout: Venmo, PayPal, or Bank
-                  </li>
-                </ul>
-              </div>
+                  Submit customer info (phone, email, driver&apos;s license)
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Get paid for every qualified lead
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Choose payout: Venmo, PayPal, or Bank Transfer
+                </li>
+              </ul>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <Link
+                href="/auth/register?role=provider"
+                className="w-full sm:w-auto px-8 py-4 rounded-xl text-lg font-semibold transition-all transform hover:scale-105 bg-[#1e3a5f] text-white shadow-lg hover:shadow-xl hover:bg-[#2a4a6f] text-center"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  Get Started
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </span>
+              </Link>
               <div className="flex items-center gap-2 text-[#1e3a5f] font-semibold">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
                 </svg>
-                Earn $50+ per lead
+                Earn money per lead
               </div>
             </div>
-          </button>
-
-          {/* Lead Receiver Card */}
-          <button
-            onClick={() => setSelectedRole("receiver")}
-            className={`group p-8 rounded-2xl border-2 transition-all text-left ${
-              selectedRole === "receiver"
-                ? "border-[#1e3a5f] bg-[#1e3a5f]/5 scale-[1.02] shadow-lg"
-                : "border-gray-200 bg-white hover:border-[#1e3a5f]/50 hover:shadow-md"
-            }`}
-          >
-            {selectedRole === "receiver" && (
-              <div className="absolute top-4 right-4">
-                <div className="w-8 h-8 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-            )}
-
-            <div className="relative z-10">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="h-16 w-16 rounded-2xl bg-[#1e3a5f] flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-[#1e3a5f]">I&apos;m a Business Owner</h3>
-                  <p className="text-[#1e3a5f]/70 text-sm font-medium">Lead Receiver / Insurance Agency</p>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-6 text-lg">
-                I own an insurance agency and want to receive qualified leads, manage payouts to salespeople, and track my business.
-              </p>
-              <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
-                <h4 className="text-[#1e3a5f] font-semibold mb-3">What you&apos;ll do:</h4>
-                <ul className="text-gray-600 space-y-2">
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    View all incoming leads with quotes
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Set & adjust payout rates per salesperson
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[#1e3a5f] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Full ledger, charts & financial tracking
-                  </li>
-                </ul>
-              </div>
-              <div className="flex items-center gap-2 text-[#1e3a5f] font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Secure Business Portal
-              </div>
-            </div>
-          </button>
-        </div>
-
-        {/* Continue Button */}
-        {selectedRole && (
-          <div className="text-center mb-16">
-            <button
-              onClick={handleContinue}
-              className="px-12 py-4 rounded-xl text-lg font-semibold transition-all transform hover:scale-105 bg-[#1e3a5f] text-white shadow-lg hover:shadow-xl hover:bg-[#2a4a6f]"
-            >
-              <span className="flex items-center gap-2">
-                {selectedRole === "provider" ? "Get Started as Provider" : "Get Started as Business"}
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </span>
-            </button>
           </div>
-        )}
+        </div>
 
         {/* Stats */}
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {[
-              { value: "$50+", label: "Per Lead Payout" },
+              { value: "Fast", label: "Lead Submission" },
               { value: "10+", label: "Insurance Carriers" },
-              { value: "3", label: "Payment Methods" },
-              { value: "100%", label: "Transparent Ledger" },
+              { value: "3", label: "Payout Methods" },
+              { value: "100%", label: "Transparent Tracking" },
             ].map((stat, i) => (
               <div key={i} className="text-center">
                 <div className="text-4xl font-bold text-[#1e3a5f]">{stat.value}</div>

@@ -1,14 +1,11 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
 function LoginContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { login, isAuthenticated, currentUser, isLoading } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -17,8 +14,6 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [debugInfo, setDebugInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const preselectedRole = searchParams.get("role") as "buyer" | "provider" | null;
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -168,30 +163,15 @@ function LoginContent() {
           <p className="text-center text-gray-500 text-sm mb-4">
             Don&apos;t have an account?
           </p>
-          <div className="grid grid-cols-2 gap-3">
-            <Link
-              href={`/auth/register?role=buyer${preselectedRole === "buyer" ? "&preselected=true" : ""}`}
-              className={`py-3 px-4 border rounded-lg text-center font-medium transition ${
-                preselectedRole === "buyer"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
-                  : "border-gray-200 text-gray-700 hover:border-[#1e3a5f] hover:text-[#1e3a5f]"
-              }`}
-            >
-              <div className="text-sm">I&apos;m a</div>
-              <div className="font-semibold">Business</div>
-            </Link>
-            <Link
-              href={`/auth/register?role=provider${preselectedRole === "provider" ? "&preselected=true" : ""}`}
-              className={`py-3 px-4 border rounded-lg text-center font-medium transition ${
-                preselectedRole === "provider"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5 text-[#1e3a5f]"
-                  : "border-gray-200 text-gray-700 hover:border-[#1e3a5f] hover:text-[#1e3a5f]"
-              }`}
-            >
-              <div className="text-sm">I&apos;m a</div>
-              <div className="font-semibold">Provider</div>
-            </Link>
-          </div>
+          <Link
+            href="/auth/register?role=provider"
+            className="block w-full py-3 px-4 border border-[#1e3a5f] bg-[#1e3a5f]/5 rounded-lg text-center font-medium transition hover:bg-[#1e3a5f]/10 text-[#1e3a5f]"
+          >
+            Sign up as Lead Provider
+          </Link>
+          <p className="text-center text-gray-400 text-xs mt-4">
+            Partner with Options Insurance Agency
+          </p>
         </div>
 
         <div className="mt-6 text-center">
