@@ -173,6 +173,7 @@ export default function ProviderDashboard() {
     declineTerms,
     updateConnectionStats,
     fetchUsersByRole,
+    refreshConnections,
   } = useConnections();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
@@ -422,6 +423,7 @@ export default function ProviderDashboard() {
                   const data = await res.json();
                   if (data.success) setDbLeads(data.leads);
                 } catch {}
+                refreshConnections();
               }}
               updateConnectionStats={updateConnectionStats}
             />

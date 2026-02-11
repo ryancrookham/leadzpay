@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Calculate fees
-    const ratePerLead = connection.rate_per_lead;
+    const ratePerLead = Number(connection.rate_per_lead) || 0;
     const fees = calculateFeeBreakdown(ratePerLead);
 
     // 4. Encrypt customer PII
@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
 
     // 7. Update connection stats
     await updateConnection(connectionId, {
-      total_leads: (connection.total_leads || 0) + 1,
-      total_paid: (connection.total_paid || 0) + ratePerLead,
+      total_leads: Number(connection.total_leads || 0) + 1,
+      total_paid: Number(connection.total_paid || 0) + ratePerLead,
     });
 
     return NextResponse.json({
