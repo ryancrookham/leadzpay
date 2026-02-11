@@ -1626,7 +1626,7 @@ function ProvidersTab({
                           </div>
                           <div>
                             <p className="text-emerald-600 text-xs">Total Paid</p>
-                            <p className="text-emerald-800 font-bold">${(connection.total_paid || 0).toFixed(2)}</p>
+                            <p className="text-emerald-800 font-bold">${Number(connection.total_paid || 0).toFixed(2)}</p>
                           </div>
                         </div>
                       </div>
@@ -2202,7 +2202,7 @@ function RolodexTab({
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">${(connection.total_paid || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-emerald-600">${Number(connection.total_paid || 0).toFixed(2)}</p>
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
                 </div>
               </div>
@@ -3911,7 +3911,7 @@ function RequestsTab({
                   </div>
                   <div>
                     <p className="text-gray-500 text-sm">Total Paid</p>
-                    <p className="text-xl font-bold text-emerald-600">${(connection.total_paid || 0).toFixed(2)}</p>
+                    <p className="text-xl font-bold text-emerald-600">${Number(connection.total_paid || 0).toFixed(2)}</p>
                   </div>
                 </div>
               </div>

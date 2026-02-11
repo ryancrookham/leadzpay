@@ -1248,7 +1248,7 @@ function ConnectionTab({
                   {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
                 </p>
                 <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)} for this lead.</p>
-                <p className="text-emerald-500 text-sm">(${(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${PLATFORM_FEE_PROVIDER.toFixed(2)} platform fee)</p>
+                <p className="text-emerald-500 text-sm">(${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${PLATFORM_FEE_PROVIDER.toFixed(2)} platform fee)</p>
               </div>
             </div>
             {channel === "asap" && (
@@ -1333,7 +1333,7 @@ function ConnectionTab({
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-gray-500 text-sm">Rate per Lead</p>
-                  <p className="text-2xl font-bold text-[#1e3a5f]">${(activeConnection?.rate_per_lead || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-[#1e3a5f]">${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -1370,7 +1370,7 @@ function ConnectionTab({
                 <p className="text-gray-500 text-sm">Total Leads</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-emerald-600">${(activeConnection?.total_paid || 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-emerald-600">${Number(activeConnection?.total_paid || 0).toFixed(2)}</p>
                 <p className="text-gray-500 text-sm">Total Earned</p>
               </div>
             </div>
@@ -1465,7 +1465,7 @@ function ConnectionTab({
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-blue-700 text-sm font-medium">
-                    You&apos;ll earn ${(activeConnection?.rate_per_lead || 50).toFixed(2)} for this lead
+                    You&apos;ll earn ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} for this lead
                   </p>
                 </div>
 
@@ -1712,7 +1712,7 @@ function ConnectionTab({
                 )}
 
                 <p className="text-center text-gray-500 text-xs">
-                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${(activeConnection?.rate_per_lead || 50).toFixed(2)} once they process it.
+                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} once they process it.
                 </p>
               </div>
             )}
@@ -1724,7 +1724,7 @@ function ConnectionTab({
                   <p className={`${channel === "asap" ? "text-red-700" : "text-blue-700"} text-sm font-medium`}>
                     {channel === "asap"
                       ? "Get the essentials - agent will call within 60 seconds"
-                      : `You'll earn $${(activeConnection?.rate_per_lead || 0).toFixed(2)} when this lead converts`}
+                      : `You'll earn $${Number(activeConnection?.rate_per_lead || 0).toFixed(2)} when this lead converts`}
                   </p>
                 </div>
 
@@ -2235,7 +2235,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${(pendingInvitation.rate_per_lead || 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${Number(pendingInvitation.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2261,7 +2261,7 @@ function ConnectionTab({
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${(pendingInvitation.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.termination_notice_days || 7} days notice.
+            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${Number(pendingInvitation.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
@@ -2318,7 +2318,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${(pendingTermsRequest.rate_per_lead || 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${Number(pendingTermsRequest.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2344,7 +2344,7 @@ function ConnectionTab({
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${(pendingTermsRequest.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.termination_notice_days || 7} days notice.
+            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${Number(pendingTermsRequest.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
@@ -2951,7 +2951,7 @@ function ProfileTab({
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
               </div>
               <div className="text-center bg-gray-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-emerald-600">${(provider?.stats?.totalEarnings || 0).toFixed(2)}</p>
+                <p className="text-2xl font-bold text-emerald-600">${Number(provider?.stats?.totalEarnings || 0).toFixed(2)}</p>
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Earned</p>
               </div>
             </div>
