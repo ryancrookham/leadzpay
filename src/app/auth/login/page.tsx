@@ -186,9 +186,6 @@ function LoginContent() {
           >
             Sign up as Lead Provider
           </Link>
-          <p className="text-center text-gray-400 text-xs mt-4">
-            Partner with Options Insurance Agency
-          </p>
         </div>
 
         <div className="mt-6 text-center">
