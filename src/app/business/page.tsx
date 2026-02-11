@@ -515,11 +515,11 @@ function BusinessPortalContent() {
                 <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Leads This Week</h3>
                 {(() => {
                   const maxCount = Math.max(...leadsByDay.map(d => d.count), 3);
-                  const padX = 30;
-                  const padTop = 25;
-                  const padBot = 35;
-                  const w = 300;
-                  const h = 170;
+                  const padX = 20;
+                  const padTop = 22;
+                  const padBot = 28;
+                  const w = 320;
+                  const h = 200;
                   const chartW = w - padX * 2;
                   const chartH = h - padTop - padBot;
                   const stepX = chartW / (leadsByDay.length - 1);
@@ -531,7 +531,7 @@ function BusinessPortalContent() {
                   const linePoints = pts.map(p => `${p.x},${p.y}`).join(" ");
                   const fillPoints = `${pts[0].x},${padTop + chartH} ${linePoints} ${pts[pts.length - 1].x},${padTop + chartH}`;
                   return (
-                    <div className="h-48">
+                    <div className="h-64">
                       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
                         <defs>
                           <linearGradient id="leadsFill" x1="0" y1="0" x2="0" y2="1">
