@@ -513,20 +513,53 @@ function BusinessPortalContent() {
               {/* Leads by Day Chart */}
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Leads This Week</h3>
-                <div className="flex items-end justify-between h-48 gap-2">
-                  {leadsByDay.map((day, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center">
-                      <div className="flex-1 w-full flex items-end">
-                        <div
-                          className="w-full bg-[#1e3a5f] rounded-t-lg transition-all"
-                          style={{ height: `${Math.max(day.count * 20, 8)}%` }}
-                        />
-                      </div>
-                      <span className="text-gray-500 text-xs mt-2">{day.day}</span>
-                      <span className="text-[#1e3a5f] text-sm font-medium">{day.count}</span>
+                {(() => {
+                  const maxCount = Math.max(...leadsByDay.map(d => d.count), 3);
+                  const padX = 30;
+                  const padTop = 25;
+                  const padBot = 35;
+                  const w = 300;
+                  const h = 170;
+                  const chartW = w - padX * 2;
+                  const chartH = h - padTop - padBot;
+                  const stepX = chartW / (leadsByDay.length - 1);
+                  const pts = leadsByDay.map((d, i) => ({
+                    x: padX + i * stepX,
+                    y: padTop + chartH - (d.count / maxCount) * chartH,
+                    ...d,
+                  }));
+                  const linePoints = pts.map(p => `${p.x},${p.y}`).join(" ");
+                  const fillPoints = `${pts[0].x},${padTop + chartH} ${linePoints} ${pts[pts.length - 1].x},${padTop + chartH}`;
+                  return (
+                    <div className="h-48">
+                      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                        <defs>
+                          <linearGradient id="leadsFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#1e3a5f" stopOpacity="0.18" />
+                            <stop offset="100%" stopColor="#1e3a5f" stopOpacity="0.02" />
+                          </linearGradient>
+                        </defs>
+                        {/* Grid lines */}
+                        {[0, 1, 2, 3].map(i => {
+                          const y = padTop + (chartH / 3) * i;
+                          return <line key={i} x1={padX} y1={y} x2={w - padX} y2={y} stroke="#e5e7eb" strokeWidth="0.5" strokeDasharray="4 3" />;
+                        })}
+                        {/* Gradient fill */}
+                        <polygon points={fillPoints} fill="url(#leadsFill)" />
+                        {/* Line */}
+                        <polyline points={linePoints} fill="none" stroke="#1e3a5f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {/* Data points and labels */}
+                        {pts.map((p, i) => (
+                          <g key={i}>
+                            <circle cx={p.x} cy={p.y} r="4" fill="#1e3a5f" stroke="white" strokeWidth="2" />
+                            <text x={p.x} y={p.y - 10} textAnchor="middle" fill="#1e3a5f" fontSize="11" fontWeight="600">{p.count}</text>
+                            <text x={p.x} y={h - 8} textAnchor="middle" fill="#6b7280" fontSize="10">{p.day}</text>
+                          </g>
+                        ))}
+                      </svg>
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </div>
 
               {/* Top Providers Chart */}
