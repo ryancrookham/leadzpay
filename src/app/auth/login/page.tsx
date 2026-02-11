@@ -3,10 +3,13 @@
 import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 function LoginContent() {
   const { login, isAuthenticated, currentUser, isLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get("registered") === "true";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,6 +91,12 @@ function LoginContent() {
           <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Welcome Back</h1>
           <p className="text-gray-500">Sign in to your account</p>
         </div>
+
+        {justRegistered && !error && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+            Account created successfully! Please sign in.
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">

@@ -1,32 +1,44 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
+type PayoutMethod = "venmo" | "paypal" | "cashapp" | "bank";
+
 function RegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { registerProvider, isAuthenticated, currentUser, isLoading } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Provider-only registration - redirect if trying to access as buyer
   const requestedRole = searchParams.get("role");
 
-  // Common fields
+  // Step management
+  const [step, setStep] = useState(1);
+
+  // Step 1: Profile fields
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [location, setLocation] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [username, setUsername] = useState("");
 
-  // Provider-specific fields
-  const [displayName, setDisplayName] = useState("");
-  const [providerPhone, setProviderPhone] = useState("");
-  const [location, setLocation] = useState("");
+  // Step 2: Payout fields
+  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod | null>(null);
+  const [venmoUsername, setVenmoUsername] = useState("");
+  const [paypalEmail, setPaypalEmail] = useState("");
+  const [cashappTag, setCashappTag] = useState("");
+  const [bankRouting, setBankRouting] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
 
   const [error, setError] = useState("");
-  const [debugInfo, setDebugInfo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
@@ -44,19 +56,169 @@ function RegisterContent() {
     }
   }, [requestedRole, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setDebugInfo("");
+  const handleProfilePictureClick = () => {
+    fileInputRef.current?.click();
+  };
 
-    // Validate passwords match
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = document.createElement("img");
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 400;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = reject;
+        img.src = reader.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        setError("Please select an image file");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Image must be less than 5MB");
+        return;
+      }
+
+      try {
+        const compressed = await compressImage(file);
+        setProfilePicture(compressed);
+        setError("");
+      } catch {
+        setError("Failed to process image");
+      }
+    }
+  };
+
+  const validateStep1 = (): boolean => {
+    setError("");
+
+    if (!username.trim()) {
+      setError("Username is required");
+      return false;
+    }
+    if (!email.trim()) {
+      setError("Email is required");
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+    if (!displayName.trim()) {
+      setError("Display name is required");
+      return false;
+    }
+    if (!password) {
+      setError("Password is required");
+      return false;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return false;
+    }
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    if (!hasLetter || !hasNumber) {
+      setError("Password must contain at least one letter and one number");
+      return false;
+    }
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateStep2 = (): boolean => {
+    setError("");
+
+    if (!payoutMethod) {
+      setError("Please select a payout method");
+      return false;
+    }
+
+    if (payoutMethod === "venmo" && !venmoUsername.trim()) {
+      setError("Please enter your Venmo username");
+      return false;
+    }
+    if (payoutMethod === "paypal" && !paypalEmail.trim()) {
+      setError("Please enter your PayPal email");
+      return false;
+    }
+    if (payoutMethod === "cashapp" && !cashappTag.trim()) {
+      setError("Please enter your Cash App $cashtag");
+      return false;
+    }
+    if (payoutMethod === "bank") {
+      if (!bankRouting.trim()) {
+        setError("Please enter your bank routing number");
+        return false;
+      }
+      if (!bankAccount.trim()) {
+        setError("Please enter your bank account number");
+        return false;
+      }
+      if (!/^\d{9}$/.test(bankRouting)) {
+        setError("Routing number must be exactly 9 digits");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleContinue = () => {
+    if (validateStep1()) {
+      setStep(2);
+    }
+  };
+
+  const handleBack = () => {
+    setError("");
+    setStep(1);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateStep2()) {
       return;
     }
 
     setIsSubmitting(true);
-    setDebugInfo("Registering as provider...");
+    setError("");
 
     try {
       const result = await registerProvider({
@@ -64,22 +226,31 @@ function RegisterContent() {
         password,
         username,
         displayName,
-        phone: providerPhone || undefined,
+        phone: phone || undefined,
         location: location || undefined,
+        profilePictureUrl: profilePicture || undefined,
+        payoutMethod: payoutMethod || undefined,
+        payoutVenmo: payoutMethod === "venmo" ? venmoUsername : undefined,
+        payoutPaypal: payoutMethod === "paypal" ? paypalEmail : undefined,
+        payoutCashapp: payoutMethod === "cashapp" ? cashappTag : undefined,
+        payoutBankRouting: payoutMethod === "bank" ? bankRouting : undefined,
+        payoutBankAccount: payoutMethod === "bank" ? bankAccount : undefined,
       });
 
       if (result.success) {
-        setDebugInfo("Registration successful! Redirecting to dashboard...");
-        window.location.href = "/provider-dashboard";
+        if ((result as { loginFailed?: boolean }).loginFailed) {
+          window.location.href = "/auth/login?registered=true";
+        } else {
+          window.location.href = "/provider-dashboard";
+        }
       } else {
         setError(result.error || "Registration failed. Please try again.");
-        setDebugInfo(`Registration failed: ${result.error}`);
         setIsSubmitting(false);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError("Registration failed. Please try again.");
-      setDebugInfo(`Exception: ${message}`);
+      console.error("Registration error:", message);
       setIsSubmitting(false);
     }
   };
@@ -107,6 +278,7 @@ function RegisterContent() {
       </div>
 
       <div className="relative z-10 bg-white p-8 rounded-2xl border border-gray-200 max-w-lg w-full shadow-lg">
+        {/* Header */}
         <div className="text-center mb-6">
           <Link href="/" className="inline-block">
             <Image
@@ -117,8 +289,29 @@ function RegisterContent() {
               className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Become a Lead Provider</h1>
-          <p className="text-gray-500">Partner with Options Insurance Agency</p>
+          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">
+            {step === 1 ? "Create Your Profile" : "Set Up Your Payouts"}
+          </h1>
+          <p className="text-gray-500">
+            Step {step} of 2 {step === 1 ? "- Partner with Options Insurance Agency" : "- How would you like to be paid?"}
+          </p>
+        </div>
+
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
+              step >= 1 ? "bg-[#1e3a5f] text-white" : "bg-gray-200 text-gray-500"
+            }`}>
+              1
+            </div>
+            <div className={`w-16 h-1 ${step >= 2 ? "bg-[#1e3a5f]" : "bg-gray-200"}`}></div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
+              step >= 2 ? "bg-[#1e3a5f] text-white" : "bg-gray-200 text-gray-500"
+            }`}>
+              2
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -127,140 +320,334 @@ function RegisterContent() {
           </div>
         )}
 
-        {debugInfo && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-xs font-mono">
-            {debugInfo}
-          </div>
+        {/* Step 1: Profile Information */}
+        {step === 1 && (
+          <form onSubmit={(e) => { e.preventDefault(); handleContinue(); }} className="space-y-4">
+            {/* Profile Picture */}
+            <div className="flex flex-col items-center mb-4">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={handleProfilePictureClick}
+                className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-[#1e3a5f] hover:bg-gray-50 transition group"
+              >
+                {profilePicture ? (
+                  <img
+                    src={profilePicture}
+                    alt="Profile preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center">
+                    <svg className="w-8 h-8 mx-auto text-gray-400 group-hover:text-[#1e3a5f] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                )}
+              </button>
+              <p className="text-sm text-gray-500 mt-2">
+                {profilePicture ? "Click to change photo" : "Add a photo (optional)"}
+              </p>
+            </div>
+
+            {/* Username and Email */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="johndoe"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Display Name */}
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                placeholder="John Doe"
+                required
+              />
+            </div>
+
+            {/* Phone and Location */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Phone <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Location <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="Philadelphia, PA"
+                />
+              </div>
+            </div>
+
+            {/* Password Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="Min. 8 characters"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  placeholder="Confirm password"
+                  required
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400">
+              Password must be at least 8 characters with at least one letter and one number.
+            </p>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition flex items-center justify-center gap-2 mt-6"
+            >
+              Continue
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </form>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Common Fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="johndoe"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="you@example.com"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
+        {/* Step 2: Payout Setup */}
+        {step === 2 && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <p className="text-gray-600 text-sm mb-4">
+              Choose how you&apos;d like to receive payments for your leads.
+            </p>
 
-          {/* Provider Fields */}
-          <div>
-            <label className="block text-gray-700 text-sm font-medium mb-2">
-              Display Name
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-              placeholder="John Doe"
-              required
-              disabled={isSubmitting}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Phone <span className="text-gray-400">(optional)</span>
+            {/* Venmo Option */}
+            <div
+              className={`border rounded-lg p-4 cursor-pointer transition ${
+                payoutMethod === "venmo"
+                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+              onClick={() => setPayoutMethod("venmo")}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  checked={payoutMethod === "venmo"}
+                  onChange={() => setPayoutMethod("venmo")}
+                  className="w-4 h-4 text-[#1e3a5f]"
+                />
+                <span className="ml-3 font-medium text-gray-900">Venmo</span>
               </label>
-              <input
-                type="tel"
-                value={providerPhone}
-                onChange={(e) => setProviderPhone(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="(555) 123-4567"
-                disabled={isSubmitting}
-              />
+              {payoutMethod === "venmo" && (
+                <div className="mt-3 ml-7">
+                  <input
+                    type="text"
+                    value={venmoUsername}
+                    onChange={(e) => setVenmoUsername(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    placeholder="@john-doe"
+                  />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Location <span className="text-gray-400">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="Philadelphia, PA"
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
 
-          {/* Password Fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Password
+            {/* PayPal Option */}
+            <div
+              className={`border rounded-lg p-4 cursor-pointer transition ${
+                payoutMethod === "paypal"
+                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+              onClick={() => setPayoutMethod("paypal")}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  checked={payoutMethod === "paypal"}
+                  onChange={() => setPayoutMethod("paypal")}
+                  className="w-4 h-4 text-[#1e3a5f]"
+                />
+                <span className="ml-3 font-medium text-gray-900">PayPal</span>
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="Min. 8 characters"
-                required
-                disabled={isSubmitting}
-              />
+              {payoutMethod === "paypal" && (
+                <div className="mt-3 ml-7">
+                  <input
+                    type="email"
+                    value={paypalEmail}
+                    onChange={(e) => setPaypalEmail(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    placeholder="paypal@example.com"
+                  />
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">
-                Confirm Password
+
+            {/* CashApp Option */}
+            <div
+              className={`border rounded-lg p-4 cursor-pointer transition ${
+                payoutMethod === "cashapp"
+                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+              onClick={() => setPayoutMethod("cashapp")}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  checked={payoutMethod === "cashapp"}
+                  onChange={() => setPayoutMethod("cashapp")}
+                  className="w-4 h-4 text-[#1e3a5f]"
+                />
+                <span className="ml-3 font-medium text-gray-900">Cash App</span>
               </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
-                placeholder="Confirm password"
-                required
-                disabled={isSubmitting}
-              />
+              {payoutMethod === "cashapp" && (
+                <div className="mt-3 ml-7">
+                  <input
+                    type="text"
+                    value={cashappTag}
+                    onChange={(e) => setCashappTag(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    placeholder="$johndoe"
+                  />
+                </div>
+              )}
             </div>
-          </div>
 
-          <p className="text-xs text-gray-400">
-            Password must be at least 8 characters with at least one letter and one number.
-          </p>
+            {/* Bank Account Option */}
+            <div
+              className={`border rounded-lg p-4 cursor-pointer transition ${
+                payoutMethod === "bank"
+                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+              onClick={() => setPayoutMethod("bank")}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="payoutMethod"
+                  checked={payoutMethod === "bank"}
+                  onChange={() => setPayoutMethod("bank")}
+                  className="w-4 h-4 text-[#1e3a5f]"
+                />
+                <span className="ml-3 font-medium text-gray-900">Bank Account</span>
+              </label>
+              {payoutMethod === "bank" && (
+                <div className="mt-3 ml-7 space-y-3">
+                  <input
+                    type="text"
+                    value={bankRouting}
+                    onChange={(e) => setBankRouting(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    placeholder="Routing Number (9 digits)"
+                  />
+                  <input
+                    type="text"
+                    value={bankAccount}
+                    onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, ""))}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    placeholder="Account Number"
+                  />
+                </div>
+              )}
+            </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                Creating Account...
-              </>
-            ) : (
-              "Create Provider Account"
-            )}
-          </button>
-        </form>
+            {/* Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={handleBack}
+                disabled={isSubmitting}
+                className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium transition hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                </svg>
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Creating...
+                  </>
+                ) : (
+                  "Complete Registration"
+                )}
+              </button>
+            </div>
+          </form>
+        )}
 
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm">

@@ -165,6 +165,13 @@ export async function registerUser(data: {
   businessName?: string;
   businessType?: string;
   licensedStates?: string[];
+  profilePictureUrl?: string;
+  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank';
+  payoutVenmo?: string;
+  payoutPaypal?: string;
+  payoutCashapp?: string;
+  payoutBankRouting?: string;
+  payoutBankAccount?: string;
 }): Promise<{ success: boolean; error?: string; user?: DbUser }> {
   try {
     // Check if user already exists
@@ -188,6 +195,13 @@ export async function registerUser(data: {
       business_name: data.businessName,
       business_type: data.businessType,
       licensed_states: data.licensedStates,
+      profile_picture_url: data.profilePictureUrl,
+      payout_method: data.payoutMethod,
+      payout_venmo: data.payoutVenmo,
+      payout_paypal: data.payoutPaypal,
+      payout_cashapp: data.payoutCashapp,
+      payout_bank_routing: data.payoutBankRouting,
+      payout_bank_account: data.payoutBankAccount,
     });
 
     return { success: true, user };

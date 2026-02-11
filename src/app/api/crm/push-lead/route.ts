@@ -1,31 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ExtractedLicenseData } from "../../extract-license/route";
 
 // Lead data format for CRM
 export interface CRMLeadData {
   // Contact Info
-  firstName: string;
-  lastName: string;
   fullName: string;
   email: string;
   phone: string;
+  state: string | null;
 
-  // Demographics
-  dateOfBirth: string;
-  age: number;
-  gender: string;
+  // Optional demographics
+  maritalStatus?: string;
+  hasInsurance?: string;
 
-  // Address
-  street: string;
-  city: string;
-  state: string;
-  zipCode: string;
-
-  // License Info
-  licenseNumber: string;
-  licenseState: string;
-  licenseExpiration: string;
-  licenseValid: boolean;
+  // License verification
+  licenseVerified: boolean;
 
   // Vehicle Info (from plate verification)
   plateNumber?: string;
@@ -46,87 +34,6 @@ export interface CRMLeadData {
   submittedAt: string;
 }
 
-// EZ Links specific payload format (adjust based on their API docs)
-interface EZLinksPayload {
-  lead: {
-    first_name: string;
-    last_name: string;
-    email: string;
-    phone: string;
-    date_of_birth: string;
-    address: {
-      line1: string;
-      city: string;
-      state: string;
-      postal_code: string;
-    };
-    custom_fields: {
-      license_number: string;
-      license_state: string;
-      license_expiration: string;
-      license_valid: string;
-      age: string;
-      gender: string;
-      lead_source: string;
-      provider_name: string;
-      // Vehicle fields
-      license_plate?: string;
-      plate_state?: string;
-      plate_verified?: string;
-      vehicle_make?: string;
-      vehicle_model?: string;
-      vehicle_year?: string;
-      vehicle_color?: string;
-    };
-  };
-  tags?: string[];
-  source?: string;
-}
-
-// Transform our data to EZ Links format
-function transformToEZLinksFormat(data: CRMLeadData): EZLinksPayload {
-  return {
-    lead: {
-      first_name: data.firstName,
-      last_name: data.lastName,
-      email: data.email,
-      phone: data.phone,
-      date_of_birth: data.dateOfBirth,
-      address: {
-        line1: data.street,
-        city: data.city,
-        state: data.state,
-        postal_code: data.zipCode,
-      },
-      custom_fields: {
-        license_number: data.licenseNumber,
-        license_state: data.licenseState,
-        license_expiration: data.licenseExpiration,
-        license_valid: data.licenseValid ? "Yes" : "No",
-        age: data.age.toString(),
-        gender: data.gender,
-        lead_source: data.source,
-        provider_name: data.providerName || "WOML",
-        // Vehicle fields
-        license_plate: data.plateNumber,
-        plate_state: data.plateState,
-        plate_verified: data.plateVerified ? "Yes" : "No",
-        vehicle_make: data.vehicleMake,
-        vehicle_model: data.vehicleModel,
-        vehicle_year: data.vehicleYear?.toString(),
-        vehicle_color: data.vehicleColor,
-      },
-    },
-    tags: [
-      "auto_insurance",
-      "leadzpay",
-      data.licenseValid ? "valid_license" : "expired_license",
-      data.plateVerified ? "plate_verified" : "plate_unverified",
-    ],
-    source: "leadzpay_api",
-  };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -134,62 +41,34 @@ export async function POST(request: NextRequest) {
       licenseData,
       email,
       phone,
+      customerName,
+      maritalStatus,
+      hasInsurance,
       providerId,
       providerName,
       leadType = "quote",
-      // Plate verification data
       plateNumber,
       plateState,
       plateVerified,
       vehicle,
-    } = body as {
-      licenseData: ExtractedLicenseData;
-      email: string;
-      phone: string;
-      providerId?: string;
-      providerName?: string;
-      leadType?: string;
-      plateNumber?: string;
-      plateState?: string;
-      plateVerified?: boolean;
-      vehicle?: {
-        make?: string;
-        model?: string;
-        year?: number;
-        color?: string;
-      };
-    };
+    } = body;
 
-    if (!licenseData || !email || !phone) {
+    if (!email || !phone) {
       return NextResponse.json(
-        { error: "Missing required fields: licenseData, email, phone" },
+        { error: "Missing required fields: email, phone" },
         { status: 400 }
       );
     }
 
-    // Check for EZ Links API configuration
-    const ezLinksApiKey = process.env.EZLINKS_API_KEY;
-    const ezLinksApiUrl = process.env.EZLINKS_API_URL || "https://api.ezlynx.com/v1/leads";
-
-    // Build the CRM lead data
+    // Build the CRM lead data from available info
     const crmData: CRMLeadData = {
-      firstName: licenseData.firstName,
-      lastName: licenseData.lastName,
-      fullName: licenseData.fullName,
+      fullName: customerName || licenseData?.name || "Unknown",
       email,
       phone,
-      dateOfBirth: licenseData.dateOfBirth,
-      age: licenseData.age,
-      gender: licenseData.gender,
-      street: licenseData.address.street,
-      city: licenseData.address.city,
-      state: licenseData.address.state,
-      zipCode: licenseData.address.zipCode,
-      licenseNumber: licenseData.licenseNumber,
-      licenseState: licenseData.licenseState,
-      licenseExpiration: licenseData.expirationDate,
-      licenseValid: licenseData.isValid && !licenseData.isExpired,
-      // Vehicle/Plate data
+      state: licenseData?.state || null,
+      maritalStatus,
+      hasInsurance,
+      licenseVerified: !!(licenseData?.isLicense && licenseData?.isClear),
       plateNumber,
       plateState,
       plateVerified,
@@ -197,7 +76,6 @@ export async function POST(request: NextRequest) {
       vehicleModel: vehicle?.model,
       vehicleYear: vehicle?.year,
       vehicleColor: vehicle?.color,
-      // Source
       source: "WOML",
       leadType,
       providerId,
@@ -205,26 +83,24 @@ export async function POST(request: NextRequest) {
       submittedAt: new Date().toISOString(),
     };
 
-    // If EZ Links is configured, push to their API
-    if (ezLinksApiKey) {
-      const ezLinksPayload = transformToEZLinksFormat(crmData);
+    // Check for EZ Links API configuration
+    const ezLinksApiKey = process.env.EZLINKS_API_KEY;
+    const ezLinksApiUrl = process.env.EZLINKS_API_URL || "https://api.ezlynx.com/v1/leads";
 
+    if (ezLinksApiKey) {
       try {
         const ezLinksResponse = await fetch(ezLinksApiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${ezLinksApiKey}`,
-            "X-API-Key": ezLinksApiKey, // Some APIs use this header instead
           },
-          body: JSON.stringify(ezLinksPayload),
+          body: JSON.stringify(crmData),
         });
 
         if (!ezLinksResponse.ok) {
           const errorText = await ezLinksResponse.text();
           console.error("EZ Links API error:", errorText);
-
-          // Still return success but note the CRM push failed
           return NextResponse.json({
             success: true,
             crmPushed: false,
@@ -234,7 +110,6 @@ export async function POST(request: NextRequest) {
         }
 
         const ezLinksResult = await ezLinksResponse.json();
-
         return NextResponse.json({
           success: true,
           crmPushed: true,
@@ -252,7 +127,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // No CRM configured - return data for local storage
+    // No CRM configured
     return NextResponse.json({
       success: true,
       crmPushed: false,
@@ -260,7 +135,6 @@ export async function POST(request: NextRequest) {
       message: "Lead processed. Configure EZLINKS_API_KEY to push to CRM.",
       data: crmData,
     });
-
   } catch (error) {
     console.error("CRM push error:", error);
     return NextResponse.json(

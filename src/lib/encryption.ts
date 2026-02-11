@@ -249,6 +249,33 @@ export function maskLicenseNumber(licenseNumber: string): string {
 }
 
 // ============================================
+// Single-field encryption for bank info columns
+// ============================================
+
+/**
+ * Encrypt a single field value, returning "encrypted:iv" for storage in one DB column.
+ */
+export async function encryptField(value: string): Promise<string> {
+  const { encrypted, iv } = await encrypt(value);
+  return `${encrypted}:${iv}`;
+}
+
+/**
+ * Decrypt a single field stored as "encrypted:iv".
+ * Returns original value if not encrypted (legacy plaintext data).
+ */
+export async function decryptField(stored: string | null): Promise<string | null> {
+  if (!stored) return null;
+  if (!stored.includes(":")) return stored; // legacy plaintext
+  const [encrypted, iv] = stored.split(":");
+  try {
+    return await decrypt(encrypted, iv);
+  } catch {
+    return "****"; // fallback if key changed
+  }
+}
+
+// ============================================
 // Client-side encryption key derivation
 // ============================================
 

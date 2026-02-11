@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { auth } from "@/lib/auth";
 import { executeSql as sql, isDatabaseConfigured, getUserById, createTransaction } from "@/lib/db";
 import { createPaymentSchema, validateInput } from "@/lib/validation";
+import { PLATFORM_FEE_TOTAL, PLATFORM_FEE_PROVIDER, calculateFeeBreakdown } from "@/lib/platform-fees";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -71,18 +72,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Convert amount to cents
-    const amountInCents = Math.round(amount * 100);
+    // Calculate fees
+    const fees = calculateFeeBreakdown(amount);
+    const buyerTotalCents = Math.round(fees.buyerTotal * 100);
+    const platformFeeCents = Math.round(PLATFORM_FEE_TOTAL * 100);
 
-    // No platform fee - provider receives 100% of payment
     const paymentIntentParams: Stripe.PaymentIntentCreateParams = {
-      amount: amountInCents,
+      amount: buyerTotalCents,
       currency: "usd",
       metadata: {
         providerId,
         leadId,
         buyerId: session.user.id,
         type: "lead_payout",
+        ratePerLead: String(amount),
+        platformFee: String(PLATFORM_FEE_TOTAL),
+        providerNet: String(fees.providerNet),
         description: description || `Lead payout for ${leadId}`,
       },
       automatic_payment_methods: {
@@ -90,27 +95,43 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    // If provider has a connected Stripe account, set up transfer
+    // Platform takes $2 fee, rest goes to provider's connected Stripe account
     if (providerStripeAccountId) {
       paymentIntentParams.transfer_data = {
         destination: providerStripeAccountId,
       };
+      paymentIntentParams.application_fee_amount = platformFeeCents;
     }
 
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
-    // Record pending transaction in database
+    // Record transactions in database
     if (isDatabaseConfigured()) {
+      // Lead payout transaction (provider earning)
       await createTransaction({
         type: "lead_payout",
+        status: "pending",
         amount: amount,
-        fee_amount: 0,
-        net_amount: amount,
+        fee_amount: PLATFORM_FEE_PROVIDER,
+        net_amount: fees.providerNet,
         from_account_id: session.user.id,
         to_account_id: providerId,
         lead_id: leadId,
         stripe_payment_id: paymentIntent.id,
         description: description || `Lead payout for ${leadId}`,
+      });
+
+      // Platform fee transaction
+      await createTransaction({
+        type: "platform_fee",
+        status: "completed",
+        amount: PLATFORM_FEE_TOTAL,
+        fee_amount: 0,
+        net_amount: PLATFORM_FEE_TOTAL,
+        from_account_id: session.user.id,
+        to_account_id: null,
+        lead_id: leadId,
+        description: `Platform fee for lead ${leadId}`,
       });
     }
 
@@ -118,9 +139,9 @@ export async function POST(request: NextRequest) {
       success: true,
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
-      amount: amount,
-      platformFee: 0,
-      providerPayout: amount,
+      amount: fees.buyerTotal,
+      platformFee: PLATFORM_FEE_TOTAL,
+      providerPayout: fees.providerNet,
       hasConnectedAccount: !!providerStripeAccountId,
     });
   } catch (error) {

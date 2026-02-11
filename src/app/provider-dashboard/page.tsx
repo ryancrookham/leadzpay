@@ -1,17 +1,39 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth, useCurrentProvider } from "@/lib/auth-context";
-import { useLeads, type Lead, type CustomerProfile } from "@/lib/leads-context";
+import { type CustomerProfile } from "@/lib/leads-context";
+
+// Type for leads returned by GET /api/leads
+interface ApiLead {
+  id: string;
+  providerId: string;
+  buyerId: string;
+  connectionId: string;
+  status: string;
+  customerName: string;
+  customerState: string | null;
+  vehicleYear: number | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  payoutAmount: number;
+  payoutStatus: "pending" | "processing" | "completed" | "failed";
+  payoutCompletedAt: string | null;
+  submittedAt: string;
+  providerName: string | null;
+  buyerName: string | null;
+  buyerBusinessName: string | null;
+}
 import { useConnections, type ApiConnection } from "@/lib/connection-context";
 import { isProvider, LeadBuyer } from "@/lib/auth-types";
 import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
 import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
 import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
 import { MASTER_OPERATOR } from "@/lib/master-operator";
+import { calculateFeeBreakdown, PLATFORM_FEE_PROVIDER } from "@/lib/platform-fees";
 
 // Lead form data interface (basic info)
 interface LeadFormData {
@@ -84,6 +106,40 @@ const US_STATES = [
 
 type Tab = "dashboard" | "connection" | "leads" | "earnings" | "profile";
 
+// Error boundary to catch tab rendering errors and show message instead of white screen
+class TabErrorBoundary extends React.Component<
+  { children: React.ReactNode; tabName: string },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; tabName: string }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error) {
+    console.error(`[${this.props.tabName}] Tab crash:`, error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+          <p className="text-red-600 font-medium mb-2">Something went wrong loading this tab.</p>
+          <p className="text-red-400 text-sm mb-4">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Helper function to check lead caps for ApiConnection
 function checkLeadCaps(connection: ApiConnection): {
   weeklyCapReached: boolean;
@@ -104,7 +160,10 @@ export default function ProviderDashboard() {
   const router = useRouter();
   const { currentUser, isAuthenticated, isLoading, logout, updateUser } = useAuth();
   const currentProvider = useCurrentProvider();
-  const { leads, addLead } = useLeads();
+  // Fetch leads from database API (not localStorage)
+  const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
+  const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
+
   const {
     getRequestsForProvider,
     getInvitationsForProvider,
@@ -125,6 +184,25 @@ export default function ProviderDashboard() {
       router.push("/business");
     }
   }, [isLoading, isAuthenticated, currentUser, router]);
+
+  // Fetch leads from database API
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchLeads = async () => {
+      try {
+        const res = await fetch("/api/leads");
+        const data = await res.json();
+        if (data.success) {
+          setDbLeads(data.leads);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leads:", err);
+      } finally {
+        setDbLeadsLoading(false);
+      }
+    };
+    fetchLeads();
+  }, [currentUser]);
 
   const handleLogout = () => {
     logout();
@@ -153,14 +231,11 @@ export default function ProviderDashboard() {
   // Business invitations are also terms_set status but initiated by the business
   const pendingInvitation = myInvitations.length > 0 ? myInvitations[0] : null;
 
-  // Get provider's leads from active connection
-  const myLeads = activeConnection
-    ? leads.filter(l => l.providerId === currentUser.id)
-    : [];
-  const totalLeads = myLeads.length;
-  const claimedLeads = myLeads.filter(l => l.status === "claimed").length;
-  const totalEarnings = myLeads.reduce((sum, l) => sum + (l.payout || 0), 0);
-  const pendingEarnings = myLeads.filter(l => l.status === "pending").reduce((sum, l) => sum + (l.payout || 0), 0);
+  // Calculate stats from DB leads (net amounts after platform fee)
+  const totalLeads = dbLeads.length;
+  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
+  const totalEarnings = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
+  const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
 
   // Determine connection status message
   const getConnectionStatus = () => {
@@ -313,55 +388,71 @@ export default function ProviderDashboard() {
 
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
-          <DashboardTab
-            activeConnection={activeConnection}
-            myLeads={myLeads}
-            totalLeads={totalLeads}
-            claimedLeads={claimedLeads}
-            totalEarnings={totalEarnings}
-            pendingEarnings={pendingEarnings}
-            onNavigateToConnection={() => setActiveTab("connection")}
-          />
+          <TabErrorBoundary tabName="Dashboard">
+            <DashboardTab
+              activeConnection={activeConnection}
+              dbLeads={dbLeads}
+              totalLeads={totalLeads}
+              paidLeads={paidLeads}
+              totalEarnings={totalEarnings}
+              pendingEarnings={pendingEarnings}
+              onNavigateToConnection={() => setActiveTab("connection")}
+            />
+          </TabErrorBoundary>
         )}
 
         {/* Connection Tab */}
         {activeTab === "connection" && (
-          <ConnectionTab
-            currentUser={currentUser}
-            currentProvider={currentProvider}
-            activeConnection={activeConnection}
-            pendingTermsRequest={pendingTermsRequest}
-            pendingInvitation={pendingInvitation}
-            pendingRequest={pendingRequest}
-            myRequests={myRequests}
-            fetchUsersByRole={fetchUsersByRole}
-            sendConnectionRequest={sendConnectionRequest}
-            acceptTerms={acceptTerms}
-            declineTerms={declineTerms}
-            addLead={addLead}
-            updateConnectionStats={updateConnectionStats}
-          />
+          <TabErrorBoundary tabName="Connection">
+            <ConnectionTab
+              currentUser={currentUser}
+              currentProvider={currentProvider}
+              activeConnection={activeConnection}
+              pendingTermsRequest={pendingTermsRequest}
+              pendingInvitation={pendingInvitation}
+              pendingRequest={pendingRequest}
+              myRequests={myRequests}
+              fetchUsersByRole={fetchUsersByRole}
+              sendConnectionRequest={sendConnectionRequest}
+              acceptTerms={acceptTerms}
+              declineTerms={declineTerms}
+              onLeadSubmitted={async () => {
+                try {
+                  const res = await fetch("/api/leads");
+                  const data = await res.json();
+                  if (data.success) setDbLeads(data.leads);
+                } catch {}
+              }}
+              updateConnectionStats={updateConnectionStats}
+            />
+          </TabErrorBoundary>
         )}
 
         {/* Leads Tab */}
         {activeTab === "leads" && (
-          <LeadsTab myLeads={myLeads} activeConnection={activeConnection} onNavigateToConnection={() => setActiveTab("connection")} />
+          <TabErrorBoundary tabName="Leads">
+            <LeadsTab dbLeads={dbLeads} dbLeadsLoading={dbLeadsLoading} activeConnection={activeConnection} onNavigateToConnection={() => setActiveTab("connection")} />
+          </TabErrorBoundary>
         )}
 
         {/* Earnings Tab */}
         {activeTab === "earnings" && (
-          <EarningsTab
-            myLeads={myLeads}
-            totalLeads={totalLeads}
-            totalEarnings={totalEarnings}
-            pendingEarnings={pendingEarnings}
-            activeConnection={activeConnection}
-          />
+          <TabErrorBoundary tabName="Earnings">
+            <EarningsTab
+              dbLeads={dbLeads}
+              totalLeads={totalLeads}
+              totalEarnings={totalEarnings}
+              pendingEarnings={pendingEarnings}
+              activeConnection={activeConnection}
+            />
+          </TabErrorBoundary>
         )}
 
         {/* Profile Tab */}
         {activeTab === "profile" && (
-          <ProfileTab provider={currentProvider} updateUser={updateUser} />
+          <TabErrorBoundary tabName="Profile">
+            <ProfileTab provider={currentProvider} updateUser={updateUser} />
+          </TabErrorBoundary>
         )}
       </div>
     </div>
@@ -371,17 +462,17 @@ export default function ProviderDashboard() {
 // Dashboard Tab
 function DashboardTab({
   activeConnection,
-  myLeads,
+  dbLeads,
   totalLeads,
-  claimedLeads,
+  paidLeads,
   totalEarnings,
   pendingEarnings,
   onNavigateToConnection,
 }: {
   activeConnection: ApiConnection | null;
-  myLeads: Lead[];
+  dbLeads: ApiLead[];
   totalLeads: number;
-  claimedLeads: number;
+  paidLeads: number;
   totalEarnings: number;
   pendingEarnings: number;
   onNavigateToConnection: () => void;
@@ -391,9 +482,9 @@ function DashboardTab({
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard title="Total Leads" value={totalLeads.toString()} color="navy" />
-        <StatCard title="Claimed Leads" value={claimedLeads.toString()} color="emerald" />
-        <StatCard title="Total Earnings" value={`$${totalEarnings.toLocaleString()}`} color="blue" />
-        <StatCard title="Pending" value={`$${pendingEarnings.toLocaleString()}`} color="amber" />
+        <StatCard title="Paid Leads" value={paidLeads.toString()} color="emerald" />
+        <StatCard title="Total Earnings" value={`$${totalEarnings.toFixed(2)}`} color="blue" />
+        <StatCard title="Pending" value={`$${pendingEarnings.toFixed(2)}`} color="amber" />
       </div>
 
       {/* Quick Actions */}
@@ -411,7 +502,7 @@ function DashboardTab({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">Submit New Lead</h3>
-                <p className="text-gray-500 text-sm">Earn ${activeConnection.rate_per_lead} per lead</p>
+                <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)}/lead (after ${PLATFORM_FEE_PROVIDER.toFixed(2)} fee)</p>
               </div>
             </div>
           </button>
@@ -446,7 +537,7 @@ function DashboardTab({
               </div>
               <div>
                 <p className="font-semibold text-gray-800">{activeConnection.buyerBusinessName}</p>
-                <p className="text-gray-500 text-sm">${activeConnection.rate_per_lead}/lead • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
+                <p className="text-gray-500 text-sm">${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)}/lead (after $1.00 fee) • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
           ) : (
@@ -468,29 +559,35 @@ function DashboardTab({
       {/* Recent Leads */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Recent Leads</h3>
-        {myLeads.length > 0 ? (
+        {dbLeads.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-gray-500 border-b border-gray-200">
                   <th className="pb-3 font-medium">Customer</th>
                   <th className="pb-3 font-medium">Vehicle</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Payout</th>
+                  <th className="pb-3 font-medium">Payment</th>
+                  <th className="pb-3 font-medium">Net Payout</th>
                   <th className="pb-3 font-medium">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {myLeads.slice(0, 5).map((lead) => (
+                {dbLeads.slice(0, 5).map((lead) => (
                   <tr key={lead.id} className="border-b border-gray-100">
                     <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                    <td className="py-4 text-gray-600">{lead.carModel}</td>
-                    <td className="py-4">
-                      <StatusBadge status={lead.status} />
+                    <td className="py-4 text-gray-600">
+                      {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}
                     </td>
-                    <td className="py-4 text-[#1e3a5f] font-medium">${lead.payout || 0}</td>
+                    <td className="py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                      </span>
+                    </td>
+                    <td className="py-4 text-[#1e3a5f] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
                     <td className="py-4 text-gray-500 text-sm">
-                      {new Date(lead.createdAt).toLocaleDateString()}
+                      {new Date(lead.submittedAt).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
@@ -520,7 +617,7 @@ function ConnectionTab({
   sendConnectionRequest,
   acceptTerms,
   declineTerms,
-  addLead,
+  onLeadSubmitted,
   updateConnectionStats,
 }: {
   currentUser: import("@/lib/auth-types").User;
@@ -534,7 +631,7 @@ function ConnectionTab({
   sendConnectionRequest: (buyerId: string, message?: string) => Promise<ApiConnection | null>;
   acceptTerms: (connectionId: string) => Promise<boolean>;
   declineTerms: (connectionId: string) => Promise<boolean>;
-  addLead: (lead: Omit<Lead, "id" | "createdAt">) => Lead;
+  onLeadSubmitted: () => Promise<void>;
   updateConnectionStats: (connectionId: string, leadPayout: number) => void;
 }) {
   const [requestMessage, setRequestMessage] = useState("");
@@ -603,30 +700,17 @@ function ConnectionTab({
   const [quoteEmail, setQuoteEmail] = useState("");
   const [quotePhone, setQuotePhone] = useState("");
   const [extractedLicenseData, setExtractedLicenseData] = useState<{
-    firstName: string;
-    lastName: string;
-    fullName: string;
-    dateOfBirth: string;
-    age: number;
-    gender: "male" | "female" | "other";
-    licenseNumber: string;
-    licenseState: string;
-    expirationDate: string;
-    address: {
-      street: string;
-      city: string;
-      state: string;
-      zipCode: string;
-      fullAddress: string;
-    };
-    isExpired: boolean;
-    isValid: boolean;
-    daysUntilExpiration: number;
-    validationNotes: string[];
-    confidence: "high" | "medium" | "low";
+    isLicense: boolean;
+    isClear: boolean;
+    name: string | null;
+    state: string | null;
+    reason?: string;
   } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [maritalStatus, setMaritalStatus] = useState<"" | "married" | "single">("");
+  const [hasInsurance, setHasInsurance] = useState<"" | "yes" | "no">("");
 
   // License plate verification state
   const [plateImage, setPlateImage] = useState<string | null>(null);
@@ -707,6 +791,9 @@ function ConnectionTab({
     setLicenseImage(null);
     setQuoteEmail("");
     setQuotePhone("");
+    setCustomerName("");
+    setMaritalStatus("");
+    setHasInsurance("");
     setExtractedLicenseData(null);
     setIsExtracting(false);
     setExtractionError(null);
@@ -756,7 +843,7 @@ function ConnectionTab({
     const firstName = formData.customerName.split(" ")[0] || "there";
     setChatMessages([{
       role: "ai",
-      text: `Great news, ${firstName}! I've found some excellent rates for your ${formData.carYear} ${formData.carMake} ${formData.carModel}.\n\nBased on your profile, you qualify for multiple discounts!\n\n**Your BEST rate: $${bestQuote.monthlyPremium}/month with ${bestQuote.companyName}**\n\nThis rate includes ${bestQuote.totalDiscount}% in savings. Would you like me to lock this in for you today, or do you have any questions about the coverage?`
+      text: `Great news, ${firstName}! I've found some excellent rates for your ${formData.carYear} ${formData.carMake} ${formData.carModel}.\n\nBased on your profile, you qualify for multiple discounts!\n\n**Your BEST rate: $${bestQuote.monthlyPremium.toFixed(2)}/month with ${bestQuote.companyName}**\n\nThis rate includes ${bestQuote.totalDiscount}% in savings. Would you like me to lock this in for you today, or do you have any questions about the coverage?`
     }]);
   };
 
@@ -813,21 +900,34 @@ function ConnectionTab({
     setCallStatus("calling");
     const payout = activeConnection.rate_per_lead;
 
-    // Create the lead
-    const lead = addLead({
-      providerId: currentUser.id,
-      providerName: currentProvider.displayName,
-      buyerId: activeConnection.buyerId,
-      customerName: formData.customerName,
-      email: formData.email,
-      phone: formData.phone,
-      carYear: parseInt(formData.carYear) || new Date().getFullYear(),
-      carModel: `${formData.carMake} ${formData.carModel}`.trim(),
-      quoteType: "asap",
-      payout,
-      connectionId: activeConnection.id,
-      status: "pending",
-    });
+    // Submit lead to API (database)
+    let leadId = "";
+    try {
+      const apiRes = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId: activeConnection.id,
+          customerData: {
+            name: formData.customerName,
+            email: formData.email,
+            phone: formData.phone,
+          },
+          vehicleData: formData.carMake ? {
+            make: formData.carMake,
+            model: formData.carModel,
+            year: parseInt(formData.carYear) || undefined,
+          } : undefined,
+        }),
+      });
+      const apiData = await apiRes.json();
+      if (apiData.success) {
+        leadId = apiData.leadId;
+        onLeadSubmitted();
+      }
+    } catch (err) {
+      console.error("Lead API call failed:", err);
+    }
 
     // Update connection stats
     updateConnectionStats(activeConnection.id, payout);
@@ -842,7 +942,7 @@ function ConnectionTab({
           customerPhone: formData.phone,
           carModel: `${formData.carMake} ${formData.carModel}`,
           quoteType: "asap",
-          leadId: lead.id,
+          leadId,
         }),
       });
 
@@ -863,7 +963,7 @@ function ConnectionTab({
   };
 
   // Handle Quote purchase
-  const handlePurchase = () => {
+  const handlePurchase = async () => {
     if (!activeConnection || !currentProvider || !selectedQuote) return;
 
     // Check lead caps before submission
@@ -875,27 +975,32 @@ function ConnectionTab({
 
     const payout = activeConnection.rate_per_lead;
 
-    addLead({
-      providerId: currentUser.id,
-      providerName: currentProvider.displayName,
-      buyerId: activeConnection.buyerId,
-      customerName: formData.customerName,
-      email: formData.email,
-      phone: formData.phone,
-      carYear: parseInt(formData.carYear) || new Date().getFullYear(),
-      carModel: `${formData.carMake} ${formData.carModel}`.trim(),
-      quoteType: "quote",
-      payout,
-      connectionId: activeConnection.id,
-      status: "converted",
-      quote: {
-        monthlyPremium: selectedQuote.monthlyPremium,
-        annualPremium: selectedQuote.annualPremium,
-        coverageType: selectedQuote.coverageType,
-        deductible: selectedQuote.deductible,
-        provider: selectedQuote.companyName,
-      },
-    });
+    // Submit lead to API (database)
+    try {
+      const apiRes = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectionId: activeConnection.id,
+          customerData: {
+            name: formData.customerName,
+            email: formData.email,
+            phone: formData.phone,
+          },
+          vehicleData: formData.carMake ? {
+            make: formData.carMake,
+            model: formData.carModel,
+            year: parseInt(formData.carYear) || undefined,
+          } : undefined,
+        }),
+      });
+      const apiData = await apiRes.json();
+      if (apiData.success) {
+        onLeadSubmitted();
+      }
+    } catch (err) {
+      console.error("Lead API call failed:", err);
+    }
 
     updateConnectionStats(activeConnection.id, payout);
     setFormStep("success");
@@ -917,72 +1022,73 @@ function ConnectionTab({
 
     const payout = activeConnection.rate_per_lead;
 
-    // Use extracted name if available, otherwise use email prefix as placeholder
-    const customerName = extractedLicenseData?.fullName || quoteEmail.split("@")[0] || "Customer";
+    // Use the editable name field (auto-filled from license, or manually entered)
+    const leadName = customerName || extractedLicenseData?.name || "Customer";
 
     // Build car info from license if available
     let carModel = "See License";
     let carYear = new Date().getFullYear();
-    if (extractedLicenseData?.licenseState) {
-      carModel = `Vehicle from ${extractedLicenseData.licenseState}`;
+    if (extractedLicenseData?.state) {
+      carModel = `Vehicle from ${extractedLicenseData.state}`;
     }
 
-    // Create the lead
-    const newLead = addLead({
-      providerId: currentUser.id,
-      providerName: currentProvider.displayName,
-      buyerId: activeConnection.buyerId,
-      customerName,
-      email: quoteEmail,
-      phone: quotePhone,
-      carYear,
-      carModel,
-      quoteType: "quote",
-      payout,
-      connectionId: activeConnection.id,
-      status: "pending",
-      licenseImage: licenseImage || undefined,
-      extractedLicenseData: extractedLicenseData ? {
-        firstName: extractedLicenseData.firstName,
-        lastName: extractedLicenseData.lastName,
-        fullName: extractedLicenseData.fullName,
-        dateOfBirth: extractedLicenseData.dateOfBirth,
-        age: extractedLicenseData.age,
-        gender: extractedLicenseData.gender,
-        licenseNumber: extractedLicenseData.licenseNumber,
-        licenseState: extractedLicenseData.licenseState,
-        expirationDate: extractedLicenseData.expirationDate,
-        address: extractedLicenseData.address,
-        isExpired: extractedLicenseData.isExpired,
-        isValid: extractedLicenseData.isValid,
-      } : undefined,
-    });
-
-    // Push to CRM with license data
+    // Submit lead to API (database)
     try {
-      await fetch("/api/crm/push-lead", {
+      const apiRes = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          licenseData: extractedLicenseData,
-          email: quoteEmail,
-          phone: quotePhone,
-          providerId: currentUser.id,
-          providerName: currentProvider.displayName,
-          leadType: "quote",
+          connectionId: activeConnection.id,
+          customerData: {
+            name: leadName,
+            email: quoteEmail,
+            phone: quotePhone,
+            licenseData: extractedLicenseData || undefined,
+            maritalStatus: maritalStatus || undefined,
+            hasInsurance: hasInsurance || undefined,
+          },
+          vehicleData: extractedLicenseData?.state ? {
+            state: extractedLicenseData.state,
+          } : undefined,
         }),
       });
+      const apiData = await apiRes.json();
+      if (!apiData.success) {
+        alert("Lead submission failed: " + (apiData.error || "Unknown error. Please try again."));
+        return;
+      }
+
+      // Lead created successfully — update UI and push to CRM
+      onLeadSubmitted();
+
+      // Push to CRM (non-blocking, don't fail the lead if CRM fails)
+      try {
+        await fetch("/api/crm/push-lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            licenseData: extractedLicenseData,
+            email: quoteEmail,
+            phone: quotePhone,
+            customerName: leadName,
+            maritalStatus: maritalStatus || undefined,
+            hasInsurance: hasInsurance || undefined,
+            providerId: currentUser.id,
+            providerName: currentProvider.displayName,
+            leadType: "quote",
+          }),
+        });
+      } catch (err) {
+        console.error("CRM push failed:", err);
+      }
+
+      updateConnectionStats(activeConnection.id, payout);
+      setFormStep("success");
+      setLeadSubmitted(true);
     } catch (err) {
-      console.error("CRM push failed:", err);
-      // Continue - lead is still saved locally
+      console.error("Lead API call failed:", err);
+      alert("Lead submission failed. Please check your connection and try again.");
     }
-
-    updateConnectionStats(activeConnection.id, payout);
-    setFormStep("success");
-    setLeadSubmitted(true);
-
-    // Log for debugging
-    console.log("Lead submitted:", newLead);
   };
 
   // Handle license image upload
@@ -1026,11 +1132,12 @@ function ConnectionTab({
         if (result.success && result.data) {
           setExtractedLicenseData(result.data);
           setExtractionError(null);
+          if (result.data.name) setCustomerName(result.data.name);
         } else {
-          setExtractionError(result.error || "Could not extract license data. You can still submit manually.");
+          setExtractionError(result.error || "Could not verify license photo. Please try again.");
         }
       } catch {
-        setExtractionError("Failed to process license. You can still submit manually.");
+        setExtractionError("Failed to verify license photo. Please try again.");
       } finally {
         setIsExtracting(false);
       }
@@ -1140,7 +1247,8 @@ function ConnectionTab({
                 <p className="text-xl font-bold text-emerald-800">
                   {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
                 </p>
-                <p className="text-emerald-600">You earned ${activeConnection.rate_per_lead} for this lead.</p>
+                <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)} for this lead.</p>
+                <p className="text-emerald-500 text-sm">(${(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${PLATFORM_FEE_PROVIDER.toFixed(2)} platform fee)</p>
               </div>
             </div>
             {channel === "asap" && (
@@ -1211,11 +1319,11 @@ function ConnectionTab({
 
             <div className="flex items-center gap-6 mb-6">
               <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">{activeConnection.buyerBusinessName.charAt(0)}</span>
+                <span className="text-2xl font-bold text-white">{(activeConnection.buyerBusinessName || "?").charAt(0)}</span>
               </div>
               <div>
-                <h4 className="text-xl font-bold text-gray-800">{activeConnection.buyerBusinessName}</h4>
-                <p className="text-gray-500">Connected since {new Date(activeConnection.accepted_at || activeConnection.created_at).toLocaleDateString()}</p>
+                <h4 className="text-xl font-bold text-gray-800">{activeConnection.buyerBusinessName || "Business"}</h4>
+                <p className="text-gray-500">Connected since {(activeConnection.accepted_at || activeConnection.created_at) ? new Date(activeConnection.accepted_at || activeConnection.created_at).toLocaleDateString() : "N/A"}</p>
               </div>
             </div>
 
@@ -1225,7 +1333,7 @@ function ConnectionTab({
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-gray-500 text-sm">Rate per Lead</p>
-                  <p className="text-2xl font-bold text-[#1e3a5f]">${activeConnection.rate_per_lead}</p>
+                  <p className="text-2xl font-bold text-[#1e3a5f]">${(activeConnection?.rate_per_lead || 0).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -1262,7 +1370,7 @@ function ConnectionTab({
                 <p className="text-gray-500 text-sm">Total Leads</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-emerald-600">${activeConnection.total_paid}</p>
+                <p className="text-3xl font-bold text-emerald-600">${(activeConnection?.total_paid || 0).toFixed(2)}</p>
                 <p className="text-gray-500 text-sm">Total Earned</p>
               </div>
             </div>
@@ -1357,7 +1465,7 @@ function ConnectionTab({
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                   <p className="text-blue-700 text-sm font-medium">
-                    You&apos;ll earn ${activeConnection?.rate_per_lead || 50} for this lead
+                    You&apos;ll earn ${(activeConnection?.rate_per_lead || 50).toFixed(2)} for this lead
                   </p>
                 </div>
 
@@ -1391,34 +1499,49 @@ function ConnectionTab({
                   />
                 </div>
 
+                {/* Customer Name */}
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    placeholder="Full name (auto-fills from license)"
+                  />
+                </div>
+
                 {/* Driver's License Upload */}
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData?.isExpired ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-                        <p className="text-blue-600 font-medium">Analyzing license...</p>
-                        <p className="text-gray-500 text-sm">Extracting name, address, DOB, and validating expiration</p>
+                        <p className="text-blue-600 font-medium">Checking photo quality...</p>
+                        <p className="text-gray-500 text-sm">Verifying this is a clear driver&apos;s license photo</p>
                       </div>
                     ) : licenseImage ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isValid && !extractedLicenseData?.isExpired ? (
+                          {extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                               </svg>
-                              <span className="font-medium">Valid License</span>
+                              <span className="font-medium">Clear License</span>
                             </span>
-                          ) : extractedLicenseData?.isExpired ? (
+                          ) : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? (
                             <span className="text-red-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                               </svg>
-                              <span className="font-medium">License Expired</span>
+                              <span className="font-medium">Retake Photo</span>
                             </span>
                           ) : (
                             <span className="text-yellow-600 flex items-center gap-1">
@@ -1454,96 +1577,142 @@ function ConnectionTab({
                             </svg>
                           </div>
                           <p className="text-gray-700 font-medium">Tap to take photo or upload</p>
-                          <p className="text-gray-500 text-sm">JPG, PNG up to 5MB - AI extracts data automatically</p>
+                          <p className="text-gray-500 text-sm">JPG, PNG up to 5MB - must be clear and fully visible</p>
                         </div>
                       </label>
                     )}
                   </div>
                 </div>
 
-                {/* Extraction Error */}
+                {/* Verification Error */}
                 {extractionError && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                     <p className="text-yellow-700 text-sm">{extractionError}</p>
                   </div>
                 )}
 
-                {/* Extracted License Data Display */}
+                {/* License Verification Result */}
                 {extractedLicenseData && (
-                  <div className={`border rounded-xl p-4 ${extractedLicenseData.isExpired ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200"}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className={`font-semibold ${extractedLicenseData.isExpired ? "text-red-800" : "text-emerald-800"}`}>
-                        Extracted License Data
-                      </h4>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        extractedLicenseData.confidence === "high" ? "bg-green-200 text-green-800" :
-                        extractedLicenseData.confidence === "medium" ? "bg-yellow-200 text-yellow-800" :
-                        "bg-red-200 text-red-800"
-                      }`}>
-                        {extractedLicenseData.confidence} confidence
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-gray-500">Name:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.fullName}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">DOB:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.dateOfBirth} (Age {extractedLicenseData.age})</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">License #:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseNumber}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">State:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.licenseState}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Address:</span>
-                        <p className="font-medium text-gray-800">{extractedLicenseData.address.fullAddress}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Expiration:</span>
-                        <p className={`font-medium ${extractedLicenseData.isExpired ? "text-red-600" : "text-gray-800"}`}>
-                          {extractedLicenseData.expirationDate}
-                          {extractedLicenseData.isExpired
-                            ? ` (Expired ${Math.abs(extractedLicenseData.daysUntilExpiration)} days ago)`
-                            : ` (${extractedLicenseData.daysUntilExpiration} days remaining)`}
+                  <div className={`border rounded-xl p-4 ${extractedLicenseData.isLicense && extractedLicenseData.isClear ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                    {extractedLicenseData.isLicense && extractedLicenseData.isClear ? (
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <p className="text-emerald-800 font-medium text-sm">
+                          License verified{extractedLicenseData.name ? ` — ${extractedLicenseData.name}` : ""}{extractedLicenseData.state ? ` (${extractedLicenseData.state})` : ""}
                         </p>
                       </div>
-                    </div>
-                    {extractedLicenseData.validationNotes && extractedLicenseData.validationNotes.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        {extractedLicenseData.validationNotes.map((note: string, i: number) => (
-                          <p key={i} className={`text-xs ${extractedLicenseData.isExpired ? "text-red-600" : "text-amber-600"}`}>
-                            • {note}
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          <p className="text-red-800 font-medium text-sm">
+                            {!extractedLicenseData.isLicense ? "This does not appear to be a driver's license" : "Photo is not clear enough to read"}
                           </p>
-                        ))}
+                        </div>
+                        {extractedLicenseData.reason && (
+                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.reason}</p>
+                        )}
+                        <p className="text-red-700 text-xs ml-7 font-medium">Please upload a clear, centered photo of the full license.</p>
                       </div>
                     )}
                   </div>
                 )}
 
+                {/* Optional Fields */}
+                <div className="space-y-4 border-t border-gray-100 pt-4">
+                  {/* Marital Status */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Marital Status <span className="text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMaritalStatus(maritalStatus === "married" ? "" : "married")}
+                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
+                            maritalStatus === "married"
+                              ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          Married
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMaritalStatus(maritalStatus === "single" ? "" : "single")}
+                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
+                            maritalStatus === "single"
+                              ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          Single
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Current Insurance */}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                        Do you currently have insurance? <span className="text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setHasInsurance(hasInsurance === "yes" ? "" : "yes")}
+                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
+                            hasInsurance === "yes"
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHasInsurance(hasInsurance === "no" ? "" : "no")}
+                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
+                            hasInsurance === "no"
+                              ? "border-red-400 bg-red-50 text-red-600"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
+                </div>
+
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={!quoteEmail || !quotePhone || !licenseImage || isExtracting}
-                  className={`w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 ${
-                    extractedLicenseData?.isExpired
-                      ? "bg-amber-500 hover:bg-amber-600 text-white"
-                      : "bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
-                  }`}
+                  disabled={!quoteEmail || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear}
+                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  {extractedLicenseData?.isExpired ? "Submit Lead (License Expired)" : "Submit Lead"}
+                  Submit Lead
                 </button>
 
+                {/* Photo quality warnings */}
+                {extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) && (
+                  <p className="text-center text-red-600 text-sm font-medium">
+                    Photo does not meet quality requirements. Please upload a clear, centered photo of the full license.
+                  </p>
+                )}
+                {licenseImage && !extractedLicenseData && !isExtracting && (
+                  <p className="text-center text-red-600 text-sm font-medium">
+                    Could not verify license. Please try uploading again.
+                  </p>
+                )}
+
                 <p className="text-center text-gray-500 text-xs">
-                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${activeConnection?.rate_per_lead || 50} once they process it.
+                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${(activeConnection?.rate_per_lead || 50).toFixed(2)} once they process it.
                 </p>
               </div>
             )}
@@ -1555,7 +1724,7 @@ function ConnectionTab({
                   <p className={`${channel === "asap" ? "text-red-700" : "text-blue-700"} text-sm font-medium`}>
                     {channel === "asap"
                       ? "Get the essentials - agent will call within 60 seconds"
-                      : `You'll earn $${activeConnection.rate_per_lead} when this lead converts`}
+                      : `You'll earn $${(activeConnection?.rate_per_lead || 0).toFixed(2)} when this lead converts`}
                   </p>
                 </div>
 
@@ -1800,7 +1969,7 @@ function ConnectionTab({
                     <div className="flex items-center justify-between px-2">
                       <div>
                         <p className="text-sm opacity-80">Best Rate for {formData.customerName.split(" ")[0]}</p>
-                        <p className="text-3xl font-bold">${selectedQuote.monthlyPremium}/mo</p>
+                        <p className="text-3xl font-bold">${selectedQuote.monthlyPremium.toFixed(2)}/mo</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm opacity-80">{selectedQuote.companyName}</p>
@@ -1850,7 +2019,7 @@ function ConnectionTab({
                 {selectedQuote && (
                   <button onClick={() => setFormStep("payment")} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    Purchase {selectedQuote.companyName} - ${selectedQuote.monthlyPremium}/mo
+                    Purchase {selectedQuote.companyName} - ${selectedQuote.monthlyPremium.toFixed(2)}/mo
                   </button>
                 )}
               </div>
@@ -1864,7 +2033,7 @@ function ConnectionTab({
                   <div className="flex items-center justify-between px-2">
                     <div>
                       <p className="text-sm opacity-80">Selected Policy</p>
-                      <p className="text-2xl font-bold">${selectedQuote.monthlyPremium}/mo</p>
+                      <p className="text-2xl font-bold">${selectedQuote.monthlyPremium.toFixed(2)}/mo</p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold">{selectedQuote.companyName}</p>
@@ -2005,10 +2174,10 @@ function ConnectionTab({
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-bold text-gray-800">{quote.companyName}</p>
-                          <p className="text-sm text-gray-500">{quote.coverageType} coverage • ${quote.deductible} deductible</p>
+                          <p className="text-sm text-gray-500">{quote.coverageType} coverage • ${quote.deductible.toFixed(2)} deductible</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-[#1e3a5f]">${quote.monthlyPremium}/mo</p>
+                          <p className="text-2xl font-bold text-[#1e3a5f]">${quote.monthlyPremium.toFixed(2)}/mo</p>
                           <p className="text-sm text-emerald-600">{quote.totalDiscount}% savings</p>
                         </div>
                       </div>
@@ -2045,7 +2214,7 @@ function ConnectionTab({
 
           <div className="flex items-center gap-6 mb-6">
             <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">{pendingInvitation.buyerBusinessName.charAt(0)}</span>
+              <span className="text-2xl font-bold text-white">{(pendingInvitation.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
               <h4 className="text-xl font-bold text-gray-800">{pendingInvitation.buyerBusinessName}</h4>
@@ -2066,7 +2235,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingInvitation.rate_per_lead}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${(pendingInvitation.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2092,7 +2261,7 @@ function ConnectionTab({
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${pendingInvitation.rate_per_lead} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.termination_notice_days || 7} days notice.
+            By accepting this invitation, you agree to submit leads to {pendingInvitation.buyerBusinessName} at the rate of ${(pendingInvitation.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingInvitation.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
@@ -2135,7 +2304,7 @@ function ConnectionTab({
 
           <div className="flex items-center gap-6 mb-6">
             <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">{pendingTermsRequest.buyerBusinessName.charAt(0)}</span>
+              <span className="text-2xl font-bold text-white">{(pendingTermsRequest.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
               <h4 className="text-xl font-bold text-gray-800">{pendingTermsRequest.buyerBusinessName}</h4>
@@ -2149,7 +2318,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${pendingTermsRequest.rate_per_lead}</p>
+                <p className="text-3xl font-bold text-[#1e3a5f]">${(pendingTermsRequest.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2175,7 +2344,7 @@ function ConnectionTab({
           </div>
 
           <p className="text-gray-600 text-sm mb-6">
-            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${pendingTermsRequest.rate_per_lead} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.termination_notice_days || 7} days notice.
+            By accepting these terms, you agree to submit leads to {pendingTermsRequest.buyerBusinessName} at the rate of ${(pendingTermsRequest.rate_per_lead || 0).toFixed(2)} per qualified lead. You can terminate this agreement at any time with {pendingTermsRequest.termination_notice_days || 7} days notice.
           </p>
 
           <div className="flex gap-4">
@@ -2208,7 +2377,7 @@ function ConnectionTab({
           </div>
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <span className="text-xl font-bold text-blue-600">{pendingRequest.buyerBusinessName.charAt(0)}</span>
+              <span className="text-xl font-bold text-blue-600">{(pendingRequest.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
               <p className="font-semibold text-gray-800">{pendingRequest.buyerBusinessName}</p>
@@ -2242,7 +2411,7 @@ function ConnectionTab({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                          <span className="text-xl font-bold text-white">{buyer.businessName.charAt(0)}</span>
+                          <span className="text-xl font-bold text-white">{(buyer.businessName || "?").charAt(0)}</span>
                         </div>
                         <div>
                           <p className="font-semibold text-gray-800">{buyer.businessName}</p>
@@ -2304,7 +2473,7 @@ function ConnectionTab({
               <div key={request.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <p className="font-medium text-gray-800">{request.buyerBusinessName}</p>
-                  <p className="text-gray-500 text-sm">{new Date(request.createdAt).toLocaleDateString()}</p>
+                  <p className="text-gray-500 text-sm">{request.createdAt ? new Date(request.createdAt).toLocaleDateString() : "N/A"}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   request.status === "accepted" ? "bg-emerald-100 text-emerald-700" :
@@ -2324,11 +2493,11 @@ function ConnectionTab({
 }
 
 // Leads Tab
-function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLeads: Lead[]; activeConnection: ApiConnection | null; onNavigateToConnection: () => void }) {
+function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConnection }: { dbLeads: ApiLead[]; dbLeadsLoading: boolean; activeConnection: ApiConnection | null; onNavigateToConnection: () => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({myLeads.length})</h3>
+        <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({dbLeads.length})</h3>
         {activeConnection && (
           <button
             onClick={onNavigateToConnection}
@@ -2341,35 +2510,42 @@ function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLea
           </button>
         )}
       </div>
-      {myLeads.length > 0 ? (
+      {dbLeadsLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+        </div>
+      ) : dbLeads.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-200">
                 <th className="pb-3 font-medium">Date</th>
                 <th className="pb-3 font-medium">Customer</th>
-                <th className="pb-3 font-medium">Contact</th>
                 <th className="pb-3 font-medium">Vehicle</th>
-                <th className="pb-3 font-medium">Status</th>
-                <th className="pb-3 font-medium">Payout</th>
+                <th className="pb-3 font-medium">Payment</th>
+                <th className="pb-3 font-medium">Net Payout</th>
               </tr>
             </thead>
             <tbody>
-              {myLeads.map((lead) => (
+              {dbLeads.map((lead) => (
                 <tr key={lead.id} className="border-b border-gray-100">
                   <td className="py-4 text-gray-500 text-sm">
-                    {new Date(lead.createdAt).toLocaleDateString()}
+                    {new Date(lead.submittedAt).toLocaleDateString()}
                   </td>
                   <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                  <td className="py-4 text-gray-500 text-sm">
-                    <div>{lead.email}</div>
-                    <div>{lead.phone}</div>
+                  <td className="py-4 text-gray-600">
+                    {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}
                   </td>
-                  <td className="py-4 text-gray-600">{lead.carModel} ({lead.carYear})</td>
                   <td className="py-4">
-                    <StatusBadge status={lead.status} />
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                      lead.payoutStatus === "pending" ? "bg-amber-100 text-amber-700" :
+                      "bg-gray-100 text-gray-500"
+                    }`}>
+                      {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                    </span>
                   </td>
-                  <td className="py-4 text-[#1e3a5f] font-bold">${lead.payout || 0}</td>
+                  <td className="py-4 text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2386,13 +2562,13 @@ function LeadsTab({ myLeads, activeConnection, onNavigateToConnection }: { myLea
 
 // Earnings Tab
 function EarningsTab({
-  myLeads,
+  dbLeads,
   totalLeads,
   totalEarnings,
   pendingEarnings,
   activeConnection,
 }: {
-  myLeads: Lead[];
+  dbLeads: ApiLead[];
   totalLeads: number;
   totalEarnings: number;
   pendingEarnings: number;
@@ -2403,17 +2579,17 @@ function EarningsTab({
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <p className="text-gray-500 text-sm mb-1">Total Earned</p>
-          <p className="text-3xl font-bold text-emerald-600">${totalEarnings.toLocaleString()}</p>
+          <p className="text-gray-500 text-sm mb-1">Total Earned (net)</p>
+          <p className="text-3xl font-bold text-emerald-600">${totalEarnings.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Pending Payouts</p>
-          <p className="text-3xl font-bold text-amber-600">${pendingEarnings.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-amber-600">${pendingEarnings.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
           <p className="text-3xl font-bold text-[#1e3a5f]">
-            ${totalLeads > 0 ? Math.round(totalEarnings / totalLeads) : activeConnection?.rate_per_lead || 0}
+            ${(totalLeads > 0 ? (totalEarnings / totalLeads) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet : 0).toFixed(2)}
           </p>
         </div>
       </div>
@@ -2421,17 +2597,21 @@ function EarningsTab({
       {/* Earnings History */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Earnings History</h3>
-        {myLeads.length > 0 ? (
+        {dbLeads.length > 0 ? (
           <div className="space-y-3">
-            {myLeads.map((lead) => (
+            {dbLeads.map((lead) => (
               <div key={lead.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div>
                   <p className="text-gray-800 font-medium">{lead.customerName}</p>
-                  <p className="text-gray-500 text-sm">{new Date(lead.createdAt).toLocaleDateString()}</p>
+                  <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[#1e3a5f] font-bold">${lead.payout || 0}</p>
-                  <StatusBadge status={lead.status} />
+                  <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</p>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                  </span>
                 </div>
               </div>
             ))}
@@ -2456,22 +2636,110 @@ function ProfileTab({
   const [phone, setPhone] = useState(provider?.phone || "");
   const [location, setLocation] = useState(provider?.location || "");
   const [bio, setBio] = useState(provider?.bio || "");
-  const [paymentMethod, setPaymentMethod] = useState(provider?.paymentMethod || "venmo");
+  const [profilePicture, setProfilePicture] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("venmo");
+  const [payoutVenmo, setPayoutVenmo] = useState("");
+  const [payoutPaypal, setPayoutPaypal] = useState("");
+  const [payoutCashapp, setPayoutCashapp] = useState("");
+  const [payoutBankRouting, setPayoutBankRouting] = useState("");
+  const [payoutBankAccount, setPayoutBankAccount] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  const handleSave = () => {
-    if (provider) {
-      updateUser({
-        displayName,
-        phone,
-        location,
-        bio,
-        paymentMethod: paymentMethod as "venmo" | "paypal" | "bank",
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+  // Fetch full profile (including payout details) and Stripe status on mount
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const res = await fetch("/api/profile");
+        if (res.ok) {
+          const data = await res.json();
+          const p = data.profile;
+          if (p.payoutMethod) setPayoutMethod(p.payoutMethod);
+          if (p.payoutVenmo) setPayoutVenmo(p.payoutVenmo);
+          if (p.payoutPaypal) setPayoutPaypal(p.payoutPaypal);
+          if (p.payoutCashapp) setPayoutCashapp(p.payoutCashapp);
+          if (p.payoutBankRouting) setPayoutBankRouting(p.payoutBankRouting);
+          if (p.payoutBankAccount) setPayoutBankAccount(p.payoutBankAccount);
+          if (p.profilePictureUrl) setProfilePicture(p.profilePictureUrl);
+        }
+      } catch (e) {
+        console.error("Failed to load profile:", e);
+      }
+      setProfileLoaded(true);
+    }
+    loadProfile();
+  }, []);
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = document.createElement("img");
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 400;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxSize) { height = (height * maxSize) / width; width = maxSize; }
+          } else {
+            if (height > maxSize) { width = (width * maxSize) / height; height = maxSize; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("Canvas not supported")); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file);
+        setProfilePicture(compressed);
+      } catch {
+        console.error("Failed to process image");
+      }
     }
   };
+
+  const handleSave = async () => {
+    if (!provider) return;
+    setSaving(true);
+    await updateUser({
+      displayName,
+      phone,
+      location,
+      bio,
+      profilePictureUrl: profilePicture || undefined,
+      payoutMethod: payoutMethod as "venmo" | "paypal" | "cashapp" | "bank",
+      payoutVenmo,
+      payoutPaypal,
+      payoutCashapp,
+      payoutBankRouting,
+      payoutBankAccount,
+    } as any);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const payoutOptions = [
+    { value: "venmo", label: "Venmo", icon: "V" },
+    { value: "paypal", label: "PayPal", icon: "P" },
+    { value: "cashapp", label: "CashApp", icon: "$" },
+    { value: "bank", label: "Bank Account", icon: "B" },
+  ];
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
@@ -2489,6 +2757,28 @@ function ProfileTab({
         )}
 
         <div className="space-y-4">
+          {/* Profile Picture */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {profilePicture ? (
+                <img src={profilePicture} alt="Profile" className="h-20 w-20 rounded-full object-cover border-2 border-gray-200" />
+              ) : (
+                <div className="h-20 w-20 rounded-full bg-[#1e3a5f] flex items-center justify-center border-2 border-gray-200">
+                  <span className="text-2xl font-bold text-white">{displayName?.charAt(0) || "?"}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition inline-block">
+                Upload Photo
+                <input type="file" accept="image/*" onChange={handlePictureChange} className="hidden" />
+              </label>
+              {profilePicture && (
+                <button onClick={() => setProfilePicture("")} className="ml-2 text-red-500 hover:text-red-700 text-sm">Remove</button>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-gray-700 text-sm font-medium mb-2">Display Name</label>
             <input
@@ -2527,23 +2817,103 @@ function ProfileTab({
               className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition resize-none"
             />
           </div>
+
+          {/* Payout Method */}
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-2">Preferred Payment Method</label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as "venmo" | "paypal" | "bank")}
-              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
-            >
-              <option value="venmo">Venmo</option>
-              <option value="paypal">PayPal</option>
-              <option value="bank">Bank Transfer</option>
-            </select>
+            <label className="block text-gray-700 text-sm font-medium mb-3">Payout Method</label>
+            <div className="grid grid-cols-2 gap-2">
+              {payoutOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPayoutMethod(opt.value)}
+                  className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
+                    payoutMethod === opt.value
+                      ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                      : "border-gray-200 hover:border-gray-300 text-gray-600"
+                  }`}
+                >
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    payoutMethod === opt.value ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-500"
+                  }`}>{opt.icon}</span>
+                  <span className="font-medium text-sm">{opt.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Conditional payout detail inputs */}
+          {profileLoaded && (
+            <div>
+              {payoutMethod === "venmo" && (
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Venmo Username</label>
+                  <input
+                    type="text"
+                    value={payoutVenmo}
+                    onChange={(e) => setPayoutVenmo(e.target.value)}
+                    placeholder="@username"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+              )}
+              {payoutMethod === "paypal" && (
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">PayPal Email</label>
+                  <input
+                    type="email"
+                    value={payoutPaypal}
+                    onChange={(e) => setPayoutPaypal(e.target.value)}
+                    placeholder="email@example.com"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+              )}
+              {payoutMethod === "cashapp" && (
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">CashApp Tag</label>
+                  <input
+                    type="text"
+                    value={payoutCashapp}
+                    onChange={(e) => setPayoutCashapp(e.target.value)}
+                    placeholder="$cashtag"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+              )}
+              {payoutMethod === "bank" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Routing Number</label>
+                    <input
+                      type="text"
+                      value={payoutBankRouting}
+                      onChange={(e) => setPayoutBankRouting(e.target.value)}
+                      placeholder="9-digit routing number"
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Account Number</label>
+                    <input
+                      type="text"
+                      value={payoutBankAccount}
+                      onChange={(e) => setPayoutBankAccount(e.target.value)}
+                      placeholder="Account number"
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={handleSave}
-            className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md"
+            disabled={saving}
+            className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
           >
-            Save Profile
+            {saving ? "Saving..." : "Save Profile"}
           </button>
         </div>
       </div>
@@ -2555,9 +2925,13 @@ function ProfileTab({
         <div className="border border-gray-200 rounded-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-6 text-white">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-2xl font-bold">{displayName?.charAt(0) || "?"}</span>
-              </div>
+              {profilePicture ? (
+                <img src={profilePicture} alt="Profile" className="h-16 w-16 rounded-full object-cover border-2 border-white/30" />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-2xl font-bold">{displayName?.charAt(0) || "?"}</span>
+                </div>
+              )}
               <div>
                 <h4 className="text-xl font-bold">{displayName || "Your Name"}</h4>
                 <p className="text-white/70">@{provider?.username}</p>
@@ -2577,13 +2951,13 @@ function ProfileTab({
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
               </div>
               <div className="text-center bg-gray-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-emerald-600">${provider?.stats?.totalEarnings || 0}</p>
+                <p className="text-2xl font-bold text-emerald-600">${(provider?.stats?.totalEarnings || 0).toFixed(2)}</p>
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Earned</p>
               </div>
             </div>
 
             <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
-              <span className="text-gray-500">Payment: {paymentMethod}</span>
+              <span className="text-gray-500">Payment: {payoutMethod}</span>
               <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
                 Active
               </span>

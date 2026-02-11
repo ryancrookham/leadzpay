@@ -123,6 +123,13 @@ export interface ProviderRegistrationData {
   displayName: string;
   phone?: string;
   location?: string;
+  profilePictureUrl?: string;
+  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank';
+  payoutVenmo?: string;
+  payoutPaypal?: string;
+  payoutCashapp?: string;
+  payoutBankRouting?: string;
+  payoutBankAccount?: string;
 }
 
 // Helper to check user type

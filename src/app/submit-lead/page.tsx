@@ -1558,7 +1558,7 @@ export default function SubmitLead() {
                     maxLength={4}
                     className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-400 transition"
                   />
-                  <p className="text-gray-400 text-xs mt-2">Full bank details will be collected securely via Stripe</p>
+                  <p className="text-gray-400 text-xs mt-2">Full bank details can be configured in your profile settings</p>
                 </div>
               )}
             </div>

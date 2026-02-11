@@ -32,11 +32,15 @@ export async function GET(request: NextRequest) {
     // Filter to only return public info and connection status
     const sanitizedUsers = users.map((user) => ({
       id: user.id,
+      username: user.username,
       displayName: user.display_name || user.username,
       businessName: user.business_name,
       location: user.location,
       licensedStates: user.licensed_states,
       email: user.email,
+      phone: user.phone,
+      profilePictureUrl: user.profile_picture_url,
+      payoutMethod: user.payout_method,
       isConnected: connectedUserIds.has(user.id),
       connectionStatus: myConnections.find(
         (c) => (userRole === "provider" ? c.buyer_id : c.provider_id) === user.id

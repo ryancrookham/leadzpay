@@ -1,16 +1,73 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useLeads, type Lead, type Provider } from "@/lib/leads-context";
+import { useLeads, type Provider } from "@/lib/leads-context";
 import { useAuth, useCurrentBuyer } from "@/lib/auth-context";
-import { useConnections, type ApiConnection } from "@/lib/connection-context";
+import { useConnections, type ApiConnection, type DiscoveryUser } from "@/lib/connection-context";
 import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
+import { calculateFeeBreakdown, PLATFORM_FEE_BUYER } from "@/lib/platform-fees";
+
+// Type for leads returned by GET /api/leads
+interface ApiLead {
+  id: string;
+  providerId: string;
+  buyerId: string;
+  connectionId: string;
+  status: string;
+  customerName: string;
+  customerState: string | null;
+  vehicleYear: number | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  payoutAmount: number;
+  payoutStatus: "pending" | "processing" | "completed" | "failed";
+  payoutCompletedAt: string | null;
+  submittedAt: string;
+  providerName: string | null;
+  providerVenmo?: string | null;
+  buyerName: string | null;
+  buyerBusinessName: string | null;
+}
 
 type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
+
+// Error boundary to catch tab rendering errors and show message instead of white screen
+class TabErrorBoundary extends React.Component<
+  { children: React.ReactNode; tabName: string },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; tabName: string }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error) {
+    console.error(`[${this.props.tabName}] Tab crash:`, error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+          <p className="text-red-600 font-medium mb-2">Something went wrong loading this tab.</p>
+          <p className="text-red-400 text-sm mb-4">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function BusinessPortalContent() {
   const router = useRouter();
@@ -32,7 +89,7 @@ function BusinessPortalContent() {
   const [crmFileName, setCrmFileName] = useState<string | null>(null);
   const [isDraggingCrm, setIsDraggingCrm] = useState(false);
 
-  const { leads, providers, updateProvider, addProvider } = useLeads();
+  const { providers, updateProvider, addProvider } = useLeads();
   const {
     getRequestsForBuyer,
     getConnectionsForBuyer,
@@ -41,7 +98,30 @@ function BusinessPortalContent() {
     updateConnectionTerms,
     terminateConnection,
     sendInvitationToProvider,
+    fetchUsersByRole,
   } = useConnections();
+
+  // Fetch leads from database API (not localStorage)
+  const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
+  const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchLeads = async () => {
+      try {
+        const res = await fetch("/api/leads");
+        const data = await res.json();
+        if (data.success) {
+          setDbLeads(data.leads);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leads:", err);
+      } finally {
+        setDbLeadsLoading(false);
+      }
+    };
+    fetchLeads();
+  }, [currentUser]);
 
   // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
   const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_buyer_review") : [];
@@ -320,18 +400,24 @@ function BusinessPortalContent() {
     );
   }
 
-  // Calculate stats
-  const totalLeads = leads.length;
-  const claimedLeads = leads.filter(l => l.status === "claimed").length;
-  const totalPayouts = leads.reduce((sum, l) => sum + (l.payout || 0), 0);
+  // Calculate stats from DB leads
+  const totalLeads = dbLeads.length;
+  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
+  const totalPayouts = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
   const avgLeadValue = totalLeads > 0 ? totalPayouts / totalLeads : 0;
 
   // Get leads by provider for chart
-  const leadsByProvider = providers.map(p => ({
-    ...p,
-    leadCount: leads.filter(l => l.providerId === p.id).length,
-    totalPayout: leads.filter(l => l.providerId === p.id).reduce((sum, l) => sum + (l.payout || 0), 0),
-  }));
+  const leadsByProvider = (() => {
+    const providerMap = new Map<string, { id: string; name: string; leadCount: number; totalPayout: number }>();
+    dbLeads.forEach(l => {
+      const key = l.providerId;
+      const existing = providerMap.get(key) || { id: key, name: l.providerName || "Unknown", leadCount: 0, totalPayout: 0 };
+      existing.leadCount++;
+      existing.totalPayout += l.payoutAmount;
+      providerMap.set(key, existing);
+    });
+    return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
+  })();
 
   // Get leads by day for chart (last 7 days)
   const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -342,7 +428,7 @@ function BusinessPortalContent() {
 
   const leadsByDay = last7Days.map(day => ({
     day: new Date(day).toLocaleDateString('en-US', { weekday: 'short' }),
-    count: leads.filter(l => l.createdAt.split('T')[0] === day).length,
+    count: dbLeads.filter(l => l.submittedAt.split('T')[0] === day).length,
   }));
 
   return (
@@ -417,9 +503,9 @@ function BusinessPortalContent() {
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard title="Total Leads" value={totalLeads.toString()} color="navy" />
-              <StatCard title="Policies Sold" value={claimedLeads.toString()} color="emerald" />
-              <StatCard title="Total Payouts" value={`$${totalPayouts.toLocaleString()}`} color="blue" />
-              <StatCard title="Avg Lead Value" value={`$${avgLeadValue.toFixed(0)}`} color="amber" />
+              <StatCard title="Leads Paid" value={paidLeads.toString()} color="emerald" />
+              <StatCard title="Total Payouts" value={`$${totalPayouts.toFixed(2)}`} color="blue" />
+              <StatCard title="Avg Lead Value" value={`$${avgLeadValue.toFixed(2)}`} color="amber" />
             </div>
 
             {/* Charts Row */}
@@ -487,10 +573,21 @@ function BusinessPortalContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leads.slice(0, 5).map((lead) => (
-                      <LeadRow key={lead.id} lead={lead} />
+                    {dbLeads.slice(0, 5).map((lead) => (
+                      <tr key={lead.id} className="border-b border-gray-100">
+                        <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
+                        <td className="py-4 text-gray-600">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
+                        <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
+                        <td className="py-4 text-[#1e3a5f] font-medium">-</td>
+                        <td className="py-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                          }`}>{lead.payoutStatus === "completed" ? "Paid" : "Pending"}</span>
+                        </td>
+                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</td>
+                      </tr>
                     ))}
-                    {leads.length === 0 && (
+                    {dbLeads.length === 0 && (
                       <tr>
                         <td colSpan={6} className="text-center text-gray-400 py-8">
                           No leads yet
@@ -918,87 +1015,148 @@ function BusinessPortalContent() {
 
         {/* Requests Tab */}
         {activeTab === "requests" && (
-          <RequestsTab
-            buyerId={currentUser.id}
-            buyerBusinessName={currentBuyer?.businessName || ""}
-            pendingRequests={pendingRequests}
-            awaitingResponse={awaitingResponse}
-            myConnections={myConnections}
-            setTermsForRequest={setTermsForRequest}
-            rejectRequest={rejectRequest}
-            updateConnectionTerms={updateConnectionTerms}
-            terminateConnection={terminateConnection}
-            sendInvitationToProvider={sendInvitationToProvider}
-            licensedStates={currentBuyer?.licensedStates || []}
-          />
+          <TabErrorBoundary tabName="Requests">
+            <RequestsTab
+              buyerId={currentUser.id}
+              buyerBusinessName={currentBuyer?.businessName || ""}
+              pendingRequests={pendingRequests}
+              awaitingResponse={awaitingResponse}
+              myConnections={myConnections}
+              setTermsForRequest={setTermsForRequest}
+              rejectRequest={rejectRequest}
+              updateConnectionTerms={updateConnectionTerms}
+              terminateConnection={terminateConnection}
+              sendInvitationToProvider={sendInvitationToProvider}
+              licensedStates={currentBuyer?.licensedStates || []}
+            />
+          </TabErrorBoundary>
         )}
 
         {/* Leads Tab */}
         {activeTab === "leads" && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({leads.length})</h3>
+              <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({dbLeads.length})</h3>
             </div>
+            {dbLeadsLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-gray-500 border-b border-gray-200">
                     <th className="pb-3 font-medium">Date</th>
                     <th className="pb-3 font-medium">Customer</th>
-                    <th className="pb-3 font-medium">Contact</th>
                     <th className="pb-3 font-medium">Vehicle</th>
                     <th className="pb-3 font-medium">Provider</th>
-                    <th className="pb-3 font-medium">Quote</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Payout</th>
+                    <th className="pb-3 font-medium">Cost</th>
+                    <th className="pb-3 font-medium">Payment</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((lead) => (
+                  {dbLeads.map((lead) => (
                     <tr key={lead.id} className="border-b border-gray-100">
                       <td className="py-4 text-gray-500 text-sm">
-                        {new Date(lead.createdAt).toLocaleDateString()}
+                        {new Date(lead.submittedAt).toLocaleDateString()}
                       </td>
                       <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                      <td className="py-4 text-gray-500 text-sm">
-                        <div>{lead.email}</div>
-                        <div>{lead.phone}</div>
+                      <td className="py-4 text-gray-600">
+                        {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}
                       </td>
-                      <td className="py-4 text-gray-600">{lead.carModel}</td>
-                      <td className="py-4 text-gray-600">{lead.providerName}</td>
-                      <td className="py-4 text-[#1e3a5f] font-medium">
-                        {lead.quote ? `$${lead.quote.monthlyPremium}/mo` : "-"}
-                      </td>
+                      <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
+                      <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</td>
                       <td className="py-4">
-                        <StatusBadge status={lead.status} />
+                        {lead.payoutStatus === "completed" ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Paid
+                          </span>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {lead.providerVenmo ? (
+                              <a
+                                href={`https://venmo.com/${lead.providerVenmo.replace(/^@/, '')}?txn=pay&amount=${Number(lead.payoutAmount).toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                              >
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
+                                Pay ${Number(lead.payoutAmount).toFixed(2)}
+                              </a>
+                            ) : (
+                              <span className="text-gray-400 text-xs">No Venmo set</span>
+                            )}
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Mark this lead as paid? ($${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} total)`)) return;
+                                try {
+                                  const res = await fetch(`/api/leads/${lead.id}/mark-paid`, { method: "POST" });
+                                  if (res.ok) {
+                                    setDbLeads(prev => prev.map(l =>
+                                      l.id === lead.id ? { ...l, payoutStatus: "completed" } : l
+                                    ));
+                                  }
+                                } catch (e) {
+                                  console.error("Mark paid failed:", e);
+                                }
+                              }}
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1 rounded-lg text-sm font-medium transition border border-amber-200"
+                            >
+                              Mark Paid
+                            </button>
+                          </div>
+                        )}
                       </td>
-                      <td className="py-4 text-gray-800 font-medium">${lead.payout || 0}</td>
                     </tr>
                   ))}
+                  {dbLeads.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center text-gray-400 py-12">No leads yet</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
 
         {/* Providers Tab */}
         {activeTab === "providers" && (
-          <ProvidersTab providers={providers} leads={leads} updateProvider={updateProvider} addProvider={addProvider} activeConnections={activeConnections} />
+          <TabErrorBoundary tabName="Providers">
+            <ProvidersTab
+              fetchUsersByRole={fetchUsersByRole}
+              sendInvitationToProvider={sendInvitationToProvider}
+              updateConnectionTerms={updateConnectionTerms}
+              terminateConnection={terminateConnection}
+              activeConnections={activeConnections}
+            />
+          </TabErrorBoundary>
         )}
 
         {/* Ledger Tab */}
         {activeTab === "ledger" && (
-          <LedgerTab leads={leads} providers={providers} />
+          <TabErrorBoundary tabName="Ledger">
+            <LedgerTab dbLeads={dbLeads} />
+          </TabErrorBoundary>
         )}
 
         {/* Rolodex Tab */}
         {activeTab === "rolodex" && (
-          <RolodexTab providers={providers} leads={leads} currentBuyer={currentBuyer} activeConnections={activeConnections} />
+          <TabErrorBoundary tabName="Rolodex">
+            <RolodexTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} />
+          </TabErrorBoundary>
         )}
 
         {/* Settings Tab */}
         {activeTab === "settings" && (
-          <SettingsTab currentBuyer={currentBuyer} />
+          <TabErrorBoundary tabName="Settings">
+            <SettingsTab currentBuyer={currentBuyer} />
+          </TabErrorBoundary>
         )}
       </div>
     </div>
@@ -1035,118 +1193,238 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function LeadRow({ lead }: { lead: Lead }) {
-  return (
-    <tr className="border-b border-gray-100">
-      <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-      <td className="py-4 text-gray-600">{lead.carModel}</td>
-      <td className="py-4 text-gray-600">{lead.providerName}</td>
-      <td className="py-4 text-[#1e3a5f] font-medium">
-        {lead.quote ? `$${lead.quote.monthlyPremium}/mo` : "-"}
-      </td>
-      <td className="py-4">
-        <StatusBadge status={lead.status} />
-      </td>
-      <td className="py-4 text-gray-800 font-medium">${lead.payout || 0}</td>
-    </tr>
-  );
-}
 
 function ProvidersTab({
-  providers,
-  leads,
-  updateProvider,
-  addProvider,
+  fetchUsersByRole,
+  sendInvitationToProvider,
+  updateConnectionTerms,
+  terminateConnection,
   activeConnections,
 }: {
-  providers: Provider[];
-  leads: Lead[];
-  updateProvider: (id: string, updates: Partial<Provider>) => void;
-  addProvider: (provider: Omit<Provider, "id">) => Provider;
+  fetchUsersByRole: (role: "buyer" | "provider") => Promise<DiscoveryUser[]>;
+  sendInvitationToProvider: (email: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }, message?: string) => Promise<ApiConnection | null>;
+  updateConnectionTerms: (id: string, terms: { ratePerLead?: number; paymentTiming?: string; weeklyLeadCap?: number | null; monthlyLeadCap?: number | null; terminationNoticeDays?: number }) => Promise<boolean>;
+  terminateConnection: (id: string) => Promise<boolean>;
   activeConnections: ApiConnection[];
 }) {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showRateModal, setShowRateModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [newRate, setNewRate] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [allProviders, setAllProviders] = useState<DiscoveryUser[]>([]);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<DiscoveryUser | null>(null);
+  const [showTermsForm, setShowTermsForm] = useState(false);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [newProviderName, setNewProviderName] = useState("");
-  const [newProviderEmail, setNewProviderEmail] = useState("");
-  const [newProviderRate, setNewProviderRate] = useState("50");
-  const [newProviderPayment, setNewProviderPayment] = useState<"venmo" | "paypal" | "bank">("venmo");
+  const [isSending, setIsSending] = useState(false);
 
-  const handleAddProvider = () => {
-    if (newProviderName && newProviderEmail) {
-      addProvider({
-        name: newProviderName,
-        email: newProviderEmail,
-        payoutRate: parseInt(newProviderRate) || 50,
-        status: "active",
-        totalLeads: 0,
-        totalEarnings: 0,
-        paymentMethod: newProviderPayment,
-      });
-      setNewProviderName("");
-      setNewProviderEmail("");
-      setNewProviderRate("50");
-      setShowAddModal(false);
-    }
-  };
+  // Terms form state
+  const [ratePerLead, setRatePerLead] = useState(50);
+  const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [enableLeadCaps, setEnableLeadCaps] = useState(false);
+  const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
+  const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
+  const [terminationDays, setTerminationDays] = useState(7);
+  const [inviteMessage, setInviteMessage] = useState("");
 
-  const openRateModal = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setNewRate(provider.payoutRate.toString());
-    setShowRateModal(true);
-  };
+  // Edit terms modal state
+  const [editingConnection, setEditingConnection] = useState<ApiConnection | null>(null);
+  const [editRate, setEditRate] = useState(50);
+  const [editPaymentTiming, setEditPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [editEnableLeadCaps, setEditEnableLeadCaps] = useState(false);
+  const [editWeeklyLeadCap, setEditWeeklyLeadCap] = useState<number | undefined>(undefined);
+  const [editMonthlyLeadCap, setEditMonthlyLeadCap] = useState<number | undefined>(undefined);
+  const [editTerminationDays, setEditTerminationDays] = useState(7);
 
-  const handleRateChange = async () => {
-    if (!selectedProvider || !newRate) return;
+  // Fetch providers on mount
+  useEffect(() => {
+    loadProviders();
+  }, []);
 
-    const newRateNum = parseInt(newRate);
-    if (newRateNum === selectedProvider.payoutRate) {
-      setShowRateModal(false);
-      return;
-    }
-
-    setIsUpdating(true);
-
+  const loadProviders = async () => {
+    setIsLoadingProviders(true);
     try {
-      // Send email notification
-      const response = await fetch("/api/notify-rate-change", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providerName: selectedProvider.name,
-          providerEmail: selectedProvider.email,
-          oldRate: selectedProvider.payoutRate,
-          newRate: newRateNum,
-        }),
-      });
-
-      const data = await response.json();
-
-      // Update the provider rate
-      updateProvider(selectedProvider.id, { payoutRate: newRateNum });
-
-      setShowRateModal(false);
-      setNotification({
-        type: "success",
-        message: `Rate updated to $${newRateNum}/lead. ${data.notifications?.provider?.simulated ? "Email notification simulated." : "Email sent to " + selectedProvider.email}`,
-      });
-
-      // Clear notification after 5 seconds
-      setTimeout(() => setNotification(null), 5000);
+      const users = await fetchUsersByRole("provider");
+      setAllProviders(users);
     } catch (error) {
-      console.error("Rate change error:", error);
-      setNotification({
-        type: "error",
-        message: "Failed to update rate. Please try again.",
-      });
-      setTimeout(() => setNotification(null), 5000);
+      console.error("Failed to fetch providers:", error);
     } finally {
-      setIsUpdating(false);
+      setIsLoadingProviders(false);
     }
+  };
+
+  // Filter providers by search
+  const filteredProviders = allProviders.filter((p) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (p.displayName || "").toLowerCase().includes(q) ||
+      (p.email || "").toLowerCase().includes(q) ||
+      (p.location && p.location.toLowerCase().includes(q))
+    );
+  });
+
+  const nonActiveProviders = filteredProviders.filter((p) => p.connectionStatus !== "active");
+  const activeProviders = filteredProviders.filter((p) => p.connectionStatus === "active");
+
+  const getStatusBadge = (provider: DiscoveryUser) => {
+    if (!provider.connectionStatus) return { label: "Not Connected", bg: "bg-gray-100", text: "text-gray-600" };
+    switch (provider.connectionStatus) {
+      case "pending_provider_accept": return { label: "Invitation Sent", bg: "bg-amber-100", text: "text-amber-700" };
+      case "pending_buyer_review": return { label: "Requested Connection", bg: "bg-blue-100", text: "text-blue-700" };
+      case "active": return { label: "Connected", bg: "bg-emerald-100", text: "text-emerald-700" };
+      case "terminated": return { label: "Previously Terminated", bg: "bg-gray-100", text: "text-gray-600" };
+      case "declined_by_provider": return { label: "Declined", bg: "bg-red-100", text: "text-red-600" };
+      case "rejected_by_buyer": return { label: "Rejected", bg: "bg-red-100", text: "text-red-600" };
+      default: return { label: provider.connectionStatus, bg: "bg-gray-100", text: "text-gray-600" };
+    }
+  };
+
+  const getPayoutLabel = (method: string | null | undefined) => {
+    if (!method) return null;
+    switch (method) {
+      case "venmo": return "Venmo";
+      case "paypal": return "PayPal";
+      case "cashapp": return "CashApp";
+      case "bank": return "Bank Transfer";
+      default: return method;
+    }
+  };
+
+  const canSendTerms = (provider: DiscoveryUser) => {
+    return !provider.connectionStatus || provider.connectionStatus === "terminated" || provider.connectionStatus === "declined_by_provider" || provider.connectionStatus === "rejected_by_buyer";
+  };
+
+  const handleSendTerms = async () => {
+    if (!selectedProvider) return;
+    setIsSending(true);
+    try {
+      const terms = {
+        ratePerLead,
+        paymentTiming,
+        weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : undefined,
+        monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : undefined,
+        terminationNoticeDays: terminationDays,
+      };
+      const result = await sendInvitationToProvider(selectedProvider.email, terms, inviteMessage || undefined);
+      if (result) {
+        setNotification({ type: "success", message: `Terms sent to ${selectedProvider.displayName}! They will see your offer when they sign in.` });
+        setSelectedProvider(null);
+        setShowTermsForm(false);
+        resetTermsForm();
+        await loadProviders();
+      } else {
+        setNotification({ type: "error", message: "Failed to send terms. Please try again." });
+      }
+    } catch {
+      setNotification({ type: "error", message: "Failed to send terms. Please try again." });
+    } finally {
+      setIsSending(false);
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const resetTermsForm = () => {
+    setRatePerLead(50);
+    setPaymentTiming("per_lead");
+    setEnableLeadCaps(false);
+    setWeeklyLeadCap(undefined);
+    setMonthlyLeadCap(undefined);
+    setTerminationDays(7);
+    setInviteMessage("");
+  };
+
+  const openEditTerms = (connection: ApiConnection) => {
+    setEditingConnection(connection);
+    setEditRate(connection.rate_per_lead);
+    setEditPaymentTiming((connection.payment_timing as typeof editPaymentTiming) || "per_lead");
+    setEditEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
+    setEditWeeklyLeadCap(connection.weekly_lead_cap || undefined);
+    setEditMonthlyLeadCap(connection.monthly_lead_cap || undefined);
+    setEditTerminationDays(connection.termination_notice_days || 7);
+  };
+
+  const handleUpdateTerms = async () => {
+    if (!editingConnection) return;
+    const terms = {
+      ratePerLead: editRate,
+      paymentTiming: editPaymentTiming,
+      weeklyLeadCap: editEnableLeadCaps ? (editWeeklyLeadCap || null) : null,
+      monthlyLeadCap: editEnableLeadCaps ? (editMonthlyLeadCap || null) : null,
+      terminationNoticeDays: editTerminationDays,
+    };
+    const success = await updateConnectionTerms(editingConnection.id, terms);
+    if (success) {
+      setNotification({ type: "success", message: `Terms updated for ${editingConnection.providerName}.` });
+      setEditingConnection(null);
+      await loadProviders();
+    } else {
+      setNotification({ type: "error", message: "Failed to update terms." });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleTerminate = async (connection: ApiConnection) => {
+    if (!confirm(`Are you sure you want to terminate your connection with ${connection.providerName}?`)) return;
+    const success = await terminateConnection(connection.id);
+    if (success) {
+      setNotification({ type: "success", message: `Connection with ${connection.providerName} terminated.` });
+      await loadProviders();
+    } else {
+      setNotification({ type: "error", message: "Failed to terminate connection." });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  // Provider card component
+  const ProviderCard = ({ provider, isActive }: { provider: DiscoveryUser; isActive: boolean }) => {
+    const badge = getStatusBadge(provider);
+    const connection = isActive ? activeConnections.find((c) => c.provider_id === provider.id) : null;
+
+    return (
+      <button
+        onClick={() => { setSelectedProvider(provider); setShowTermsForm(false); }}
+        className={`text-left bg-white rounded-xl border p-5 shadow-sm hover:shadow-md transition cursor-pointer ${
+          isActive ? "border-emerald-200" : "border-gray-200 hover:border-[#1e3a5f]/30"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          {provider.profilePictureUrl ? (
+            <img
+              src={provider.profilePictureUrl}
+              alt={provider.displayName}
+              className="h-12 w-12 rounded-full object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className={`h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+              isActive ? "bg-emerald-600" : "bg-[#1e3a5f]"
+            }`}>
+              <span className="text-white font-bold text-lg">
+                {(provider.displayName || "?").charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <h4 className="text-gray-800 font-semibold truncate">{provider.displayName}</h4>
+            {provider.username && provider.username !== provider.displayName && (
+              <p className="text-gray-400 text-xs truncate">@{provider.username}</p>
+            )}
+            <p className="text-gray-500 text-sm truncate">{provider.email}</p>
+            <p className="text-gray-400 text-xs mt-0.5 truncate">{provider.location || "No location"}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+            {badge.label}
+          </span>
+          {provider.payoutMethod && (
+            <span className="px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-600">
+              {getPayoutLabel(provider.payoutMethod)}
+            </span>
+          )}
+          {connection && (
+            <span className="text-xs text-emerald-600 font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</span>
+          )}
+        </div>
+      </button>
+    );
   };
 
   return (
@@ -1178,342 +1456,506 @@ function ProvidersTab({
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-[#1e3a5f]">Manage Providers ({providers.length + activeConnections.length})</h3>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-semibold shadow-md"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      {/* Header + Search */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h3 className="text-lg font-semibold text-[#1e3a5f]">Provider Network ({allProviders.length})</h3>
+        <div className="relative">
+          <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          Add Provider
-        </button>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, email, location..."
+            className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] w-72"
+          />
+        </div>
       </div>
 
-      {/* Rate Change Modal */}
-      {showRateModal && selectedProvider && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-gray-200 shadow-xl">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-12 w-12 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center">
-                <svg className="w-6 h-6 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+      {isLoadingProviders ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+        </div>
+      ) : (
+        <>
+          {/* Non-Active Senders Section */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+              Non-Active Senders ({nonActiveProviders.length})
+            </h4>
+            {nonActiveProviders.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+                <p className="text-gray-400">{searchQuery ? "No providers match your search." : "All registered providers have active connections."}</p>
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-[#1e3a5f]">Change Payout Rate</h3>
-                <p className="text-gray-500 text-sm">{selectedProvider.name}</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {nonActiveProviders.map((provider) => (
+                  <ProviderCard key={provider.id} provider={provider} isActive={false} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Active Connections Section */}
+          {activeProviders.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+                Active Connections ({activeProviders.length})
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeProviders.map((provider) => (
+                  <ProviderCard key={provider.id} provider={provider} isActive={true} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Provider Profile Modal */}
+      {selectedProvider && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setSelectedProvider(null); setShowTermsForm(false); }}>
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Profile Header */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                {selectedProvider.profilePictureUrl ? (
+                  <img
+                    src={selectedProvider.profilePictureUrl}
+                    alt={selectedProvider.displayName}
+                    className="h-16 w-16 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold text-2xl">
+                      {(selectedProvider.displayName || "?").charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xl font-bold text-[#1e3a5f]">{selectedProvider.displayName}</h3>
+                  {selectedProvider.username && selectedProvider.username !== selectedProvider.displayName && (
+                    <p className="text-gray-400 text-sm">@{selectedProvider.username}</p>
+                  )}
+                  <p className="text-gray-500">{selectedProvider.email}</p>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Current Rate</span>
-                  <span className="text-gray-800 font-bold text-lg">${selectedProvider.payoutRate}/lead</span>
+            {/* Profile Details */}
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Username</p>
+                  <p className="text-gray-800 font-medium">@{selectedProvider.username || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Email</p>
+                  <a href={`mailto:${selectedProvider.email}`} className="text-[#1e3a5f] font-medium hover:underline">
+                    {selectedProvider.email}
+                  </a>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Phone</p>
+                  {selectedProvider.phone ? (
+                    <a href={`tel:${selectedProvider.phone}`} className="text-[#1e3a5f] font-medium hover:underline">
+                      {selectedProvider.phone}
+                    </a>
+                  ) : (
+                    <p className="text-gray-400 font-medium italic">Not provided</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Location</p>
+                  <p className={`font-medium ${selectedProvider.location ? "text-gray-800" : "text-gray-400 italic"}`}>
+                    {selectedProvider.location || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Preferred Payment</p>
+                  {selectedProvider.payoutMethod ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700">
+                      {getPayoutLabel(selectedProvider.payoutMethod)}
+                    </span>
+                  ) : (
+                    <p className="text-gray-400 font-medium italic">Not provided</p>
+                  )}
                 </div>
               </div>
 
+              {/* Connection Status */}
+              {(() => {
+                const badge = getStatusBadge(selectedProvider);
+                return (
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500 text-sm">Connection Status</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Action Buttons */}
+              {(() => {
+                const connection = activeConnections.find((c) => c.provider_id === selectedProvider.id);
+
+                if (selectedProvider.connectionStatus === "active" && connection) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-emerald-600 text-xs">Rate</p>
+                            <p className="text-emerald-800 font-bold text-lg">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</p>
+                            <p className="text-emerald-600 text-xs">(${Number(connection.rate_per_lead || 0).toFixed(2)} + $${PLATFORM_FEE_BUYER.toFixed(2)} fee)</p>
+                          </div>
+                          <div>
+                            <p className="text-emerald-600 text-xs">Payment</p>
+                            <p className="text-emerald-800 font-medium capitalize">{(connection.payment_timing || "per_lead").replace("_", " ")}</p>
+                          </div>
+                          <div>
+                            <p className="text-emerald-600 text-xs">Total Leads</p>
+                            <p className="text-emerald-800 font-bold">{connection.total_leads}</p>
+                          </div>
+                          <div>
+                            <p className="text-emerald-600 text-xs">Total Paid</p>
+                            <p className="text-emerald-800 font-bold">${(connection.total_paid || 0).toFixed(2)}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => openEditTerms(connection)}
+                          className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition text-sm"
+                        >
+                          Edit Terms
+                        </button>
+                        <button
+                          onClick={() => handleTerminate(connection)}
+                          className="px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium transition text-sm"
+                        >
+                          Terminate
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (selectedProvider.connectionStatus === "pending_provider_accept") {
+                  return (
+                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 text-center">
+                      <div className="flex items-center justify-center gap-2 text-amber-700">
+                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                        <p className="font-medium">Awaiting Provider Response</p>
+                      </div>
+                      <p className="text-amber-600 text-sm mt-1">You&apos;ve already sent terms. Waiting for them to accept.</p>
+                    </div>
+                  );
+                }
+
+                if (selectedProvider.connectionStatus === "pending_buyer_review") {
+                  return (
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
+                      <p className="text-blue-700 font-medium">This provider requested a connection</p>
+                      <p className="text-blue-600 text-sm mt-1">Go to the Requests tab to review and set terms.</p>
+                    </div>
+                  );
+                }
+
+                // Can send terms: not connected, terminated, declined, rejected
+                if (canSendTerms(selectedProvider)) {
+                  if (!showTermsForm) {
+                    return (
+                      <button
+                        onClick={() => { setShowTermsForm(true); resetTermsForm(); }}
+                        className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Send Connection Terms
+                      </button>
+                    );
+                  }
+
+                  // Inline terms form
+                  return (
+                    <div className="space-y-4 border-t border-gray-200 pt-4">
+                      <h4 className="font-semibold text-[#1e3a5f]">Set Connection Terms</h4>
+
+                      {/* Rate Per Lead */}
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">Rate Per Lead</label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#1e3a5f] text-xl">$</span>
+                          <input
+                            type="number"
+                            value={ratePerLead}
+                            onChange={(e) => setRatePerLead(Number(e.target.value))}
+                            className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                            min={5}
+                            max={500}
+                          />
+                          <span className="text-gray-500 text-sm">per qualified lead</span>
+                        </div>
+                      </div>
+
+                      {/* Payment Timing */}
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">Payment Timing</label>
+                        <select
+                          value={paymentTiming}
+                          onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                        >
+                          <option value="per_lead">Per Lead (Immediate)</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="biweekly">Bi-weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+
+                      {/* Lead Caps */}
+                      <div className="border border-gray-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h5 className="font-medium text-gray-800 text-sm">Lead Volume Caps</h5>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enableLeadCaps}
+                              onChange={(e) => setEnableLeadCaps(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
+                          </label>
+                        </div>
+                        {enableLeadCaps && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-gray-600 text-xs mb-1">Weekly Cap</label>
+                              <input
+                                type="number"
+                                value={weeklyLeadCap || ""}
+                                onChange={(e) => setWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                                placeholder="No limit"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-gray-600 text-xs mb-1">Monthly Cap</label>
+                              <input
+                                type="number"
+                                value={monthlyLeadCap || ""}
+                                onChange={(e) => setMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                                placeholder="No limit"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Termination Notice */}
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">Termination Notice</label>
+                        <select
+                          value={terminationDays}
+                          onChange={(e) => setTerminationDays(Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                        >
+                          <option value={0}>Immediate (No notice)</option>
+                          <option value={7}>7 days notice</option>
+                          <option value={14}>14 days notice</option>
+                          <option value={30}>30 days notice</option>
+                        </select>
+                      </div>
+
+                      {/* Message */}
+                      <div>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">Message (optional)</label>
+                        <textarea
+                          value={inviteMessage}
+                          onChange={(e) => setInviteMessage(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] text-sm"
+                          rows={2}
+                          placeholder="Hi! I'd like to partner with you for insurance leads..."
+                        />
+                      </div>
+
+                      {/* Submit */}
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setShowTermsForm(false)}
+                          className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSendTerms}
+                          disabled={isSending}
+                          className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isSending ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              Sending...
+                            </>
+                          ) : (
+                            "Send Invitation"
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Terms Modal */}
+      {editingConnection && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingConnection(null)}>
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-[#1e3a5f]">Edit Terms - {editingConnection.providerName}</h3>
+              <p className="text-gray-500 text-sm mt-1">Update the terms for this provider relationship.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Rate */}
               <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">New Rate (per lead)</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
                 <div className="flex items-center gap-2">
                   <span className="text-[#1e3a5f] text-xl">$</span>
                   <input
                     type="number"
-                    value={newRate}
-                    onChange={(e) => setNewRate(e.target.value)}
-                    min="0"
-                    className="flex-1 px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 text-xl font-bold focus:border-[#1e3a5f] focus:outline-none transition"
+                    value={editRate}
+                    onChange={(e) => setEditRate(Number(e.target.value))}
+                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                    min={5}
+                    max={500}
                   />
+                  <span className="text-gray-500 text-sm">per qualified lead</span>
                 </div>
               </div>
-
-              {parseInt(newRate) !== selectedProvider.payoutRate && (
-                <div className={`p-3 rounded-lg border ${
-                  parseInt(newRate) > selectedProvider.payoutRate
-                    ? "bg-emerald-50 border-emerald-200"
-                    : "bg-amber-50 border-amber-200"
-                }`}>
-                  <p className={`text-sm ${
-                    parseInt(newRate) > selectedProvider.payoutRate
-                      ? "text-emerald-700"
-                      : "text-amber-700"
-                  }`}>
-                    {parseInt(newRate) > selectedProvider.payoutRate
-                      ? `Rate increase of $${parseInt(newRate) - selectedProvider.payoutRate} per lead`
-                      : `Rate decrease of $${selectedProvider.payoutRate - parseInt(newRate)} per lead`
-                    }
-                  </p>
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-start gap-2">
-                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  <div>
-                    <p className="text-blue-700 text-sm font-medium">Email Notification</p>
-                    <p className="text-blue-600 text-xs mt-1">
-                      Both {selectedProvider.name} and you will receive an email notification about this rate change.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowRateModal(false)}
-                  disabled={isUpdating}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg transition border border-gray-200 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleRateChange}
-                  disabled={isUpdating || !newRate || parseInt(newRate) === selectedProvider.payoutRate}
-                  className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isUpdating ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Updating...
-                    </>
-                  ) : (
-                    "Confirm & Notify"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Provider Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-gray-200 shadow-xl">
-            <h3 className="text-xl font-bold text-[#1e3a5f] mb-4">Add New Provider</h3>
-            <div className="space-y-4">
+              {/* Payment Timing */}
               <div>
-                <label className="block text-gray-700 text-sm mb-2">Provider Name</label>
-                <input
-                  type="text"
-                  value={newProviderName}
-                  onChange={(e) => setNewProviderName(e.target.value)}
-                  placeholder="John Smith"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Email</label>
-                <input
-                  type="email"
-                  value={newProviderEmail}
-                  onChange={(e) => setNewProviderEmail(e.target.value)}
-                  placeholder="john@example.com"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Payout Rate (per lead)</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-[#1e3a5f]">$</span>
-                  <input
-                    type="number"
-                    value={newProviderRate}
-                    onChange={(e) => setNewProviderRate(e.target.value)}
-                    className="w-32 px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Payment Method</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
                 <select
-                  value={newProviderPayment}
-                  onChange={(e) => setNewProviderPayment(e.target.value as "venmo" | "paypal" | "bank")}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-800 focus:border-[#1e3a5f] focus:outline-none transition"
+                  value={editPaymentTiming}
+                  onChange={(e) => setEditPaymentTiming(e.target.value as typeof editPaymentTiming)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
                 >
-                  <option value="venmo">Venmo</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="bank">Bank Transfer</option>
+                  <option value="per_lead">Per Lead (Immediate)</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
                 </select>
               </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg transition border border-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddProvider}
-                  className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-2 rounded-lg transition font-semibold"
-                >
-                  Add Provider
-                </button>
+              {/* Lead Caps */}
+              <div className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="font-medium text-gray-800 text-sm">Lead Volume Caps</h5>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editEnableLeadCaps}
+                      onChange={(e) => setEditEnableLeadCaps(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
+                  </label>
+                </div>
+                {editEnableLeadCaps && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-gray-600 text-xs mb-1">Weekly Cap</label>
+                      <input
+                        type="number"
+                        value={editWeeklyLeadCap || ""}
+                        onChange={(e) => setEditWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                        placeholder="No limit"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-600 text-xs mb-1">Monthly Cap</label>
+                      <input
+                        type="number"
+                        value={editMonthlyLeadCap || ""}
+                        onChange={(e) => setEditMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                        placeholder="No limit"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+              {/* Termination Notice */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Termination Notice</label>
+                <select
+                  value={editTerminationDays}
+                  onChange={(e) => setEditTerminationDays(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                >
+                  <option value={0}>Immediate (No notice)</option>
+                  <option value={7}>7 days notice</option>
+                  <option value={14}>14 days notice</option>
+                  <option value={30}>30 days notice</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setEditingConnection(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateTerms}
+                className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition"
+              >
+                Update Terms
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Providers List */}
-      <div className="grid gap-4">
-        {providers.map((provider) => {
-          const providerLeads = leads.filter(l => l.providerId === provider.id);
-          const totalPayout = providerLeads.reduce((sum, l) => sum + (l.payout || 0), 0);
-
-          return (
-            <div key={provider.id} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">
-                      {provider.name.charAt(0)}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="text-gray-800 font-semibold text-lg">{provider.name}</h4>
-                    <p className="text-gray-500 text-sm">{provider.email}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${
-                        provider.status === "active"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-700"
-                      }`}>
-                        {provider.status}
-                      </span>
-                      <span className="text-gray-400 text-xs">
-                        Payment: {provider.paymentMethod || "Not set"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-gray-500 text-sm mb-1">Payout Rate</div>
-                  <button
-                    onClick={() => openRateModal(provider)}
-                    className="group flex items-center gap-2 bg-gray-50 hover:bg-[#1e3a5f]/5 border border-gray-200 hover:border-[#1e3a5f]/30 px-4 py-2 rounded-lg transition"
-                  >
-                    <span className="text-[#1e3a5f] font-bold text-lg">${provider.payoutRate}</span>
-                    <span className="text-gray-500 text-sm">/lead</span>
-                    <svg className="w-4 h-4 text-gray-400 group-hover:text-[#1e3a5f] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-gray-200">
-                <div>
-                  <p className="text-gray-500 text-sm">Total Leads</p>
-                  <p className="text-gray-800 text-xl font-bold">{providerLeads.length}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-sm">Total Earned</p>
-                  <p className="text-[#1e3a5f] text-xl font-bold">${totalPayout}</p>
-                </div>
-                <div className="flex items-end justify-end gap-2">
-                  <button
-                    onClick={() => updateProvider(provider.id, {
-                      status: provider.status === "active" ? "inactive" : "active"
-                    })}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      provider.status === "active"
-                        ? "bg-red-100 text-red-700 hover:bg-red-200"
-                        : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                    }`}
-                  >
-                    {provider.status === "active" ? "Deactivate" : "Activate"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {providers.length === 0 && activeConnections.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-400">No providers yet. Add your first provider above.</p>
-          </div>
-        )}
-
-        {/* Active Connections from Database */}
-        {activeConnections.map((connection) => (
-          <div key={connection.id} className="bg-white rounded-xl border border-emerald-200 p-6 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-emerald-600 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">
-                    {connection.providerName.charAt(0)}
-                  </span>
-                </div>
-                <div>
-                  <h4 className="text-gray-800 font-semibold text-lg">{connection.providerName}</h4>
-                  <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
-                      Connected
-                    </span>
-                    <span className="text-gray-400 text-xs">
-                      Since {new Date(connection.accepted_at || connection.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <div className="text-gray-500 text-sm mb-1">Payout Rate</div>
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg">
-                  <span className="text-emerald-700 font-bold text-lg">${connection.rate_per_lead}</span>
-                  <span className="text-gray-500 text-sm">/lead</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-gray-200">
-              <div>
-                <p className="text-gray-500 text-sm">Total Leads</p>
-                <p className="text-gray-800 text-xl font-bold">{connection.total_leads}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 text-sm">Total Paid</p>
-                <p className="text-emerald-600 text-xl font-bold">${connection.total_paid}</p>
-              </div>
-              <div className="flex items-end justify-end">
-                <span className="px-3 py-1 rounded-lg text-sm font-medium bg-emerald-100 text-emerald-700">
-                  Active Connection
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
 
-function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] }) {
-  // Build transaction history from leads
-  const transactions = leads.map(lead => {
-    const provider = providers.find(p => p.id === lead.providerId);
+function LedgerTab({ dbLeads }: { dbLeads: ApiLead[] }) {
+  // Build transaction history from DB leads
+  const transactions = dbLeads.map(lead => {
+    const fees = calculateFeeBreakdown(lead.payoutAmount || 0);
     return {
       id: lead.id,
-      date: lead.createdAt,
+      date: lead.submittedAt,
       type: "lead_payout" as const,
-      description: `Lead payout to ${provider?.name || "Unknown"} for ${lead.customerName}`,
-      amount: lead.payout || 0,
-      provider: provider?.name || "Unknown",
+      description: `Lead payout to ${lead.providerName || "Unknown"} for ${lead.customerName}`,
+      amount: fees.buyerTotal,
+      provider: lead.providerName || "Unknown",
       customer: lead.customerName,
-      vehicle: lead.carModel,
-      paymentMethod: provider?.paymentMethod || "pending",
-      status: lead.status === "claimed" ? "completed" : "pending",
+      vehicle: [lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-",
+      status: lead.payoutStatus === "completed" ? "completed" : "pending",
     };
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -1530,11 +1972,11 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Total Paid Out</p>
-          <p className="text-3xl font-bold text-emerald-600">${totalPaid.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-emerald-600">${totalPaid.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Pending Payouts</p>
-          <p className="text-3xl font-bold text-amber-600">${totalPending.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-amber-600">${totalPending.toFixed(2)}</p>
         </div>
       </div>
 
@@ -1558,7 +2000,6 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
                 <th className="pb-3 font-medium">Provider</th>
                 <th className="pb-3 font-medium">Customer</th>
                 <th className="pb-3 font-medium">Vehicle</th>
-                <th className="pb-3 font-medium">Payment Method</th>
                 <th className="pb-3 font-medium">Status</th>
                 <th className="pb-3 font-medium text-right">Amount</th>
               </tr>
@@ -1573,23 +2014,20 @@ function LedgerTab({ leads, providers }: { leads: Lead[]; providers: Provider[] 
                   <td className="py-4 text-gray-600">{tx.customer}</td>
                   <td className="py-4 text-gray-600 text-sm">{tx.vehicle}</td>
                   <td className="py-4">
-                    <PaymentMethodBadge method={tx.paymentMethod} />
-                  </td>
-                  <td className="py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       tx.status === "completed"
                         ? "bg-emerald-100 text-emerald-700"
                         : "bg-amber-100 text-amber-700"
                     }`}>
-                      {tx.status}
+                      {tx.status === "completed" ? "Paid" : "Pending"}
                     </span>
                   </td>
-                  <td className="py-4 text-[#1e3a5f] font-bold text-right">${tx.amount}</td>
+                  <td className="py-4 text-[#1e3a5f] font-bold text-right">${Number(tx.amount).toFixed(2)}</td>
                 </tr>
               ))}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-12">
+                  <td colSpan={6} className="text-center text-gray-400 py-12">
                     No transactions yet
                   </td>
                 </tr>
@@ -1623,12 +2061,12 @@ function PaymentMethodBadge({ method }: { method: string }) {
 // Rolodex Tab - View connected providers as baseball cards
 function RolodexTab({
   providers,
-  leads,
+  dbLeads,
   currentBuyer,
   activeConnections
 }: {
   providers: Provider[];
-  leads: Lead[];
+  dbLeads: ApiLead[];
   currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
   activeConnections: ApiConnection[];
 }) {
@@ -1637,29 +2075,29 @@ function RolodexTab({
 
   // Filter providers based on search
   const filteredProviders = providers.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (p.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.email || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Filter active connections based on search
   const filteredConnections = activeConnections.filter(c =>
-    c.providerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.providerEmail.toLowerCase().includes(searchQuery.toLowerCase())
+    (c.providerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.providerEmail || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate stats for each provider
+  // Calculate stats for each provider from DB leads
   const providersWithStats = filteredProviders.map(provider => {
-    const providerLeads = leads.filter(l => l.providerId === provider.id);
-    const claimedLeads = providerLeads.filter(l => l.status === "claimed");
+    const providerLeads = dbLeads.filter(l => l.providerId === provider.id);
+    const paidLeads = providerLeads.filter(l => l.payoutStatus === "completed");
     return {
       ...provider,
       totalLeads: providerLeads.length,
-      totalEarnings: providerLeads.reduce((sum, l) => sum + (l.payout || 0), 0),
+      totalEarnings: providerLeads.reduce((sum, l) => sum + l.payoutAmount, 0),
       conversionRate: providerLeads.length > 0
-        ? Math.round((claimedLeads.length / providerLeads.length) * 100)
+        ? Math.round((paidLeads.length / providerLeads.length) * 100)
         : 0,
       lastLeadDate: providerLeads.length > 0
-        ? new Date(providerLeads[0].createdAt).toLocaleDateString()
+        ? new Date(providerLeads[0].submittedAt).toLocaleDateString()
         : "Never",
     };
   });
@@ -1698,11 +2136,11 @@ function RolodexTab({
             <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl font-bold">{provider.name.charAt(0)}</span>
+                  <span className="text-xl font-bold">{(provider.name || "?").charAt(0)}</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold">{provider.name}</h4>
-                  <p className="text-white/70 text-sm">@{provider.email.split("@")[0]}</p>
+                  <h4 className="font-semibold">{provider.name || "Provider"}</h4>
+                  <p className="text-white/70 text-sm">@{(provider.email || "").split("@")[0]}</p>
                 </div>
               </div>
             </div>
@@ -1715,14 +2153,14 @@ function RolodexTab({
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">${provider.totalEarnings}</p>
+                  <p className="text-2xl font-bold text-emerald-600">${Number(provider.totalEarnings || 0).toFixed(2)}</p>
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-[#1e3a5f]">${provider.payoutRate}</span>
+                  <span className="font-medium text-[#1e3a5f]">${Number(provider.payoutRate || 0).toFixed(2)}</span>
                   <span>/lead</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${
@@ -1747,11 +2185,11 @@ function RolodexTab({
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl font-bold">{connection.providerName.charAt(0)}</span>
+                  <span className="text-xl font-bold">{(connection.providerName || "?").charAt(0)}</span>
                 </div>
                 <div>
                   <h4 className="font-semibold">{connection.providerName}</h4>
-                  <p className="text-white/70 text-sm">@{connection.providerEmail.split("@")[0]}</p>
+                  <p className="text-white/70 text-sm">@{(connection.providerEmail || "").split("@")[0]}</p>
                 </div>
               </div>
             </div>
@@ -1764,14 +2202,14 @@ function RolodexTab({
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">${connection.total_paid}</p>
+                  <p className="text-2xl font-bold text-emerald-600">${(connection.total_paid || 0).toFixed(2)}</p>
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-emerald-600">${connection.rate_per_lead}</span>
+                  <span className="font-medium text-emerald-600">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}</span>
                   <span>/lead</span>
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
@@ -1798,7 +2236,7 @@ function RolodexTab({
       {selectedProvider && (
         <ProviderDetailModal
           provider={selectedProvider}
-          leads={leads.filter(l => l.providerId === selectedProvider.id)}
+          dbLeads={dbLeads.filter(l => l.providerId === selectedProvider.id)}
           onClose={() => setSelectedProvider(null)}
         />
       )}
@@ -1809,17 +2247,17 @@ function RolodexTab({
 // Provider Detail Modal - Full baseball card view
 function ProviderDetailModal({
   provider,
-  leads,
+  dbLeads,
   onClose
 }: {
   provider: Provider;
-  leads: Lead[];
+  dbLeads: ApiLead[];
   onClose: () => void;
 }) {
   const [activeView, setActiveView] = useState<"card" | "ledger">("card");
-  const claimedLeads = leads.filter(l => l.status === "claimed");
-  const conversionRate = leads.length > 0 ? Math.round((claimedLeads.length / leads.length) * 100) : 0;
-  const totalPaid = leads.reduce((sum, l) => sum + (l.payout || 0), 0);
+  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed");
+  const conversionRate = dbLeads.length > 0 ? Math.round((paidLeads.length / dbLeads.length) * 100) : 0;
+  const totalPaid = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -1840,7 +2278,7 @@ function ProviderDetailModal({
 
           <div className="flex items-center gap-4">
             <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center">
-              <span className="text-3xl font-bold">{provider.name.charAt(0)}</span>
+              <span className="text-3xl font-bold">{(provider.name || "?").charAt(0)}</span>
             </div>
             <div>
               <h3 className="text-2xl font-bold">{provider.name}</h3>
@@ -1896,11 +2334,11 @@ function ProviderDetailModal({
                 <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Career Stats</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-[#1e3a5f]">{leads.length}</p>
+                    <p className="text-3xl font-bold text-[#1e3a5f]">{dbLeads.length}</p>
                     <p className="text-gray-500 text-sm">Total Leads</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-emerald-600">${totalPaid}</p>
+                    <p className="text-3xl font-bold text-emerald-600">${totalPaid.toFixed(2)}</p>
                     <p className="text-gray-500 text-sm">Total Paid</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
@@ -1908,7 +2346,7 @@ function ProviderDetailModal({
                     <p className="text-gray-500 text-sm">Conversion</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-amber-600">${provider.payoutRate}</p>
+                    <p className="text-3xl font-bold text-amber-600">${Number(provider.payoutRate || 0).toFixed(2)}</p>
                     <p className="text-gray-500 text-sm">Per Lead</p>
                   </div>
                 </div>
@@ -1923,7 +2361,7 @@ function ProviderDetailModal({
                       <p className="text-gray-800 font-medium">Current Payout Rate</p>
                       <p className="text-gray-500 text-sm">Payment: {provider.paymentMethod || "Not set"}</p>
                     </div>
-                    <p className="text-2xl font-bold text-[#1e3a5f]">${provider.payoutRate}/lead</p>
+                    <p className="text-2xl font-bold text-[#1e3a5f]">${Number(provider.payoutRate || 0).toFixed(2)}/lead</p>
                   </div>
                 </div>
               </div>
@@ -1932,25 +2370,25 @@ function ProviderDetailModal({
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Transaction History</h4>
-                <p className="text-sm text-gray-500">{leads.length} transactions</p>
+                <p className="text-sm text-gray-500">{dbLeads.length} transactions</p>
               </div>
 
-              {leads.length > 0 ? (
+              {dbLeads.length > 0 ? (
                 <div className="space-y-2">
-                  {leads.map((lead) => (
+                  {dbLeads.map((lead) => (
                     <div key={lead.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <p className="text-gray-800 font-medium">{lead.customerName}</p>
-                        <p className="text-gray-500 text-sm">{new Date(lead.createdAt).toLocaleDateString()}</p>
+                        <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[#1e3a5f] font-bold">${lead.payout || 0}</p>
+                        <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          lead.status === "claimed"
+                          lead.payoutStatus === "completed"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-amber-100 text-amber-700"
                         }`}>
-                          {lead.status}
+                          {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
                         </span>
                       </div>
                     </div>
@@ -2168,11 +2606,11 @@ function calculateWeeklyPerformance(
 }
 
 function AnalyticsTab({
-  leads,
+  dbLeads,
   providers,
   myConnections,
 }: {
-  leads: Lead[];
+  dbLeads: ApiLead[];
   providers: Provider[];
   myConnections: ApiConnection[];
 }) {
@@ -2444,18 +2882,18 @@ function AnalyticsTab({
 
   // Calculate real-time analytics from existing leads data
   const realTimeAnalytics = {
-    totalLeads: leads.length,
-    pendingLeads: leads.filter(l => l.status === "pending").length,
-    claimedLeads: leads.filter(l => l.status === "claimed").length,
-    totalPayout: leads.reduce((sum, l) => sum + (l.payout || 0), 0),
+    totalLeads: dbLeads.length,
+    pendingLeads: dbLeads.filter(l => l.payoutStatus === "pending").length,
+    claimedLeads: dbLeads.filter(l => l.payoutStatus === "completed").length,
+    totalPayout: dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0),
   };
 
   // Get provider rankings from real leads
   const providerRankings = providers
     .map(p => ({
       name: p.name,
-      leads: leads.filter(l => l.providerId === p.id).length,
-      payout: leads.filter(l => l.providerId === p.id).reduce((sum, l) => sum + (l.payout || 0), 0),
+      leads: dbLeads.filter(l => l.providerId === p.id).length,
+      payout: dbLeads.filter(l => l.providerId === p.id).reduce((sum, l) => sum + l.payoutAmount, 0),
     }))
     .sort((a, b) => b.leads - a.leads);
 
@@ -2487,7 +2925,7 @@ function AnalyticsTab({
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <p className="text-gray-500 text-sm">Total Payouts</p>
-            <p className="text-3xl font-bold text-blue-600">${realTimeAnalytics.totalPayout.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-blue-600">${realTimeAnalytics.totalPayout.toFixed(2)}</p>
           </div>
         </div>
       </div>
@@ -2507,7 +2945,7 @@ function AnalyticsTab({
                 <div className="flex-1">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-medium text-gray-800">{provider.name}</span>
-                    <span className="text-sm text-gray-500">{provider.leads} leads • ${provider.payout}</span>
+                    <span className="text-sm text-gray-500">{provider.leads} leads • ${provider.payout.toFixed(2)}</span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -2832,15 +3270,108 @@ function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types"
   const { updateUser } = useAuth();
   const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
   const [phone, setPhone] = useState(currentBuyer?.phone || "");
+  const [profilePicture, setProfilePicture] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("venmo");
+  const [payoutVenmo, setPayoutVenmo] = useState("");
+  const [payoutPaypal, setPayoutPaypal] = useState("");
+  const [payoutCashapp, setPayoutCashapp] = useState("");
+  const [payoutBankRouting, setPayoutBankRouting] = useState("");
+  const [payoutBankAccount, setPayoutBankAccount] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  const handleSave = () => {
-    if (currentBuyer) {
-      updateUser({ businessName, phone });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+  // Fetch full profile on mount
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const res = await fetch("/api/profile");
+        if (res.ok) {
+          const data = await res.json();
+          const p = data.profile;
+          if (p.profilePictureUrl) setProfilePicture(p.profilePictureUrl);
+          if (p.payoutMethod) setPayoutMethod(p.payoutMethod);
+          if (p.payoutVenmo) setPayoutVenmo(p.payoutVenmo);
+          if (p.payoutPaypal) setPayoutPaypal(p.payoutPaypal);
+          if (p.payoutCashapp) setPayoutCashapp(p.payoutCashapp);
+          if (p.payoutBankRouting) setPayoutBankRouting(p.payoutBankRouting);
+          if (p.payoutBankAccount) setPayoutBankAccount(p.payoutBankAccount);
+        }
+      } catch (e) {
+        console.error("Failed to load profile:", e);
+      }
+      setProfileLoaded(true);
+    }
+    loadProfile();
+  }, []);
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = document.createElement("img");
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 400;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxSize) { height = (height * maxSize) / width; width = maxSize; }
+          } else {
+            if (height > maxSize) { width = (width * maxSize) / height; height = maxSize; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("Canvas not supported")); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file);
+        setProfilePicture(compressed);
+      } catch {
+        console.error("Failed to process image");
+      }
     }
   };
+
+  const handleSave = async () => {
+    if (!currentBuyer) return;
+    setSaving(true);
+    await updateUser({
+      businessName,
+      phone,
+      profilePictureUrl: profilePicture || undefined,
+      payoutMethod: payoutMethod as any,
+      payoutVenmo,
+      payoutPaypal,
+      payoutCashapp,
+      payoutBankRouting,
+      payoutBankAccount,
+    } as any);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const payoutOptions = [
+    { value: "venmo", label: "Venmo", icon: "V" },
+    { value: "paypal", label: "PayPal", icon: "P" },
+    { value: "cashapp", label: "CashApp", icon: "$" },
+    { value: "bank", label: "Bank Account", icon: "B" },
+  ];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl shadow-sm">
@@ -2856,6 +3387,28 @@ function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types"
       )}
 
       <div className="space-y-6">
+        {/* Profile Picture */}
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            {profilePicture ? (
+              <img src={profilePicture} alt="Profile" className="h-20 w-20 rounded-full object-cover border-2 border-gray-200" />
+            ) : (
+              <div className="h-20 w-20 rounded-full bg-[#1e3a5f] flex items-center justify-center border-2 border-gray-200">
+                <span className="text-2xl font-bold text-white">{currentBuyer?.businessName?.charAt(0) || "?"}</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition inline-block">
+              Upload Photo
+              <input type="file" accept="image/*" onChange={handlePictureChange} className="hidden" />
+            </label>
+            {profilePicture && (
+              <button onClick={() => setProfilePicture("")} className="ml-2 text-red-500 hover:text-red-700 text-sm">Remove</button>
+            )}
+          </div>
+        </div>
+
         <div>
           <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
           <input
@@ -2902,11 +3455,104 @@ function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types"
             className="w-full px-4 py-2 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 cursor-not-allowed capitalize"
           />
         </div>
+
+        {/* Payment Method */}
+        <div>
+          <label className="block text-gray-700 text-sm font-medium mb-3">Payment Method</label>
+          <p className="text-gray-400 text-xs mb-3">Set your payment accounts for paying lead providers</p>
+          <div className="grid grid-cols-2 gap-2">
+            {payoutOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPayoutMethod(opt.value)}
+                className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
+                  payoutMethod === opt.value
+                    ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                    : "border-gray-200 hover:border-gray-300 text-gray-600"
+                }`}
+              >
+                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  payoutMethod === opt.value ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-500"
+                }`}>{opt.icon}</span>
+                <span className="font-medium text-sm">{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Conditional payment detail inputs */}
+        {profileLoaded && (
+          <div>
+            {payoutMethod === "venmo" && (
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Venmo Username</label>
+                <input
+                  type="text"
+                  value={payoutVenmo}
+                  onChange={(e) => setPayoutVenmo(e.target.value)}
+                  placeholder="@username"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                />
+              </div>
+            )}
+            {payoutMethod === "paypal" && (
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">PayPal Email</label>
+                <input
+                  type="email"
+                  value={payoutPaypal}
+                  onChange={(e) => setPayoutPaypal(e.target.value)}
+                  placeholder="email@example.com"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                />
+              </div>
+            )}
+            {payoutMethod === "cashapp" && (
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">CashApp Tag</label>
+                <input
+                  type="text"
+                  value={payoutCashapp}
+                  onChange={(e) => setPayoutCashapp(e.target.value)}
+                  placeholder="$cashtag"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                />
+              </div>
+            )}
+            {payoutMethod === "bank" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Routing Number</label>
+                  <input
+                    type="text"
+                    value={payoutBankRouting}
+                    onChange={(e) => setPayoutBankRouting(e.target.value)}
+                    placeholder="9-digit routing number"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Account Number</label>
+                  <input
+                    type="text"
+                    value={payoutBankAccount}
+                    onChange={(e) => setPayoutBankAccount(e.target.value)}
+                    placeholder="Account number"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={handleSave}
-          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md"
+          disabled={saving}
+          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
         >
-          Save Settings
+          {saving ? "Saving..." : "Save Settings"}
         </button>
       </div>
     </div>
@@ -2949,6 +3595,8 @@ function RequestsTab({
   const [inviteProviderEmail, setInviteProviderEmail] = useState("");
   const [inviteProviderName, setInviteProviderName] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
+  const [invitePhoneNumber, setInvitePhoneNumber] = useState("");
+  const [isSendingText, setIsSendingText] = useState(false);
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
@@ -3056,6 +3704,8 @@ function RequestsTab({
     setInviteProviderEmail("");
     setInviteProviderName("");
     setInviteMessage("");
+    setInvitePhoneNumber("");
+    setIsSendingText(false);
     setRatePerLead(50);
     setPaymentTiming("per_lead");
     setMinimumPayout(undefined);
@@ -3099,128 +3749,116 @@ function RequestsTab({
     }
   };
 
+  const handleSendTextInvite = async () => {
+    if (!invitePhoneNumber) {
+      alert("Please enter a phone number");
+      return;
+    }
+    setIsSendingText(true);
+    try {
+      const response = await fetch("/api/invite-sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: invitePhoneNumber,
+          businessName: buyerBusinessName,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(`Text invite sent to ${invitePhoneNumber}!`);
+        setInvitePhoneNumber("");
+      } else {
+        alert(data.error || "Failed to send text invite");
+      }
+    } catch {
+      alert("Failed to send text invite. Please try again.");
+    } finally {
+      setIsSendingText(false);
+    }
+  };
+
   const activeConnections = myConnections.filter(c => c.status === "active");
   const terminatedConnections = myConnections.filter(c => c.status === "terminated");
 
   return (
     <div className="space-y-6">
-      {/* Invite Provider Button */}
-      <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-xl p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold mb-1">Invite a Lead Provider</h3>
-            <p className="text-white/80 text-sm">Send an invitation with your terms to a car salesperson or dealership</p>
-          </div>
-          <button
-            onClick={openInviteModal}
-            className="bg-white text-[#1e3a5f] px-5 py-2.5 rounded-lg font-semibold hover:bg-gray-100 transition flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Invite Provider
-          </button>
-        </div>
-      </div>
-
       {/* Pending Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-6">
           <h3 className="text-lg font-semibold text-[#1e3a5f]">Pending Requests</h3>
-          {pendingRequests.length > 0 && (
+          {(pendingRequests.length + awaitingResponse.length) > 0 && (
             <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-              {pendingRequests.length} new
+              {pendingRequests.length + awaitingResponse.length} pending
             </span>
           )}
         </div>
 
-        {pendingRequests.length > 0 ? (
+        {(pendingRequests.length + awaitingResponse.length) > 0 ? (
           <div className="space-y-4">
-            {pendingRequests.map((request) => (
-              <div key={request.id} className="border border-gray-200 rounded-xl p-4 hover:border-[#1e3a5f]/30 transition">
+            {[...pendingRequests, ...awaitingResponse]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((item) => (
+              <div key={item.id} className={`border rounded-xl p-4 ${item.status === "pending_provider_accept" ? "border-amber-100 bg-amber-50/30" : "border-gray-200 hover:border-[#1e3a5f]/30"} transition`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
-                      <span className="text-xl font-bold text-white">{request.providerName.charAt(0)}</span>
+                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${item.status === "pending_provider_accept" ? "bg-amber-100" : "bg-[#1e3a5f]"}`}>
+                      <span className={`text-xl font-bold ${item.status === "pending_provider_accept" ? "text-amber-600" : "text-white"}`}>{(item.providerName || "?").charAt(0)}</span>
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800">{request.providerName}</p>
-                      <p className="text-gray-500 text-sm">{request.providerEmail}</p>
-                      <p className="text-gray-400 text-xs mt-1">
-                        Requested {new Date(request.createdAt).toLocaleDateString()}
-                      </p>
+                      <p className="font-semibold text-gray-800">{item.providerName}</p>
+                      <p className="text-gray-500 text-sm">{item.providerEmail}</p>
+                      {item.status === "pending_buyer_review" ? (
+                        <p className="text-gray-400 text-xs mt-1">
+                          Requested {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "N/A"}
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-amber-700 font-medium">${Number(item.rate_per_lead || 0).toFixed(2)}/lead</span>
+                          <span className="text-gray-400">•</span>
+                          <span className="text-gray-500 text-sm">Terms sent {(item.terms_updated_at || item.created_at) ? new Date(item.terms_updated_at || item.created_at).toLocaleDateString() : "N/A"}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openTermsModal(request)}
-                      className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
-                    >
-                      Set Terms
-                    </button>
-                    <button
-                      onClick={() => handleReject(request.id)}
-                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition text-sm"
-                    >
-                      Reject
-                    </button>
+                  <div>
+                    {item.status === "pending_buyer_review" ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openTermsModal(item)}
+                          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
+                        >
+                          Set Terms
+                        </button>
+                        <button
+                          onClick={() => handleReject(item.id)}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition text-sm"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-sm font-medium">
+                        <svg className="w-4 h-4 mr-1.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Awaiting Response
+                      </span>
+                    )}
                   </div>
                 </div>
-                {request.message && (
+                {item.status === "pending_buyer_review" && item.message && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-gray-600 text-sm italic">&quot;{request.message}&quot;</p>
+                    <p className="text-gray-600 text-sm italic">&quot;{item.message}&quot;</p>
                   </div>
                 )}
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-center text-gray-400 py-8">No pending connection requests</p>
+          <p className="text-center text-gray-400 py-8">No pending requests</p>
         )}
       </div>
-
-      {/* Awaiting Provider Response */}
-      {awaitingResponse.length > 0 && (
-        <div className="bg-white rounded-xl border border-amber-200 p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <h3 className="text-lg font-semibold text-amber-700">Awaiting Provider Response</h3>
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-              {awaitingResponse.length} pending
-            </span>
-          </div>
-
-          <div className="space-y-4">
-            {awaitingResponse.map((connection) => (
-              <div key={connection.id} className="border border-amber-100 rounded-xl p-4 bg-amber-50/30">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
-                      <span className="text-xl font-bold text-amber-600">{connection.providerName.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">{connection.providerName}</p>
-                      <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-amber-700 font-medium">${connection.rate_per_lead}/lead</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="text-gray-500 text-sm">Terms sent {new Date(connection.terms_updated_at || connection.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-sm font-medium">
-                      <svg className="w-4 h-4 mr-1.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Waiting for response
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Active Connections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -3233,13 +3871,14 @@ function RequestsTab({
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
-                      <span className="text-xl font-bold text-emerald-600">{connection.providerName.charAt(0)}</span>
+                      <span className="text-xl font-bold text-emerald-600">{(connection.providerName || "?").charAt(0)}</span>
                     </div>
                     <div>
                       <p className="font-semibold text-gray-800">{connection.providerName}</p>
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[#1e3a5f] font-medium">${connection.rate_per_lead}/lead</span>
+                        <span className="text-[#1e3a5f] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</span>
+                        <span className="text-gray-400 text-xs">(incl. $1 fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>
@@ -3272,7 +3911,7 @@ function RequestsTab({
                   </div>
                   <div>
                     <p className="text-gray-500 text-sm">Total Paid</p>
-                    <p className="text-xl font-bold text-emerald-600">${connection.total_paid}</p>
+                    <p className="text-xl font-bold text-emerald-600">${(connection.total_paid || 0).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -3365,164 +4004,6 @@ function RequestsTab({
         />
       )}
 
-      {/* Invite Provider Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
-          <div
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-[#1e3a5f]">Invite a Lead Provider</h3>
-              <p className="text-gray-500 text-sm mt-1">Enter the provider&apos;s details and set your terms. They will receive your offer when they sign in.</p>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Provider Info */}
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                <h4 className="font-medium text-[#1e3a5f] mb-3">Provider Information</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-1">Provider Name</label>
-                    <input
-                      type="text"
-                      value={inviteProviderName}
-                      onChange={(e) => setInviteProviderName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
-                      placeholder="John Smith"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-1">Provider Email</label>
-                    <input
-                      type="email"
-                      value={inviteProviderEmail}
-                      onChange={(e) => setInviteProviderEmail(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
-                      placeholder="john@dealership.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-1">Message (optional)</label>
-                    <textarea
-                      value={inviteMessage}
-                      onChange={(e) => setInviteMessage(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
-                      rows={2}
-                      placeholder="Hi! I'd like to partner with you for insurance leads..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Rate Per Lead */}
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-[#1e3a5f] text-xl">$</span>
-                  <input
-                    type="number"
-                    value={ratePerLead}
-                    onChange={(e) => setRatePerLead(Number(e.target.value))}
-                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
-                    min={5}
-                    max={500}
-                  />
-                  <span className="text-gray-500 text-sm">per qualified lead</span>
-                </div>
-              </div>
-
-              {/* Payment Timing */}
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
-                <select
-                  value={paymentTiming}
-                  onChange={(e) => setPaymentTiming(e.target.value as "per_lead" | "weekly" | "biweekly" | "monthly")}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
-                >
-                  <option value="per_lead">Per Lead (Immediate)</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-
-              {/* Lead Caps */}
-              <div className="border border-gray-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h4 className="font-medium text-gray-800">Lead Volume Caps</h4>
-                    <p className="text-xs text-gray-500">Protect yourself from unlimited lead obligations</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={enableLeadCaps}
-                      onChange={(e) => setEnableLeadCaps(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#1e3a5f]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
-                  </label>
-                </div>
-                {enableLeadCaps && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-gray-600 text-sm mb-1">Weekly Cap</label>
-                      <input
-                        type="number"
-                        value={weeklyLeadCap || ""}
-                        onChange={(e) => setWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
-                        placeholder="No limit"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 text-sm mb-1">Monthly Cap</label>
-                      <input
-                        type="number"
-                        value={monthlyLeadCap || ""}
-                        onChange={(e) => setMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
-                        placeholder="No limit"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Termination Notice */}
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Termination Notice</label>
-                <select
-                  value={terminationDays}
-                  onChange={(e) => setTerminationDays(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
-                >
-                  <option value={0}>Immediate (No notice required)</option>
-                  <option value={7}>7 days notice</option>
-                  <option value={14}>14 days notice</option>
-                  <option value={30}>30 days notice</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendInvitation}
-                className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition"
-              >
-                Send Invitation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3799,8 +4280,8 @@ function TermsModal({
                   <div className="bg-amber-100 rounded-lg p-3 mt-2">
                     <p className="text-amber-800 text-sm font-medium">Cap Summary</p>
                     <p className="text-amber-700 text-xs mt-1">
-                      Max cost per week: {weeklyLeadCap ? `$${weeklyLeadCap * ratePerLead}` : "Unlimited"}
-                      {monthlyLeadCap && ` • Max cost per month: $${monthlyLeadCap * ratePerLead}`}
+                      Max cost per week: {weeklyLeadCap ? `$${((weeklyLeadCap || 0) * (ratePerLead || 0)).toFixed(2)}` : "Unlimited"}
+                      {monthlyLeadCap && ` • Max cost per month: $${((monthlyLeadCap || 0) * (ratePerLead || 0)).toFixed(2)}`}
                     </p>
                   </div>
                 )}

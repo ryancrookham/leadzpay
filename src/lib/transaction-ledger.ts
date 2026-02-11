@@ -7,8 +7,8 @@ import { executeSql as sql, isDatabaseConfigured, getTransactionsByUserId, creat
 
 export interface Transaction {
   id: string;
-  type: "lead_payout" | "policy_commission" | "platform_fee" | "refund" | "adjustment";
-  status: "pending" | "completed" | "failed" | "reversed";
+  type: string;
+  status: string;
   amount: number;
   feeAmount: number;
   netAmount: number;

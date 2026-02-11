@@ -29,10 +29,19 @@ export interface DbUser {
   business_type: string | null;
   licensed_states: string[] | null;
   stripe_account_id: string | null;
+  stripe_customer_id: string | null;
   stripe_onboarding_complete: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Profile and payout fields
+  profile_picture_url: string | null;
+  payout_method: 'venmo' | 'paypal' | 'cashapp' | 'bank' | null;
+  payout_venmo: string | null;
+  payout_paypal: string | null;
+  payout_cashapp: string | null;
+  payout_bank_routing: string | null;
+  payout_bank_account: string | null;
 }
 
 export type ConnectionStatus =
@@ -76,13 +85,22 @@ export interface DbLead {
   vehicle_model: string | null;
   payout_amount: number;
   payout_status: 'pending' | 'processing' | 'completed' | 'failed';
+  stripe_payment_id: string | null;
+  stripe_transfer_id: string | null;
   submitted_at: string;
+  claimed_at: string | null;
+  payout_completed_at: string | null;
+  // Joined fields (from user table JOINs)
+  provider_name?: string | null;
+  provider_venmo?: string | null;
+  buyer_name?: string | null;
+  buyer_business_name?: string | null;
 }
 
 export interface DbTransaction {
   id: string;
-  type: 'lead_payout' | 'policy_commission' | 'platform_fee' | 'refund' | 'adjustment';
-  status: 'pending' | 'completed' | 'failed' | 'reversed';
+  type: string;
+  status: string;
   amount: number;
   fee_amount: number;
   net_amount: number;
@@ -135,12 +153,21 @@ export async function createUser(user: {
   business_name?: string;
   business_type?: string;
   licensed_states?: string[];
+  profile_picture_url?: string;
+  payout_method?: 'venmo' | 'paypal' | 'cashapp' | 'bank';
+  payout_venmo?: string;
+  payout_paypal?: string;
+  payout_cashapp?: string;
+  payout_bank_routing?: string;
+  payout_bank_account?: string;
 }): Promise<DbUser> {
   const sql = getSql();
   const result = await sql`
     INSERT INTO users (
       email, username, password_hash, role, display_name, phone, location,
-      business_name, business_type, licensed_states
+      business_name, business_type, licensed_states,
+      profile_picture_url, payout_method, payout_venmo, payout_paypal, payout_cashapp,
+      payout_bank_routing, payout_bank_account
     ) VALUES (
       ${user.email.toLowerCase()},
       ${user.username},
@@ -151,7 +178,14 @@ export async function createUser(user: {
       ${user.location || null},
       ${user.business_name || null},
       ${user.business_type || null},
-      ${user.licensed_states || null}
+      ${user.licensed_states || null},
+      ${user.profile_picture_url || null},
+      ${user.payout_method || null},
+      ${user.payout_venmo || null},
+      ${user.payout_paypal || null},
+      ${user.payout_cashapp || null},
+      ${user.payout_bank_routing || null},
+      ${user.payout_bank_account || null}
     )
     RETURNING *
   `;
@@ -169,8 +203,16 @@ export async function updateUser(id: string, updates: Partial<DbUser>): Promise<
       business_name = COALESCE(${updates.business_name}, business_name),
       business_type = COALESCE(${updates.business_type}, business_type),
       stripe_account_id = COALESCE(${updates.stripe_account_id}, stripe_account_id),
+      stripe_customer_id = COALESCE(${updates.stripe_customer_id}, stripe_customer_id),
       stripe_onboarding_complete = COALESCE(${updates.stripe_onboarding_complete}, stripe_onboarding_complete),
       is_active = COALESCE(${updates.is_active}, is_active),
+      profile_picture_url = COALESCE(${updates.profile_picture_url}, profile_picture_url),
+      payout_method = COALESCE(${updates.payout_method}, payout_method),
+      payout_venmo = COALESCE(${updates.payout_venmo}, payout_venmo),
+      payout_paypal = COALESCE(${updates.payout_paypal}, payout_paypal),
+      payout_cashapp = COALESCE(${updates.payout_cashapp}, payout_cashapp),
+      payout_bank_routing = COALESCE(${updates.payout_bank_routing}, payout_bank_routing),
+      payout_bank_account = COALESCE(${updates.payout_bank_account}, payout_bank_account),
       updated_at = NOW()
     WHERE id = ${id}
     RETURNING *
@@ -325,7 +367,7 @@ export async function getUsersByRole(role: 'provider' | 'buyer', excludeUserId?:
   const sql = getSql();
   if (excludeUserId) {
     const result = await sql`
-      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, created_at
+      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, profile_picture_url, payout_method, created_at
       FROM users
       WHERE role = ${role} AND is_active = true AND id != ${excludeUserId}
       ORDER BY created_at DESC
@@ -333,7 +375,7 @@ export async function getUsersByRole(role: 'provider' | 'buyer', excludeUserId?:
     return result as unknown as DbUser[];
   } else {
     const result = await sql`
-      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, created_at
+      SELECT id, email, username, role, display_name, phone, location, business_name, business_type, licensed_states, profile_picture_url, payout_method, created_at
       FROM users
       WHERE role = ${role} AND is_active = true
       ORDER BY created_at DESC
@@ -355,12 +397,13 @@ export async function getTransactionsByUserId(userId: string, limit = 50): Promi
 }
 
 export async function createTransaction(transaction: {
-  type: DbTransaction['type'];
+  type: string;
+  status?: string;
   amount: number;
   fee_amount?: number;
   net_amount: number;
-  from_account_id?: string;
-  to_account_id?: string;
+  from_account_id?: string | null;
+  to_account_id?: string | null;
   lead_id?: string;
   connection_id?: string;
   stripe_payment_id?: string;
@@ -369,10 +412,11 @@ export async function createTransaction(transaction: {
   const sql = getSql();
   const result = await sql`
     INSERT INTO transactions (
-      type, amount, fee_amount, net_amount, from_account_id, to_account_id,
+      type, status, amount, fee_amount, net_amount, from_account_id, to_account_id,
       lead_id, connection_id, stripe_payment_id, description
     ) VALUES (
       ${transaction.type},
+      ${transaction.status || 'pending'},
       ${transaction.amount},
       ${transaction.fee_amount || 0},
       ${transaction.net_amount},
@@ -484,3 +528,176 @@ export async function updateUserPassword(userId: string, passwordHash: string): 
     WHERE id = ${userId}
   `;
 }
+
+// ============================================
+// Lead queries
+// ============================================
+
+export async function createLead(data: {
+  provider_id: string;
+  buyer_id: string;
+  connection_id: string;
+  customer_data_encrypted: string;
+  customer_data_iv: string;
+  customer_state?: string;
+  vehicle_year?: number;
+  vehicle_make?: string;
+  vehicle_model?: string;
+  payout_amount: number;
+  stripe_payment_id?: string;
+}): Promise<DbLead> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO leads (
+      provider_id, buyer_id, connection_id,
+      customer_data_encrypted, customer_data_iv,
+      customer_state, vehicle_year, vehicle_make, vehicle_model,
+      payout_amount, stripe_payment_id
+    ) VALUES (
+      ${data.provider_id}, ${data.buyer_id}, ${data.connection_id},
+      ${data.customer_data_encrypted}, ${data.customer_data_iv},
+      ${data.customer_state || null}, ${data.vehicle_year || null},
+      ${data.vehicle_make || null}, ${data.vehicle_model || null},
+      ${data.payout_amount}, ${data.stripe_payment_id || null}
+    )
+    RETURNING *
+  `;
+  return first<DbLead>(result)!;
+}
+
+export async function getLeadsByProviderId(providerId: string): Promise<DbLead[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT l.*, u.display_name as buyer_name, u.business_name as buyer_business_name
+    FROM leads l
+    LEFT JOIN users u ON l.buyer_id = u.id
+    WHERE l.provider_id = ${providerId}
+    ORDER BY l.submitted_at DESC
+  `;
+  return result as unknown as DbLead[];
+}
+
+export async function getLeadsByBuyerId(buyerId: string): Promise<DbLead[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT l.*, u.display_name as provider_name, u.payout_venmo as provider_venmo
+    FROM leads l
+    LEFT JOIN users u ON l.provider_id = u.id
+    WHERE l.buyer_id = ${buyerId}
+    ORDER BY l.submitted_at DESC
+  `;
+  return result as unknown as DbLead[];
+}
+
+export async function getLeadById(id: string): Promise<DbLead | null> {
+  const sql = getSql();
+  const result = await sql`SELECT * FROM leads WHERE id = ${id} LIMIT 1`;
+  return first<DbLead>(result);
+}
+
+export async function getLeadsByConnectionId(connectionId: string): Promise<DbLead[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM leads WHERE connection_id = ${connectionId} ORDER BY submitted_at DESC
+  `;
+  return result as unknown as DbLead[];
+}
+
+export async function updateLeadPayoutStatus(
+  id: string,
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+): Promise<DbLead | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET
+      payout_status = ${status},
+      payout_completed_at = CASE WHEN ${status === 'completed'} THEN NOW() ELSE payout_completed_at END
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbLead>(result);
+}
+
+// ============================================
+// Admin / Platform stats queries
+// ============================================
+
+export async function getPlatformStats() {
+  const sql = getSql();
+
+  const [leadStats] = await sql`
+    SELECT
+      COUNT(*)::int as total_leads,
+      COUNT(*) FILTER (WHERE payout_status = 'completed')::int as paid_leads,
+      COALESCE(SUM(payout_amount), 0)::numeric as total_lead_volume
+    FROM leads
+  `;
+
+  const [txStats] = await sql`
+    SELECT
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'completed'), 0)::numeric as completed_revenue,
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'pending'), 0)::numeric as pending_revenue
+    FROM transactions
+  `;
+
+  const [connectionStats] = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'active')::int as active_connections
+    FROM connections
+  `;
+
+  const [userStats] = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE role = 'provider' AND is_active = true)::int as active_providers,
+      COUNT(*) FILTER (WHERE role = 'buyer' AND is_active = true)::int as active_buyers
+    FROM users
+  `;
+
+  return {
+    totalLeads: leadStats.total_leads,
+    paidLeads: leadStats.paid_leads,
+    totalLeadVolume: Number(leadStats.total_lead_volume),
+    completedRevenue: Number(txStats.completed_revenue),
+    pendingRevenue: Number(txStats.pending_revenue),
+    activeConnections: connectionStats.active_connections,
+    activeProviders: userStats.active_providers,
+    activeBuyers: userStats.active_buyers,
+  };
+}
+
+export async function getRevenueByDay(days: number = 30) {
+  const sql = getSql();
+  const result = await sql`
+    SELECT
+      DATE(created_at) as day,
+      COALESCE(SUM(amount), 0)::numeric as revenue,
+      COUNT(*)::int as tx_count
+    FROM transactions
+    WHERE type = 'platform_fee'
+      AND created_at >= NOW() - INTERVAL '1 day' * ${days}
+    GROUP BY DATE(created_at)
+    ORDER BY day ASC
+  `;
+  return result.map((r: any) => ({
+    day: r.day,
+    revenue: Number(r.revenue),
+    txCount: r.tx_count,
+  }));
+}
+
+export async function getAllLeadsForAdmin(limit: number = 20) {
+  const sql = getSql();
+  const result = await sql`
+    SELECT l.*,
+      p.display_name as provider_name,
+      b.display_name as buyer_name,
+      b.business_name as buyer_business_name
+    FROM leads l
+    LEFT JOIN users p ON l.provider_id = p.id
+    LEFT JOIN users b ON l.buyer_id = b.id
+    ORDER BY l.submitted_at DESC
+    LIMIT ${limit}
+  `;
+  return result as unknown as DbLead[];
+}
+

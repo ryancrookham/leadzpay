@@ -228,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerProvider = useCallback(
     async (
       data: ProviderRegistrationData
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; error?: string; loginFailed?: boolean }> => {
       try {
         // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -258,6 +258,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             displayName: data.displayName,
             phone: data.phone,
             location: data.location,
+            profilePictureUrl: data.profilePictureUrl,
+            payoutMethod: data.payoutMethod,
+            payoutVenmo: data.payoutVenmo,
+            payoutPaypal: data.payoutPaypal,
+            payoutCashapp: data.payoutCashapp,
+            payoutBankRouting: data.payoutBankRouting,
+            payoutBankAccount: data.payoutBankAccount,
           }),
         });
 
@@ -270,7 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Auto login after registration
         const loginResult = await login(data.email, data.password);
         if (!loginResult.success) {
-          return { success: true }; // Registration succeeded, login failed - user can login manually
+          return { success: true, loginFailed: true };
         }
 
         return { success: true };
@@ -283,10 +290,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updateUser = useCallback(
-    async (_updates: Partial<User>) => {
-      // TODO: Implement user update via API
-      console.warn("[AUTH] updateUser not yet implemented");
-      setUpdateTrigger((t) => t + 1);
+    async (updates: Partial<User>) => {
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        });
+        if (!res.ok) {
+          console.error("[AUTH] updateUser failed:", await res.text());
+          return;
+        }
+        setUpdateTrigger((t) => t + 1);
+      } catch (error) {
+        console.error("[AUTH] updateUser error:", error);
+      }
     },
     []
   );

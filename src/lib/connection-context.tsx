@@ -45,11 +45,15 @@ export interface ApiConnection {
 // User type for discovery (from /api/users)
 export interface DiscoveryUser {
   id: string;
+  username?: string;
   displayName: string;
   businessName: string | null;
   location: string | null;
   licensedStates: string[] | null;
   email: string;
+  phone?: string | null;
+  profilePictureUrl?: string | null;
+  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank' | null;
   isConnected: boolean;
   connectionStatus?: string;
 }

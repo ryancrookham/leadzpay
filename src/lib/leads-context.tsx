@@ -73,6 +73,9 @@ export interface Lead {
     isExpired: boolean;
     isValid: boolean;
   };
+  // Optional intake fields
+  maritalStatus?: "married" | "single";
+  hasInsurance?: "yes" | "no";
   // CRM integration tracking
   crmPushed?: boolean;
   crmLeadId?: string;

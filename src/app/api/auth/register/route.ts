@@ -5,7 +5,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { email, password, username, role, displayName, phone, location, businessName, businessType, licensedStates } = body;
+    const {
+      email,
+      password,
+      username,
+      role,
+      displayName,
+      phone,
+      location,
+      businessName,
+      businessType,
+      licensedStates,
+      profilePictureUrl,
+      payoutMethod,
+      payoutVenmo,
+      payoutPaypal,
+      payoutCashapp,
+      payoutBankRouting,
+      payoutBankAccount,
+    } = body;
 
     // Validate required fields
     if (!email || !password || !username || !role) {
@@ -60,6 +78,13 @@ export async function POST(request: NextRequest) {
       businessName,
       businessType,
       licensedStates,
+      profilePictureUrl,
+      payoutMethod,
+      payoutVenmo,
+      payoutPaypal,
+      payoutCashapp,
+      payoutBankRouting,
+      payoutBankAccount,
     });
 
     if (!result.success) {

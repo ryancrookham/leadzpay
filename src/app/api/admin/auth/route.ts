@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the admin password hash from environment variable
-    const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+    const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH?.trim();
 
     if (!adminPasswordHash) {
       console.error("ADMIN_PASSWORD_HASH not configured");
