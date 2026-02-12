@@ -1102,19 +1102,28 @@ function BusinessPortalContent() {
                         {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}
                       </td>
                       <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
-                      <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</td>
+                      <td className="py-4">
+                        <div className="text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</div>
+                        <div className="text-gray-400 text-xs">${(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerFee.toFixed(2)} WOML fee</div>
+                      </td>
                       <td className="py-4">
                         {lead.payoutStatus === "completed" ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Paid
-                          </span>
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Completed
+                            </span>
+                            <div className="text-gray-400 text-[10px]">Provider paid by WOML</div>
+                          </div>
                         ) : lead.payoutStatus === "processing" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                            Sent to WOML
-                          </span>
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              Paid to @womleads
+                            </span>
+                            <div className="text-gray-400 text-[10px] mt-1">WOML forwarding to provider</div>
+                          </div>
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             <a
@@ -1124,11 +1133,11 @@ function BusinessPortalContent() {
                               className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
                             >
                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                              Pay WOML ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}
+                              Pay @womleads ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}
                             </a>
                             <button
                               onClick={async () => {
-                                if (!confirm(`Mark as sent to WOML? ($${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} total)`)) return;
+                                if (!confirm(`Confirm you paid $${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} to @womleads via Venmo for this lead?`)) return;
                                 try {
                                   const res = await fetch(`/api/leads/${lead.id}/mark-paid`, { method: "POST" });
                                   if (res.ok) {
@@ -1144,6 +1153,7 @@ function BusinessPortalContent() {
                             >
                               Mark Sent to WOML
                             </button>
+                            <p className="text-gray-400 text-[10px]">Pay WOML first. Provider paid after processing.</p>
                           </div>
                         )}
                       </td>
