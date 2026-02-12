@@ -1104,7 +1104,7 @@ function BusinessPortalContent() {
                       <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
                       <td className="py-4">
                         <div className="text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</div>
-                        <div className="text-gray-400 text-xs">${(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerFee.toFixed(2)} WOML fee</div>
+                        <div className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerFee.toFixed(2)} WOML fee</div>
                       </td>
                       <td className="py-4">
                         {lead.payoutStatus === "completed" ? (
