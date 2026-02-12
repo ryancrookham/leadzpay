@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useAuth } from "@/lib/auth-context";
 
 interface PlatformStats {
@@ -83,15 +83,22 @@ export default function AdminPanel() {
     e.preventDefault();
     setLoginLoading(true);
     setLoginError("");
-    const result = await signIn("credentials", {
-      email: loginEmail.trim().toLowerCase(),
-      password: loginPassword,
-      redirect: false,
-    });
-    if (result?.ok) {
-      window.location.reload();
-    } else {
-      setLoginError("Invalid credentials");
+    try {
+      // Clear any existing session first to avoid conflicts
+      await signOut({ redirect: false });
+      const result = await signIn("credentials", {
+        email: loginEmail.trim().toLowerCase(),
+        password: loginPassword,
+        redirect: false,
+      });
+      if (result?.ok) {
+        window.location.href = "/admin";
+      } else {
+        setLoginError(result?.error || "Invalid credentials");
+        setLoginLoading(false);
+      }
+    } catch {
+      setLoginError("Login failed. Please try again.");
       setLoginLoading(false);
     }
   };
