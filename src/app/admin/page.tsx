@@ -234,23 +234,21 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-slate-700">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-800">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-emerald-500 flex items-center justify-center">
-              <span className="text-white font-bold text-xl">W</span>
-            </div>
+            <Image src="/woml-logo.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
           </Link>
           <div>
             <h1 className="text-white font-bold text-lg">WOML Owner Portal</h1>
-            <p className="text-slate-400 text-xs">{currentUser.email}</p>
+            <p className="text-gray-400 text-xs">{currentUser.email}</p>
           </div>
         </div>
         <button
           onClick={async () => { await logout(); window.location.href = "/auth/login"; }}
-          className="text-slate-400 hover:text-white transition text-sm"
+          className="text-gray-400 hover:text-[#C5B358] transition text-sm"
         >
           Sign Out
         </button>
@@ -259,12 +257,12 @@ export default function AdminPanel() {
       <main className="max-w-7xl mx-auto px-8 py-8">
         {statsLoading ? (
           <div className="flex justify-center py-24">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-400"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#C5B358]"></div>
           </div>
         ) : error ? (
           <div className="text-center py-24">
             <p className="text-red-400 mb-4">{error}</p>
-            <button onClick={refreshData} className="text-emerald-400 hover:text-emerald-300 underline">
+            <button onClick={refreshData} className="text-[#C5B358] hover:text-[#d4c462] underline">
               Try Again
             </button>
           </div>
@@ -272,31 +270,31 @@ export default function AdminPanel() {
           <>
             {/* Top Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                <div className="text-slate-400 text-sm mb-1">WOML Revenue</div>
-                <div className="text-3xl font-bold text-emerald-400">${stats.completedRevenue.toFixed(2)}</div>
-                <div className="text-slate-500 text-xs mt-1">collected fees</div>
+              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+                <div className="text-gray-400 text-sm mb-1">WOML Revenue</div>
+                <div className="text-3xl font-bold text-[#C5B358]">${stats.completedRevenue.toFixed(2)}</div>
+                <div className="text-gray-500 text-xs mt-1">collected fees</div>
               </div>
-              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                <div className="text-slate-400 text-sm mb-1">Awaiting Forward</div>
+              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+                <div className="text-gray-400 text-sm mb-1">Awaiting Forward</div>
                 <div className="text-3xl font-bold text-blue-400">{stats.processingLeads}</div>
-                <div className="text-slate-500 text-xs mt-1">leads to forward</div>
+                <div className="text-gray-500 text-xs mt-1">leads to forward</div>
               </div>
-              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                <div className="text-slate-400 text-sm mb-1">Total Leads</div>
+              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+                <div className="text-gray-400 text-sm mb-1">Total Leads</div>
                 <div className="text-3xl font-bold text-white">{stats.totalLeads}</div>
-                <div className="text-slate-500 text-xs mt-1">{stats.paidLeads} completed</div>
+                <div className="text-gray-500 text-xs mt-1">{stats.paidLeads} completed</div>
               </div>
-              <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                <div className="text-slate-400 text-sm mb-1">Lead Volume</div>
+              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
+                <div className="text-gray-400 text-sm mb-1">Lead Volume</div>
                 <div className="text-3xl font-bold text-purple-400">${stats.totalLeadVolume.toFixed(2)}</div>
-                <div className="text-slate-500 text-xs mt-1">total transacted</div>
+                <div className="text-gray-500 text-xs mt-1">total transacted</div>
               </div>
             </div>
 
             {/* Marketplace Health */}
             <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
+              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
                 <div className="h-12 w-12 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -304,10 +302,10 @@ export default function AdminPanel() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">{stats.activeProviders}</div>
-                  <div className="text-slate-400 text-sm">Providers</div>
+                  <div className="text-gray-400 text-sm">Providers</div>
                 </div>
               </div>
-              <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
+              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
                 <div className="h-12 w-12 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -315,18 +313,18 @@ export default function AdminPanel() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">{stats.activeBuyers}</div>
-                  <div className="text-slate-400 text-sm">Businesses</div>
+                  <div className="text-gray-400 text-sm">Businesses</div>
                 </div>
               </div>
-              <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-[#C5B358]/20 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 text-[#C5B358]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">{stats.activeConnections}</div>
-                  <div className="text-slate-400 text-sm">Connections</div>
+                  <div className="text-gray-400 text-sm">Connections</div>
                 </div>
               </div>
             </div>
@@ -339,8 +337,8 @@ export default function AdminPanel() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-2 rounded-lg font-medium transition relative ${
                     activeTab === tab
-                      ? "bg-emerald-500 text-white"
-                      : "bg-slate-800 text-slate-400 hover:text-white"
+                      ? "bg-[#C5B358] text-black"
+                      : "bg-gray-800 text-gray-400 hover:text-white"
                   }`}
                 >
                   {tab === "pnl" ? "P&L" : tab === "payouts" ? "Payouts" : tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -357,24 +355,24 @@ export default function AdminPanel() {
             {activeTab === "overview" && (
               <div className="space-y-6">
                 {/* Revenue Chart */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-2">Revenue — Last 30 Days</h2>
-                  <p className="text-slate-400 text-sm mb-6">Platform fee revenue ($2/lead)</p>
+                  <p className="text-gray-400 text-sm mb-6">Platform fee revenue ($2/lead)</p>
                   {revenueByDay.length === 0 ? (
-                    <p className="text-slate-500 text-center py-8">No revenue data yet</p>
+                    <p className="text-gray-500 text-center py-8">No revenue data yet</p>
                   ) : (
                     <div className="flex items-end gap-1 h-48">
                       {revenueByDay.map((day) => (
                         <div key={day.day} className="flex-1 flex flex-col items-center gap-1 group relative">
-                          <div className="hidden group-hover:block absolute -top-10 bg-slate-700 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                          <div className="hidden group-hover:block absolute -top-10 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
                             {new Date(day.day).toLocaleDateString()} — ${day.revenue.toFixed(2)} ({day.txCount} leads)
                           </div>
                           <div
-                            className="w-full bg-emerald-500/80 rounded-t hover:bg-emerald-400 transition-colors"
+                            className="w-full bg-[#C5B358]/80 rounded-t hover:bg-[#d4c462] transition-colors"
                             style={{ height: `${Math.max((day.revenue / maxRevenue) * 100, 4)}%` }}
                           />
                           {revenueByDay.length <= 14 && (
-                            <span className="text-slate-500 text-[10px]">
+                            <span className="text-gray-500 text-[10px]">
                               {new Date(day.day).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
                             </span>
                           )}
@@ -386,28 +384,28 @@ export default function AdminPanel() {
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                  <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                     <h3 className="text-lg font-semibold text-white mb-3">Fee Structure</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Platform fee per lead</span>
+                        <span className="text-gray-400">Platform fee per lead</span>
                         <span className="text-white font-medium">$2.00</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">From buyer (+$1)</span>
+                        <span className="text-gray-400">From buyer (+$1)</span>
                         <span className="text-white">$1.00</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">From provider (-$1)</span>
+                        <span className="text-gray-400">From provider (-$1)</span>
                         <span className="text-white">$1.00</span>
                       </div>
                     </div>
                   </div>
-                  <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                  <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                     <h3 className="text-lg font-semibold text-white mb-3">Lead Pipeline</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Total leads</span>
+                        <span className="text-gray-400">Total leads</span>
                         <span className="text-white font-medium">{stats.totalLeads}</span>
                       </div>
                       <div className="flex justify-between">
@@ -419,8 +417,8 @@ export default function AdminPanel() {
                         <span className="text-blue-400 font-medium">{stats.processingLeads}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-emerald-400">Completed</span>
-                        <span className="text-emerald-400 font-medium">{stats.paidLeads}</span>
+                        <span className="text-[#C5B358]">Completed</span>
+                        <span className="text-[#C5B358] font-medium">{stats.paidLeads}</span>
                       </div>
                     </div>
                   </div>
@@ -433,34 +431,34 @@ export default function AdminPanel() {
               <div className="space-y-6">
                 {/* Payout Summary */}
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-emerald-500/10 rounded-xl border border-emerald-500/20 p-5">
-                    <div className="text-emerald-400 text-sm mb-1">Forwarded (Completed)</div>
-                    <div className="text-2xl font-bold text-emerald-400">${stats.completedRevenue.toFixed(2)}</div>
-                    <div className="text-slate-500 text-xs mt-1">WOML fees earned</div>
+                  <div className="bg-[#C5B358]/10 rounded-xl border border-[#C5B358]/20 p-5">
+                    <div className="text-[#C5B358] text-sm mb-1">Forwarded (Completed)</div>
+                    <div className="text-2xl font-bold text-[#C5B358]">${stats.completedRevenue.toFixed(2)}</div>
+                    <div className="text-gray-500 text-xs mt-1">WOML fees earned</div>
                   </div>
                   <div className="bg-blue-500/10 rounded-xl border border-blue-500/20 p-5">
                     <div className="text-blue-400 text-sm mb-1">Held (Awaiting Forward)</div>
                     <div className="text-2xl font-bold text-blue-400">
                       ${pendingPayouts.reduce((sum, p) => sum + p.totalNet, 0).toFixed(2)}
                     </div>
-                    <div className="text-slate-500 text-xs mt-1">
+                    <div className="text-gray-500 text-xs mt-1">
                       to forward to providers ({pendingPayouts.reduce((sum, p) => sum + p.leads.length, 0)} leads)
                     </div>
                   </div>
                   <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-5">
                     <div className="text-amber-400 text-sm mb-1">Pending (Not Received)</div>
                     <div className="text-2xl font-bold text-amber-400">${stats.pendingRevenue.toFixed(2)}</div>
-                    <div className="text-slate-500 text-xs mt-1">buyers haven&apos;t paid yet</div>
+                    <div className="text-gray-500 text-xs mt-1">buyers haven&apos;t paid yet</div>
                   </div>
                 </div>
 
                 {/* Pending Payouts by Provider */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-4">
                     Pending Provider Payouts ({pendingPayouts.length} providers)
                   </h2>
                   {pendingPayouts.length === 0 ? (
-                    <p className="text-slate-500 text-center py-8">No payouts pending. All caught up!</p>
+                    <p className="text-gray-500 text-center py-8">No payouts pending. All caught up!</p>
                   ) : (
                     <div className="space-y-4">
                       {pendingPayouts.map((group) => (
@@ -479,45 +477,45 @@ export default function AdminPanel() {
             {/* ===== P&L TAB ===== */}
             {activeTab === "pnl" && (
               <div className="space-y-6">
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-4">Profit & Loss</h2>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                    <div className="flex items-center justify-between p-4 bg-[#C5B358]/10 rounded-lg border border-[#C5B358]/20">
                       <div>
-                        <div className="text-emerald-400 font-medium">Total Revenue</div>
-                        <div className="text-slate-400 text-sm">Platform fees collected ($2/lead)</div>
+                        <div className="text-[#C5B358] font-medium">Total Revenue</div>
+                        <div className="text-gray-400 text-sm">Platform fees collected ($2/lead)</div>
                       </div>
-                      <div className="text-3xl font-bold text-emerald-400">
+                      <div className="text-3xl font-bold text-[#C5B358]">
                         ${(stats.completedRevenue + stats.pendingRevenue).toFixed(2)}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-emerald-500/5 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between p-4 bg-[#C5B358]/5 rounded-lg border border-gray-800">
                       <div>
-                        <span className="text-slate-300">Collected</span>
-                        <span className="text-slate-500 text-sm ml-2">(forwarded leads)</span>
+                        <span className="text-gray-300">Collected</span>
+                        <span className="text-gray-500 text-sm ml-2">(forwarded leads)</span>
                       </div>
-                      <span className="text-emerald-400 font-medium">${stats.completedRevenue.toFixed(2)}</span>
+                      <span className="text-[#C5B358] font-medium">${stats.completedRevenue.toFixed(2)}</span>
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-blue-500/5 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between p-4 bg-blue-500/5 rounded-lg border border-gray-800">
                       <div>
-                        <span className="text-slate-300">Held</span>
-                        <span className="text-slate-500 text-sm ml-2">(awaiting forward to providers)</span>
+                        <span className="text-gray-300">Held</span>
+                        <span className="text-gray-500 text-sm ml-2">(awaiting forward to providers)</span>
                       </div>
                       <span className="text-blue-400 font-medium">
                         ${(stats.processingLeads * 2).toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-amber-500/5 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between p-4 bg-amber-500/5 rounded-lg border border-gray-800">
                       <div>
-                        <span className="text-slate-300">Pending</span>
-                        <span className="text-slate-500 text-sm ml-2">(buyers haven&apos;t paid yet)</span>
+                        <span className="text-gray-300">Pending</span>
+                        <span className="text-gray-500 text-sm ml-2">(buyers haven&apos;t paid yet)</span>
                       </div>
                       <span className="text-amber-400 font-medium">${stats.pendingRevenue.toFixed(2)}</span>
                     </div>
                     <div className="flex items-center justify-between p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
                       <div>
                         <div className="text-blue-400 font-medium">Total Lead Volume</div>
-                        <div className="text-slate-400 text-sm">Gross value of all leads</div>
+                        <div className="text-gray-400 text-sm">Gross value of all leads</div>
                       </div>
                       <div className="text-3xl font-bold text-blue-400">${stats.totalLeadVolume.toFixed(2)}</div>
                     </div>
@@ -525,25 +523,25 @@ export default function AdminPanel() {
                 </div>
 
                 {/* Daily Revenue */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-4">Daily Revenue</h2>
                   {revenueByDay.length === 0 ? (
-                    <p className="text-slate-500 text-center py-8">No revenue data yet</p>
+                    <p className="text-gray-500 text-center py-8">No revenue data yet</p>
                   ) : (
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-slate-600">
-                          <th className="text-left py-2 text-slate-400 text-sm">Date</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">WOML Revenue</th>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-2 text-gray-400 text-sm">Date</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">WOML Revenue</th>
                         </tr>
                       </thead>
                       <tbody>
                         {[...revenueByDay].reverse().map((day) => (
-                          <tr key={day.day} className="border-b border-slate-700/50">
-                            <td className="py-2 text-slate-300">{new Date(day.day).toLocaleDateString()}</td>
+                          <tr key={day.day} className="border-b border-gray-800/50">
+                            <td className="py-2 text-gray-300">{new Date(day.day).toLocaleDateString()}</td>
                             <td className="py-2 text-right text-white">{day.txCount}</td>
-                            <td className="py-2 text-right text-emerald-400 font-medium">${day.revenue.toFixed(2)}</td>
+                            <td className="py-2 text-right text-[#C5B358] font-medium">${day.revenue.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -555,39 +553,39 @@ export default function AdminPanel() {
 
             {/* ===== LEADS TAB ===== */}
             {activeTab === "leads" && (
-              <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+              <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                 <h2 className="text-xl font-semibold text-white mb-4">All Leads ({recentLeads.length})</h2>
                 {recentLeads.length === 0 ? (
-                  <p className="text-slate-500 text-center py-8">No leads yet</p>
+                  <p className="text-gray-500 text-center py-8">No leads yet</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-slate-600">
-                          <th className="text-left py-2 text-slate-400 text-sm">Date</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Provider</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Business</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Vehicle</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Rate</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">WOML Fee</th>
-                          <th className="text-center py-2 text-slate-400 text-sm">Status</th>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-2 text-gray-400 text-sm">Date</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Provider</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Business</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Vehicle</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Rate</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">WOML Fee</th>
+                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {recentLeads.map((lead) => (
-                          <tr key={lead.id} className="border-b border-slate-700/50">
-                            <td className="py-3 text-slate-300 text-sm">
+                          <tr key={lead.id} className="border-b border-gray-800/50">
+                            <td className="py-3 text-gray-300 text-sm">
                               {new Date(lead.submittedAt).toLocaleDateString()}
                             </td>
                             <td className="py-3 text-white font-medium">{lead.providerName}</td>
-                            <td className="py-3 text-slate-300">{lead.buyerName}</td>
-                            <td className="py-3 text-slate-400 text-sm">{lead.vehicleInfo || "-"}</td>
+                            <td className="py-3 text-gray-300">{lead.buyerName}</td>
+                            <td className="py-3 text-gray-400 text-sm">{lead.vehicleInfo || "-"}</td>
                             <td className="py-3 text-right text-white">${Number(lead.payoutAmount).toFixed(2)}</td>
-                            <td className="py-3 text-right text-emerald-400 font-medium">${Number(lead.platformFee).toFixed(2)}</td>
+                            <td className="py-3 text-right text-[#C5B358] font-medium">${Number(lead.platformFee).toFixed(2)}</td>
                             <td className="py-3 text-center">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${
                                 lead.payoutStatus === "completed"
-                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  ? "bg-[#C5B358]/20 text-[#C5B358]"
                                   : lead.payoutStatus === "processing"
                                   ? "bg-blue-500/20 text-blue-400"
                                   : "bg-amber-500/20 text-amber-400"
@@ -608,28 +606,28 @@ export default function AdminPanel() {
             {activeTab === "users" && (
               <div className="space-y-6">
                 {/* Providers */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-4">
                     Providers ({users.filter(u => u.role === "provider").length})
                   </h2>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-slate-600">
-                          <th className="text-left py-2 text-slate-400 text-sm">Name</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Email</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Payout</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Volume</th>
-                          <th className="text-center py-2 text-slate-400 text-sm">Status</th>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-2 text-gray-400 text-sm">Name</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Email</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Payout</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Volume</th>
+                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {users.filter(u => u.role === "provider").map((user) => (
-                          <tr key={user.id} className="border-b border-slate-700/50">
+                          <tr key={user.id} className="border-b border-gray-800/50">
                             <td className="py-3 text-white font-medium">{user.displayName}</td>
-                            <td className="py-3 text-slate-300 text-sm">{user.email}</td>
-                            <td className="py-3 text-slate-400 text-sm">
+                            <td className="py-3 text-gray-300 text-sm">{user.email}</td>
+                            <td className="py-3 text-gray-400 text-sm">
                               {user.payoutMethod ? (
                                 <span className="capitalize">{user.payoutMethod}{user.payoutVenmo ? `: @${user.payoutVenmo}` : ""}</span>
                               ) : (
@@ -637,7 +635,7 @@ export default function AdminPanel() {
                               )}
                             </td>
                             <td className="py-3 text-right text-white">{user.totalLeads}</td>
-                            <td className="py-3 text-right text-slate-300">${Number(user.totalVolume).toFixed(2)}</td>
+                            <td className="py-3 text-right text-gray-300">${Number(user.totalVolume).toFixed(2)}</td>
                             <td className="py-3 text-center">
                               <button
                                 onClick={async () => {
@@ -659,7 +657,7 @@ export default function AdminPanel() {
                                 }}
                                 className={`px-2 py-1 rounded text-xs font-medium ${
                                   user.isActive
-                                    ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                                    ? "bg-[#C5B358]/20 text-[#C5B358] hover:bg-[#C5B358]/40"
                                     : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
                                 } transition`}
                               >
@@ -674,34 +672,34 @@ export default function AdminPanel() {
                 </div>
 
                 {/* Buyers */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-4">
                     Businesses ({users.filter(u => u.role === "buyer").length})
                   </h2>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-slate-600">
-                          <th className="text-left py-2 text-slate-400 text-sm">Business</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Email</th>
-                          <th className="text-left py-2 text-slate-400 text-sm">Location</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-slate-400 text-sm">Volume</th>
-                          <th className="text-center py-2 text-slate-400 text-sm">Status</th>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-2 text-gray-400 text-sm">Business</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Email</th>
+                          <th className="text-left py-2 text-gray-400 text-sm">Location</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
+                          <th className="text-right py-2 text-gray-400 text-sm">Volume</th>
+                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {users.filter(u => u.role === "buyer").map((user) => (
-                          <tr key={user.id} className="border-b border-slate-700/50">
+                          <tr key={user.id} className="border-b border-gray-800/50">
                             <td className="py-3 text-white font-medium">{user.businessName || user.displayName}</td>
-                            <td className="py-3 text-slate-300 text-sm">{user.email}</td>
-                            <td className="py-3 text-slate-400 text-sm">{user.location || "-"}</td>
+                            <td className="py-3 text-gray-300 text-sm">{user.email}</td>
+                            <td className="py-3 text-gray-400 text-sm">{user.location || "-"}</td>
                             <td className="py-3 text-right text-white">{user.totalLeads}</td>
-                            <td className="py-3 text-right text-slate-300">${Number(user.totalVolume).toFixed(2)}</td>
+                            <td className="py-3 text-right text-gray-300">${Number(user.totalVolume).toFixed(2)}</td>
                             <td className="py-3 text-center">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${
                                 user.isActive
-                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  ? "bg-[#C5B358]/20 text-[#C5B358]"
                                   : "bg-red-500/20 text-red-400"
                               }`}>
                                 {user.isActive ? "Active" : "Inactive"}
@@ -718,7 +716,7 @@ export default function AdminPanel() {
           </>
         ) : (
           <div className="text-center py-24">
-            <p className="text-slate-400">Failed to load stats. Please try refreshing.</p>
+            <p className="text-gray-400">Failed to load stats. Please try refreshing.</p>
           </div>
         )}
       </main>
@@ -751,16 +749,16 @@ function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup
   };
 
   return (
-    <div className="bg-slate-900/50 rounded-lg border border-slate-600 overflow-hidden">
+    <div className="bg-black/50 rounded-lg border border-gray-700 overflow-hidden">
       {/* Provider Header */}
-      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50" onClick={() => setExpanded(!expanded)}>
+      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-900/50" onClick={() => setExpanded(!expanded)}>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center">
             <span className="text-blue-400 font-bold text-sm">{group.providerName.charAt(0).toUpperCase()}</span>
           </div>
           <div>
             <div className="text-white font-medium">{group.providerName}</div>
-            <div className="text-slate-400 text-sm">
+            <div className="text-gray-400 text-sm">
               {group.providerVenmo ? `@${group.providerVenmo}` : group.providerPayoutMethod || "No payout method"}
               {" · "}{group.leads.length} lead{group.leads.length !== 1 ? "s" : ""}
             </div>
@@ -768,7 +766,7 @@ function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-white">${group.totalNet.toFixed(2)}</span>
-          <svg className={`w-5 h-5 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -776,22 +774,22 @@ function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup
 
       {/* Expanded Lead Details */}
       {expanded && (
-        <div className="border-t border-slate-700">
+        <div className="border-t border-gray-800">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left px-4 py-2 text-slate-500 text-xs">Date</th>
-                <th className="text-left px-4 py-2 text-slate-500 text-xs">Business</th>
-                <th className="text-left px-4 py-2 text-slate-500 text-xs">Vehicle</th>
-                <th className="text-right px-4 py-2 text-slate-500 text-xs">Net</th>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-4 py-2 text-gray-500 text-xs">Date</th>
+                <th className="text-left px-4 py-2 text-gray-500 text-xs">Business</th>
+                <th className="text-left px-4 py-2 text-gray-500 text-xs">Vehicle</th>
+                <th className="text-right px-4 py-2 text-gray-500 text-xs">Net</th>
               </tr>
             </thead>
             <tbody>
               {group.leads.map((lead) => (
-                <tr key={lead.id} className="border-b border-slate-800">
-                  <td className="px-4 py-2 text-slate-400 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-slate-300 text-sm">{lead.buyerName}</td>
-                  <td className="px-4 py-2 text-slate-400 text-sm">{lead.vehicleInfo || "-"}</td>
+                <tr key={lead.id} className="border-b border-gray-900">
+                  <td className="px-4 py-2 text-gray-400 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-gray-300 text-sm">{lead.buyerName}</td>
+                  <td className="px-4 py-2 text-gray-400 text-sm">{lead.vehicleInfo || "-"}</td>
                   <td className="px-4 py-2 text-right text-white text-sm">${lead.providerNet.toFixed(2)}</td>
                 </tr>
               ))}
@@ -799,7 +797,7 @@ function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup
           </table>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 p-4 bg-slate-800/30">
+          <div className="flex items-center justify-end gap-3 p-4 bg-gray-900/30">
             {group.providerVenmo && (
               <a
                 href={`https://venmo.com/${group.providerVenmo.replace(/^@/, '')}?txn=pay&amount=${group.totalNet.toFixed(2)}&note=${encodeURIComponent(`WOML Payout - ${group.leads.length} lead${group.leads.length !== 1 ? "s" : ""}`)}`}
@@ -814,7 +812,7 @@ function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup
             <button
               onClick={handleForwardAll}
               disabled={forwarding}
-              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 bg-[#C5B358] hover:bg-[#b8a64e] text-black px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
             >
               {forwarding ? (
                 <>
