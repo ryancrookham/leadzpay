@@ -461,7 +461,6 @@ function BusinessPortalContent() {
             </Link>
             <span className="text-gray-300">|</span>
             <span className="text-[#1e3a5f] font-medium">{currentBuyer?.businessName || "Options Insurance Agency"}</span>
-            <span className="text-xs bg-[#1e3a5f] text-white px-2 py-1 rounded-full ml-2">Admin</span>
           </div>
           <button
             onClick={handleLogout}
