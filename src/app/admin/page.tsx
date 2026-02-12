@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 import { useAuth } from "@/lib/auth-context";
 
 interface PlatformStats {
@@ -72,6 +73,29 @@ export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "leads" | "pnl" | "users" | "payouts">("overview");
 
+  // Inline login form state
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError("");
+    const result = await signIn("credentials", {
+      email: loginEmail.trim().toLowerCase(),
+      password: loginPassword,
+      redirect: false,
+    });
+    if (result?.ok) {
+      window.location.reload();
+    } else {
+      setLoginError("Invalid credentials");
+      setLoginLoading(false);
+    }
+  };
+
   // Data state
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [revenueByDay, setRevenueByDay] = useState<RevenueDay[]>([]);
@@ -138,21 +162,63 @@ export default function AdminPanel() {
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center p-4">
-        <div className="bg-slate-800 p-8 rounded-2xl max-w-md w-full text-center">
-          <div className="h-16 w-16 rounded-xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+        <div className="bg-slate-800 p-8 rounded-2xl max-w-md w-full">
+          <div className="text-center mb-6">
+            <div className="h-16 w-16 rounded-xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+              <span className="text-emerald-400 font-bold text-2xl">W</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-1">WOML Admin Portal</h1>
+            <p className="text-slate-400 text-sm">Sign in to access the owner dashboard</p>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">WOML Admin Portal</h1>
-          <p className="text-slate-400 mb-6">Please sign in with your WOML admin account to access this dashboard.</p>
-          <Link
-            href="/auth/login"
-            className="inline-block bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-medium transition"
-          >
-            Sign In
-          </Link>
-          <Link href="/" className="block text-slate-400 hover:text-white mt-4 text-sm">
+
+          {loginError && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <div>
+              <label className="block text-slate-400 text-sm mb-1.5">Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="womleads@outlook.com"
+                required
+                disabled={loginLoading}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-50"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1.5">Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Enter admin password"
+                required
+                disabled={loginLoading}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-50"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loginLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </button>
+          </form>
+
+          <Link href="/" className="block text-slate-400 hover:text-white mt-6 text-sm text-center">
             Back to Home
           </Link>
         </div>
