@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
 interface PlatformStats {
@@ -161,22 +162,20 @@ export default function AdminPanel() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C5B358]"></div>
       </div>
     );
   }
 
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 flex items-center justify-center p-4">
-        <div className="bg-slate-800 p-8 rounded-2xl max-w-md w-full">
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
+        <div className="bg-gray-900 p-8 rounded-2xl max-w-md w-full border border-gray-800">
           <div className="text-center mb-6">
-            <div className="h-16 w-16 rounded-xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-              <span className="text-emerald-400 font-bold text-2xl">W</span>
-            </div>
+            <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4 h-14 w-auto object-contain" />
             <h1 className="text-2xl font-bold text-white mb-1">WOML Admin Portal</h1>
-            <p className="text-slate-400 text-sm">Sign in to access the owner dashboard</p>
+            <p className="text-gray-400 text-sm">Sign in to access the owner dashboard</p>
           </div>
 
           {loginError && (
@@ -187,7 +186,7 @@ export default function AdminPanel() {
 
           <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Email</label>
+              <label className="block text-gray-400 text-sm mb-1.5">Email</label>
               <input
                 type="email"
                 value={loginEmail}
@@ -195,11 +194,11 @@ export default function AdminPanel() {
                 placeholder="womleads@outlook.com"
                 required
                 disabled={loginLoading}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-50"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition disabled:opacity-50"
               />
             </div>
             <div>
-              <label className="block text-slate-400 text-sm mb-1.5">Password</label>
+              <label className="block text-gray-400 text-sm mb-1.5">Password</label>
               <input
                 type="password"
                 value={loginPassword}
@@ -207,17 +206,17 @@ export default function AdminPanel() {
                 placeholder="Enter admin password"
                 required
                 disabled={loginLoading}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-50"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition disabled:opacity-50"
               />
             </div>
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-[#C5B358] hover:bg-[#b8a64e] text-black rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loginLoading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-black"></div>
                   Signing in...
                 </>
               ) : (
@@ -226,7 +225,7 @@ export default function AdminPanel() {
             </button>
           </form>
 
-          <Link href="/" className="block text-slate-400 hover:text-white mt-6 text-sm text-center">
+          <Link href="/" className="block text-gray-500 hover:text-[#C5B358] mt-6 text-sm text-center transition">
             Back to Home
           </Link>
         </div>
