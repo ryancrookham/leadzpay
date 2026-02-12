@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getPlatformStats, getRevenueByDay, getAllLeadsForAdmin, getLeadsPendingForwarding, getAllUsers } from "@/lib/db";
+import { getPlatformStats, getRevenueByDay, getAllLeadsForAdmin, getLeadsPendingForwarding, getAllUsers, getPlatformSettings } from "@/lib/db";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
 
 export async function GET() {
@@ -11,28 +11,32 @@ export async function GET() {
       return NextResponse.json({ error: "Admin authentication required" }, { status: 401 });
     }
 
-    const [stats, revenueByDay, recentLeads, pendingPayoutLeads, users] = await Promise.all([
+    const [stats, revenueByDay, recentLeads, pendingPayoutLeads, users, platformFees] = await Promise.all([
       getPlatformStats(),
       getRevenueByDay(30),
       getAllLeadsForAdmin(50),
       getLeadsPendingForwarding(),
       getAllUsers(),
+      getPlatformSettings(),
     ]);
 
     // Sanitize leads for admin view (no encrypted PII)
-    const sanitizedLeads = recentLeads.map((lead) => ({
-      id: lead.id,
-      providerName: (lead as any).provider_name || "Unknown",
-      buyerName: (lead as any).buyer_business_name || (lead as any).buyer_name || "Unknown",
-      payoutAmount: lead.payout_amount,
-      buyerTotal: calculateFeeBreakdown(lead.payout_amount).buyerTotal,
-      providerNet: calculateFeeBreakdown(lead.payout_amount).providerNet,
-      platformFee: calculateFeeBreakdown(lead.payout_amount).totalPlatformFee,
-      payoutStatus: lead.payout_status,
-      submittedAt: lead.submitted_at,
-      vehicleInfo: [lead.vehicle_year, lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(" ") || null,
-      customerState: lead.customer_state,
-    }));
+    const sanitizedLeads = recentLeads.map((lead) => {
+      const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+      return {
+        id: lead.id,
+        providerName: (lead as any).provider_name || "Unknown",
+        buyerName: (lead as any).buyer_business_name || (lead as any).buyer_name || "Unknown",
+        payoutAmount: lead.payout_amount,
+        buyerTotal: breakdown.buyerTotal,
+        providerNet: breakdown.providerNet,
+        platformFee: breakdown.totalPlatformFee,
+        payoutStatus: lead.payout_status,
+        submittedAt: lead.submitted_at,
+        vehicleInfo: [lead.vehicle_year, lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(" ") || null,
+        customerState: lead.customer_state,
+      };
+    });
 
     // Group pending payouts by provider
     const providerGroups: Record<string, {
@@ -56,7 +60,7 @@ export async function GET() {
           totalNet: 0,
         };
       }
-      const net = calculateFeeBreakdown(lead.payout_amount).providerNet;
+      const net = calculateFeeBreakdown(lead.payout_amount, platformFees).providerNet;
       providerGroups[pid].leads.push({
         id: lead.id,
         buyerName: (lead as any).buyer_business_name || (lead as any).buyer_name || "Unknown",
@@ -94,6 +98,7 @@ export async function GET() {
       recentLeads: sanitizedLeads,
       pendingPayouts,
       users: sanitizedUsers,
+      platformFees,
     });
   } catch (error) {
     console.error("Admin stats error:", error);

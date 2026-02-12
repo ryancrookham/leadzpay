@@ -76,7 +76,7 @@ export const updateProfileSchema = z.object({
   displayName: z.string().max(100).optional(),
   phone: phoneSchema,
   location: z.string().max(255).optional(),
-  payoutMethod: z.enum(["venmo", "paypal", "bank", "stripe"]).optional(),
+  payoutMethod: z.enum(["venmo", "paypal", "bank"]).optional(),
   venmoUsername: z.string().max(100).optional(),
   paypalEmail: emailSchema.optional(),
 });

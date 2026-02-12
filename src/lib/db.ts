@@ -760,3 +760,48 @@ export async function toggleUserActive(userId: string, isActive: boolean) {
   return first<DbUser>(result);
 }
 
+// ============================================
+// Platform Settings queries
+// ============================================
+
+export interface PlatformSettings {
+  fee_total: number;
+  fee_buyer: number;
+  fee_provider: number;
+}
+
+export async function getPlatformSettings(): Promise<PlatformSettings> {
+  const sql = getSql();
+  const result = await sql`SELECT key, value FROM platform_settings WHERE key IN ('fee_total', 'fee_buyer', 'fee_provider')`;
+
+  const settings: PlatformSettings = {
+    fee_total: 2.0,
+    fee_buyer: 1.0,
+    fee_provider: 1.0,
+  };
+
+  for (const row of result) {
+    if (row.key === 'fee_total') settings.fee_total = Number(row.value);
+    if (row.key === 'fee_buyer') settings.fee_buyer = Number(row.value);
+    if (row.key === 'fee_provider') settings.fee_provider = Number(row.value);
+  }
+
+  return settings;
+}
+
+export async function updatePlatformSettings(settings: Partial<PlatformSettings>): Promise<PlatformSettings> {
+  const sql = getSql();
+
+  if (settings.fee_total !== undefined) {
+    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_total', ${String(settings.fee_total)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_total)}, updated_at = NOW()`;
+  }
+  if (settings.fee_buyer !== undefined) {
+    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_buyer', ${String(settings.fee_buyer)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_buyer)}, updated_at = NOW()`;
+  }
+  if (settings.fee_provider !== undefined) {
+    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_provider', ${String(settings.fee_provider)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_provider)}, updated_at = NOW()`;
+  }
+
+  return getPlatformSettings();
+}
+

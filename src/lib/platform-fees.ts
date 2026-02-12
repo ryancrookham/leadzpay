@@ -1,16 +1,22 @@
-// Platform fee constants — change these to adjust pricing
-export const PLATFORM_FEE_TOTAL = 2.0; // $2 flat fee per lead
-export const PLATFORM_FEE_PROVIDER = 1.0; // $1 from provider earnings
-export const PLATFORM_FEE_BUYER = 1.0; // $1 added to buyer cost
+// Platform fee defaults (fallback if DB unavailable)
+export const PLATFORM_FEE_TOTAL = 2.0;
+export const PLATFORM_FEE_PROVIDER = 1.0;
+export const PLATFORM_FEE_BUYER = 1.0;
 
-export function calculateFeeBreakdown(ratePerLead: number) {
+export function calculateFeeBreakdown(
+  ratePerLead: number,
+  fees?: { fee_total?: number; fee_buyer?: number; fee_provider?: number }
+) {
   const rate = Number(ratePerLead) || 0;
+  const providerFee = fees?.fee_provider ?? PLATFORM_FEE_PROVIDER;
+  const buyerFee = fees?.fee_buyer ?? PLATFORM_FEE_BUYER;
+  const totalFee = fees?.fee_total ?? PLATFORM_FEE_TOTAL;
   return {
     ratePerLead: rate,
-    providerFee: PLATFORM_FEE_PROVIDER,
-    buyerFee: PLATFORM_FEE_BUYER,
-    totalPlatformFee: PLATFORM_FEE_TOTAL,
-    providerNet: Math.round((rate - PLATFORM_FEE_PROVIDER) * 100) / 100,
-    buyerTotal: Math.round((rate + PLATFORM_FEE_BUYER) * 100) / 100,
+    providerFee,
+    buyerFee,
+    totalPlatformFee: totalFee,
+    providerNet: Math.round((rate - providerFee) * 100) / 100,
+    buyerTotal: Math.round((rate + buyerFee) * 100) / 100,
   };
 }

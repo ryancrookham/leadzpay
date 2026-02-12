@@ -8,14 +8,10 @@ import {
   getLeadsByBuyerId,
   createTransaction,
   updateConnection,
+  getPlatformSettings,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
-import {
-  PLATFORM_FEE_TOTAL,
-  PLATFORM_FEE_PROVIDER,
-  PLATFORM_FEE_BUYER,
-  calculateFeeBreakdown,
-} from "@/lib/platform-fees";
+import { calculateFeeBreakdown } from "@/lib/platform-fees";
 
 /**
  * POST /api/leads - Provider submits a lead
@@ -67,9 +63,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Buyer account not found" }, { status: 404 });
     }
 
-    // 3. Calculate fees
+    // 3. Calculate fees (from DB settings)
     const ratePerLead = Number(connection.rate_per_lead) || 0;
-    const fees = calculateFeeBreakdown(ratePerLead);
+    const platformFees = await getPlatformSettings();
+    const fees = calculateFeeBreakdown(ratePerLead, platformFees);
 
     // 4. Encrypt customer PII
     const { encrypted, iv } = await encrypt(customerData);
@@ -94,27 +91,27 @@ export async function POST(request: NextRequest) {
       type: "lead_payout",
       status: "pending",
       amount: ratePerLead,
-      fee_amount: PLATFORM_FEE_PROVIDER,
+      fee_amount: fees.providerFee,
       net_amount: fees.providerNet,
       from_account_id: buyer.id,
       to_account_id: session.user.id,
       lead_id: lead.id,
       connection_id: connectionId,
-      description: `Lead payout - $${ratePerLead.toFixed(2)}/lead (net $${fees.providerNet.toFixed(2)} after $${PLATFORM_FEE_PROVIDER.toFixed(2)} fee)`,
+      description: `Lead payout - $${ratePerLead.toFixed(2)}/lead (net $${fees.providerNet.toFixed(2)} after $${fees.providerFee.toFixed(2)} fee)`,
     });
 
     // Platform fee transaction
     await createTransaction({
       type: "platform_fee",
       status: "pending",
-      amount: PLATFORM_FEE_TOTAL,
+      amount: fees.totalPlatformFee,
       fee_amount: 0,
-      net_amount: PLATFORM_FEE_TOTAL,
+      net_amount: fees.totalPlatformFee,
       from_account_id: buyer.id,
       to_account_id: null,
       lead_id: lead.id,
       connection_id: connectionId,
-      description: `Platform fee ($${PLATFORM_FEE_BUYER.toFixed(2)} from buyer + $${PLATFORM_FEE_PROVIDER.toFixed(2)} from provider)`,
+      description: `Platform fee ($${fees.buyerFee.toFixed(2)} from buyer + $${fees.providerFee.toFixed(2)} from provider)`,
     });
 
     // 7. Update connection stats
@@ -128,7 +125,7 @@ export async function POST(request: NextRequest) {
       leadId: lead.id,
       fees: {
         buyerTotal: fees.buyerTotal,
-        platformFee: PLATFORM_FEE_TOTAL,
+        platformFee: fees.totalPlatformFee,
         providerNet: fees.providerNet,
         ratePerLead,
       },

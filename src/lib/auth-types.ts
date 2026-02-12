@@ -76,7 +76,7 @@ export interface LeadProvider extends BaseUser {
   phone?: string;
   location?: string;
   bio?: string;
-  paymentMethod?: "venmo" | "paypal" | "bank" | "stripe";
+  paymentMethod?: "venmo" | "paypal" | "bank";
   paymentDetails?: {
     venmoUsername?: string;
     paypalEmail?: string;
