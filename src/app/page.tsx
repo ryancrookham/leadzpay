@@ -33,7 +33,10 @@ export default function Home() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-        <Link href="/admin" className="flex items-center">
+        <button
+          onClick={() => { window.location.href = "/admin"; }}
+          className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#1e3a5f] transition cursor-pointer"
+        >
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
@@ -41,7 +44,7 @@ export default function Home() {
             height={80}
             className="h-20 w-auto object-contain"
           />
-        </Link>
+        </button>
         <div className="flex gap-3 items-center">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
