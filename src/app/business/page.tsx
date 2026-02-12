@@ -141,8 +141,8 @@ function BusinessPortalContent() {
     }
   }, [isLoading, isAuthenticated, currentUser, router]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace("/");
   };
 

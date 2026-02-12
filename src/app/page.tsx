@@ -4,19 +4,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
-// Admin emails that can see the operator dashboard
-const ADMIN_EMAILS = ["rcrookham@gmail.com"];
-
-function isAdmin(email: string | undefined): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email.toLowerCase());
-}
-
 export default function Home() {
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
 
   // Get dashboard URL based on user role
-  const dashboardUrl = currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
+  const dashboardUrl = currentUser?.role === "admin" ? "/admin" : currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
 
   // Show minimal loading state only while checking auth
   if (isLoading) {
@@ -53,19 +45,6 @@ export default function Home() {
         <div className="flex gap-3 items-center">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
-              {/* Admin Operator Button - only for admins */}
-              {isAdmin(currentUser?.email) && (
-                <Link
-                  href="/admin/health"
-                  className="text-gray-400 hover:text-[#1e3a5f] p-2 rounded-lg transition"
-                  title="Operator Dashboard"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </Link>
-              )}
               <Link
                 href={dashboardUrl}
                 className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
