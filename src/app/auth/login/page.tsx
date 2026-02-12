@@ -21,7 +21,7 @@ function LoginContent() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!isLoading && isAuthenticated && currentUser) {
-      const targetUrl = currentUser.role === "buyer" ? "/business" : "/provider-dashboard";
+      const targetUrl = currentUser.role === "admin" ? "/admin" : currentUser.role === "buyer" ? "/business" : "/provider-dashboard";
       window.location.href = targetUrl;
     }
   }, [isAuthenticated, currentUser, isLoading]);
@@ -40,7 +40,7 @@ function LoginContent() {
 
       if (result.success && result.role) {
         setDebugInfo(`Login successful! Role: ${result.role}. Redirecting...`);
-        const targetUrl = result.role === "buyer" ? "/business" : "/provider-dashboard";
+        const targetUrl = result.role === "admin" ? "/admin" : result.role === "buyer" ? "/business" : "/provider-dashboard";
         window.location.href = targetUrl;
       } else {
         setError(result.error || "Invalid email or password");

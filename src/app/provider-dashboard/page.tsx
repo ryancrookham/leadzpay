@@ -236,7 +236,7 @@ export default function ProviderDashboard() {
   const totalLeads = dbLeads.length;
   const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
   const totalEarnings = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
-  const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
+  const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "processing").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
 
   // Determine connection status message
   const getConnectionStatus = () => {
@@ -582,9 +582,11 @@ function DashboardTab({
                     </td>
                     <td className="py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                        lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                        lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                        "bg-amber-100 text-amber-700"
                       }`}>
-                        {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                        {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                       </span>
                     </td>
                     <td className="py-4 text-[#1e3a5f] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
@@ -2541,10 +2543,10 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                   <td className="py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                      lead.payoutStatus === "pending" ? "bg-amber-100 text-amber-700" :
-                      "bg-gray-100 text-gray-500"
+                      lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                      "bg-amber-100 text-amber-700"
                     }`}>
-                      {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                      {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                     </span>
                   </td>
                   <td className="py-4 text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
@@ -2610,9 +2612,11 @@ function EarningsTab({
                 <div className="text-right">
                   <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                    lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                    lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                    "bg-amber-100 text-amber-700"
                   }`}>
-                    {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                    {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                   </span>
                 </div>
               </div>

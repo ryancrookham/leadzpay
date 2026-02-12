@@ -8,6 +8,13 @@ export const MASTER_OPERATOR = {
   name: "Ryan Crookham",
 };
 
+// WOML Platform Configuration
+export const WOML_PLATFORM = {
+  email: "womleads@outlook.com",
+  venmoUsername: "womleads",
+  name: "WOML - Word of Mouth Leads",
+};
+
 /**
  * Check if an email belongs to the master operator
  */

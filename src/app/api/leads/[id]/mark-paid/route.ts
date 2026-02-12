@@ -33,19 +33,20 @@ export async function POST(
       return NextResponse.json({ error: "Not your lead" }, { status: 403 });
     }
 
-    if (lead.payout_status === "completed") {
-      return NextResponse.json({ error: "Lead is already marked as paid" }, { status: 400 });
+    if (lead.payout_status === "completed" || lead.payout_status === "processing") {
+      return NextResponse.json({ error: "Lead payment already recorded" }, { status: 400 });
     }
 
-    // Update lead payout status
-    const updated = await updateLeadPayoutStatus(leadId, "completed");
+    // Mark as processing (buyer paid WOML, awaiting admin forward to provider)
+    const updated = await updateLeadPayoutStatus(leadId, "processing");
 
-    // Update matching transactions to completed
+    // Only mark platform_fee transaction as completed (WOML received their fee)
+    // Leave lead_payout transaction as pending (provider hasn't been paid yet)
     const sql = executeSql;
     await sql`
       UPDATE transactions
       SET status = 'completed', completed_at = NOW()
-      WHERE lead_id = ${leadId} AND status = 'pending'
+      WHERE lead_id = ${leadId} AND type = 'platform_fee' AND status = 'pending'
     `;
 
     return NextResponse.json({

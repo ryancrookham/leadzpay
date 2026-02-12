@@ -12,6 +12,7 @@ import {
   User,
   LeadBuyer,
   LeadProvider,
+  PlatformAdmin,
   BuyerRegistrationData,
   ProviderRegistrationData,
   getDefaultBuyerStats,
@@ -28,7 +29,7 @@ interface AuthContextType {
     email: string,
     password: string,
     staySignedIn?: boolean
-  ) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }>;
+  ) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" | "admin" }>;
   logout: () => void;
   registerBuyer: (
     data: BuyerRegistrationData
@@ -61,7 +62,19 @@ function sessionToUser(sessionUser: {
 }): User {
   const now = new Date().toISOString();
 
-  if (sessionUser.role === "buyer") {
+  if (sessionUser.role === "admin") {
+    const admin: PlatformAdmin = {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      username: sessionUser.username,
+      role: "admin",
+      displayName: sessionUser.displayName || "WOML Admin",
+      createdAt: now,
+      updatedAt: now,
+      isActive: true,
+    };
+    return admin;
+  } else if (sessionUser.role === "buyer") {
     const buyer: LeadBuyer = {
       id: sessionUser.id,
       email: sessionUser.email,
@@ -117,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string,
       _staySignedIn: boolean = false
-    ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" }> => {
+    ): Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" | "admin" }> => {
       console.log("[AUTH] Login attempt for:", email);
 
       if (!email || !password) {

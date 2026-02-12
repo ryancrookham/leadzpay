@@ -629,6 +629,7 @@ export async function getPlatformStats() {
     SELECT
       COUNT(*)::int as total_leads,
       COUNT(*) FILTER (WHERE payout_status = 'completed')::int as paid_leads,
+      COUNT(*) FILTER (WHERE payout_status = 'processing')::int as processing_leads,
       COALESCE(SUM(payout_amount), 0)::numeric as total_lead_volume
     FROM leads
   `;
@@ -656,6 +657,7 @@ export async function getPlatformStats() {
   return {
     totalLeads: leadStats.total_leads,
     paidLeads: leadStats.paid_leads,
+    processingLeads: leadStats.processing_leads,
     totalLeadVolume: Number(leadStats.total_lead_volume),
     completedRevenue: Number(txStats.completed_revenue),
     pendingRevenue: Number(txStats.pending_revenue),
@@ -690,6 +692,8 @@ export async function getAllLeadsForAdmin(limit: number = 20) {
   const result = await sql`
     SELECT l.*,
       p.display_name as provider_name,
+      p.payout_venmo as provider_venmo,
+      p.payout_method as provider_payout_method,
       b.display_name as buyer_name,
       b.business_name as buyer_business_name
     FROM leads l
@@ -699,5 +703,60 @@ export async function getAllLeadsForAdmin(limit: number = 20) {
     LIMIT ${limit}
   `;
   return result as unknown as DbLead[];
+}
+
+export async function getLeadsPendingForwarding() {
+  const sql = getSql();
+  const result = await sql`
+    SELECT l.*,
+      p.display_name as provider_name,
+      p.payout_venmo as provider_venmo,
+      p.payout_method as provider_payout_method,
+      b.display_name as buyer_name,
+      b.business_name as buyer_business_name
+    FROM leads l
+    LEFT JOIN users p ON l.provider_id = p.id
+    LEFT JOIN users b ON l.buyer_id = b.id
+    WHERE l.payout_status = 'processing'
+    ORDER BY l.submitted_at ASC
+  `;
+  return result as unknown as (DbLead & {
+    provider_venmo: string | null;
+    provider_payout_method: string | null;
+  })[];
+}
+
+export async function getAllUsers() {
+  const sql = getSql();
+  const result = await sql`
+    SELECT
+      u.id, u.email, u.username, u.role, u.display_name, u.phone,
+      u.business_name, u.location, u.is_active, u.created_at,
+      u.payout_method, u.payout_venmo,
+      COALESCE(ps.total_leads, bs.total_leads, 0)::int as total_leads,
+      COALESCE(ps.total_volume, bs.total_volume, 0)::numeric as total_volume
+    FROM users u
+    LEFT JOIN (
+      SELECT provider_id, COUNT(*)::int as total_leads, COALESCE(SUM(payout_amount), 0)::numeric as total_volume
+      FROM leads GROUP BY provider_id
+    ) ps ON u.id = ps.provider_id AND u.role = 'provider'
+    LEFT JOIN (
+      SELECT buyer_id, COUNT(*)::int as total_leads, COALESCE(SUM(payout_amount), 0)::numeric as total_volume
+      FROM leads GROUP BY buyer_id
+    ) bs ON u.id = bs.buyer_id AND u.role = 'buyer'
+    WHERE u.role IN ('provider', 'buyer')
+    ORDER BY u.created_at DESC
+  `;
+  return result as unknown as (DbUser & { total_leads: number; total_volume: number })[];
+}
+
+export async function toggleUserActive(userId: string, isActive: boolean) {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE users SET is_active = ${isActive}, updated_at = NOW()
+    WHERE id = ${userId}
+    RETURNING *
+  `;
+  return first<DbUser>(result);
 }
 

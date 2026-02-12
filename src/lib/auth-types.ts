@@ -1,6 +1,6 @@
 "use client";
 
-export type UserRole = "buyer" | "provider";
+export type UserRole = "buyer" | "provider" | "admin";
 
 // Stored separately for security
 export interface UserCredentials {
@@ -90,8 +90,14 @@ export interface LeadProvider extends BaseUser {
   connectionIds: string[];
 }
 
+// Platform Admin (WOML Owner)
+export interface PlatformAdmin extends BaseUser {
+  role: "admin";
+  displayName: string;
+}
+
 // Union type for any user
-export type User = LeadBuyer | LeadProvider;
+export type User = LeadBuyer | LeadProvider | PlatformAdmin;
 
 // Session stored in localStorage
 export interface Session {
@@ -139,6 +145,10 @@ export function isBuyer(user: User): user is LeadBuyer {
 
 export function isProvider(user: User): user is LeadProvider {
   return user.role === "provider";
+}
+
+export function isAdmin(user: User): user is PlatformAdmin {
+  return user.role === "admin";
 }
 
 // Default stats for new users

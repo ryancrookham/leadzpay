@@ -10,6 +10,7 @@ import { useConnections, type ApiConnection, type DiscoveryUser } from "@/lib/co
 import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, PLATFORM_FEE_BUYER } from "@/lib/platform-fees";
+import { WOML_PLATFORM } from "@/lib/master-operator";
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -402,7 +403,7 @@ function BusinessPortalContent() {
 
   // Calculate stats from DB leads
   const totalLeads = dbLeads.length;
-  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
+  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing").length;
   const totalPayouts = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
   const avgLeadValue = totalLeads > 0 ? totalPayouts / totalLeads : 0;
 
@@ -614,8 +615,10 @@ function BusinessPortalContent() {
                         <td className="py-4 text-[#1e3a5f] font-medium">-</td>
                         <td className="py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                          }`}>{lead.payoutStatus === "completed" ? "Paid" : "Pending"}</span>
+                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                            lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                            "bg-amber-100 text-amber-700"
+                          }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
                         </td>
                         <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</td>
                       </tr>
@@ -1108,38 +1111,38 @@ function BusinessPortalContent() {
                             </svg>
                             Paid
                           </span>
+                        ) : lead.payoutStatus === "processing" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                            Sent to WOML
+                          </span>
                         ) : (
                           <div className="flex flex-col gap-1.5">
-                            {lead.providerVenmo ? (
-                              <a
-                                href={`https://venmo.com/${lead.providerVenmo.replace(/^@/, '')}?txn=pay&amount=${Number(lead.payoutAmount).toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
-                              >
-                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                                Pay ${Number(lead.payoutAmount).toFixed(2)}
-                              </a>
-                            ) : (
-                              <span className="text-gray-400 text-xs">No Venmo set</span>
-                            )}
+                            <a
+                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
+                              Pay WOML ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}
+                            </a>
                             <button
                               onClick={async () => {
-                                if (!confirm(`Mark this lead as paid? ($${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} total)`)) return;
+                                if (!confirm(`Mark as sent to WOML? ($${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} total)`)) return;
                                 try {
                                   const res = await fetch(`/api/leads/${lead.id}/mark-paid`, { method: "POST" });
                                   if (res.ok) {
                                     setDbLeads(prev => prev.map(l =>
-                                      l.id === lead.id ? { ...l, payoutStatus: "completed" } : l
+                                      l.id === lead.id ? { ...l, payoutStatus: "processing" } : l
                                     ));
                                   }
                                 } catch (e) {
-                                  console.error("Mark paid failed:", e);
+                                  console.error("Mark sent failed:", e);
                                 }
                               }}
                               className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1 rounded-lg text-sm font-medium transition border border-amber-200"
                             >
-                              Mark Paid
+                              Mark Sent to WOML
                             </button>
                           </div>
                         )}
@@ -1988,7 +1991,7 @@ function LedgerTab({ dbLeads }: { dbLeads: ApiLead[] }) {
       provider: lead.providerName || "Unknown",
       customer: lead.customerName,
       vehicle: [lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-",
-      status: lead.payoutStatus === "completed" ? "completed" : "pending",
+      status: lead.payoutStatus === "completed" ? "completed" : lead.payoutStatus === "processing" ? "sent_to_woml" : "pending",
     };
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -2121,7 +2124,7 @@ function RolodexTab({
   // Calculate stats for each provider from DB leads
   const providersWithStats = filteredProviders.map(provider => {
     const providerLeads = dbLeads.filter(l => l.providerId === provider.id);
-    const paidLeads = providerLeads.filter(l => l.payoutStatus === "completed");
+    const paidLeads = providerLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
     return {
       ...provider,
       totalLeads: providerLeads.length,
@@ -2288,7 +2291,7 @@ function ProviderDetailModal({
   onClose: () => void;
 }) {
   const [activeView, setActiveView] = useState<"card" | "ledger">("card");
-  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed");
+  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
   const conversionRate = dbLeads.length > 0 ? Math.round((paidLeads.length / dbLeads.length) * 100) : 0;
   const totalPaid = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
 
@@ -2419,9 +2422,11 @@ function ProviderDetailModal({
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           lead.payoutStatus === "completed"
                             ? "bg-emerald-100 text-emerald-700"
+                            : lead.payoutStatus === "processing"
+                            ? "bg-blue-100 text-blue-700"
                             : "bg-amber-100 text-amber-700"
                         }`}>
-                          {lead.payoutStatus === "completed" ? "Paid" : "Pending"}
+                          {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}
                         </span>
                       </div>
                     </div>
@@ -2917,7 +2922,7 @@ function AnalyticsTab({
   const realTimeAnalytics = {
     totalLeads: dbLeads.length,
     pendingLeads: dbLeads.filter(l => l.payoutStatus === "pending").length,
-    claimedLeads: dbLeads.filter(l => l.payoutStatus === "completed").length,
+    claimedLeads: dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing").length,
     totalPayout: dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0),
   };
 
