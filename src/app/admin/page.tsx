@@ -69,7 +69,7 @@ interface AdminUser {
 }
 
 export default function AdminPanel() {
-  const { currentUser, isLoading: authLoading, isAuthenticated, logout, login } = useAuth();
+  const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "leads" | "pnl" | "users" | "payouts">("overview");
 
   // Inline login form state
@@ -83,14 +83,19 @@ export default function AdminPanel() {
     setLoginLoading(true);
     setLoginError("");
     try {
-      const result = await login(loginEmail.trim(), loginPassword);
-      if (result.success && result.role === "admin") {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: loginEmail.trim().toLowerCase(),
+          password: loginPassword,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
         window.location.href = "/admin";
-      } else if (result.success && result.role !== "admin") {
-        setLoginError("This account is not an admin");
-        setLoginLoading(false);
       } else {
-        setLoginError(result.error || "Invalid credentials");
+        setLoginError(data.error || "Invalid credentials");
         setLoginLoading(false);
       }
     } catch {
