@@ -33,7 +33,7 @@ export default function Home() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center">
+        <Link href="/admin" className="flex items-center">
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
@@ -41,7 +41,7 @@ export default function Home() {
             height={80}
             className="h-20 w-auto object-contain"
           />
-        </div>
+        </Link>
         <div className="flex gap-3 items-center">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
