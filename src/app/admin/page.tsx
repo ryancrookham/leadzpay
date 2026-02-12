@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { signIn, signOut } from "next-auth/react";
 import { useAuth } from "@/lib/auth-context";
 
 interface PlatformStats {
@@ -70,7 +69,7 @@ interface AdminUser {
 }
 
 export default function AdminPanel() {
-  const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
+  const { currentUser, isLoading: authLoading, isAuthenticated, logout, login } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "leads" | "pnl" | "users" | "payouts">("overview");
 
   // Inline login form state
@@ -84,17 +83,14 @@ export default function AdminPanel() {
     setLoginLoading(true);
     setLoginError("");
     try {
-      // Clear any existing session first to avoid conflicts
-      await signOut({ redirect: false });
-      const result = await signIn("credentials", {
-        email: loginEmail.trim().toLowerCase(),
-        password: loginPassword,
-        redirect: false,
-      });
-      if (result?.ok) {
+      const result = await login(loginEmail.trim(), loginPassword);
+      if (result.success && result.role === "admin") {
         window.location.href = "/admin";
+      } else if (result.success && result.role !== "admin") {
+        setLoginError("This account is not an admin");
+        setLoginLoading(false);
       } else {
-        setLoginError(result?.error || "Invalid credentials");
+        setLoginError(result.error || "Invalid credentials");
         setLoginLoading(false);
       }
     } catch {
@@ -184,7 +180,7 @@ export default function AdminPanel() {
             </div>
           )}
 
-          <form onSubmit={handleAdminLogin} className="space-y-4">
+          <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
             <div>
               <label className="block text-slate-400 text-sm mb-1.5">Email</label>
               <input
