@@ -137,7 +137,7 @@ function BusinessPortalContent() {
     if (!isLoading && (!isAuthenticated || !currentUser)) {
       router.push("/auth/login?role=buyer");
     } else if (!isLoading && currentUser && !isBuyer(currentUser)) {
-      router.push("/provider-dashboard");
+      router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
     }
   }, [isLoading, isAuthenticated, currentUser, router]);
 

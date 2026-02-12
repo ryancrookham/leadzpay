@@ -55,8 +55,8 @@ export default function Home() {
                 </svg>
               </Link>
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   window.location.reload();
                 }}
                 className="text-gray-500 hover:text-red-600 px-3 py-2 rounded-lg transition flex items-center gap-1"

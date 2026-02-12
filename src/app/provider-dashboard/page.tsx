@@ -210,6 +210,13 @@ export default function ProviderDashboard() {
     router.replace("/");
   };
 
+  // Redirect admin users to their own dashboard
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && currentUser && currentUser.role === "admin") {
+      router.replace("/admin");
+    }
+  }, [isLoading, isAuthenticated, currentUser, router]);
+
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isProvider(currentUser)) {
     return (
