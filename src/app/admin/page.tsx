@@ -124,7 +124,7 @@ interface PlatformFees {
 
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payouts" | "payments">("payouts");
+  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payments">("payments");
 
   // Inline login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -401,10 +401,10 @@ export default function AdminPanel() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["payouts", "profitability", "info", "payments"] as const).map((tab) => {
+              {(["payments", "profitability", "info"] as const).map((tab) => {
                 const labels: Record<string, string> = {
-                  payouts: "Payouts", profitability: "Profitability",
-                  info: "Users", payments: "Payments",
+                  payments: "Payments", profitability: "Profitability",
+                  info: "Users",
                 };
                 return (
                   <button
@@ -417,7 +417,7 @@ export default function AdminPanel() {
                     }`}
                   >
                     {labels[tab]}
-                    {tab === "payouts" && pendingPayouts.length > 0 && (
+                    {tab === "payments" && pendingPayouts.length > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
                         {pendingPayouts.length}
                       </span>
@@ -426,54 +426,6 @@ export default function AdminPanel() {
                 );
               })}
             </div>
-
-            {/* ===== PAYOUTS TAB ===== */}
-            {activeTab === "payouts" && (
-              <div className="space-y-6">
-                {/* Payout Summary */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-[#C5B358]/10 rounded-xl border border-[#C5B358]/20 p-5">
-                    <div className="text-[#C5B358] text-sm mb-1">Forwarded (Completed)</div>
-                    <div className="text-2xl font-bold text-[#C5B358]">${stats.completedRevenue.toFixed(2)}</div>
-                    <div className="text-gray-500 text-xs mt-1">WOML fees earned</div>
-                  </div>
-                  <div className="bg-blue-500/10 rounded-xl border border-blue-500/20 p-5">
-                    <div className="text-blue-400 text-sm mb-1">Held (Awaiting Forward)</div>
-                    <div className="text-2xl font-bold text-blue-400">
-                      ${pendingPayouts.reduce((sum, p) => sum + p.totalNet, 0).toFixed(2)}
-                    </div>
-                    <div className="text-gray-500 text-xs mt-1">
-                      to forward to providers ({pendingPayouts.reduce((sum, p) => sum + p.leads.length, 0)} leads)
-                    </div>
-                  </div>
-                  <div className="bg-amber-500/10 rounded-xl border border-amber-500/20 p-5">
-                    <div className="text-amber-400 text-sm mb-1">Pending (Not Received)</div>
-                    <div className="text-2xl font-bold text-amber-400">${stats.pendingRevenue.toFixed(2)}</div>
-                    <div className="text-gray-500 text-xs mt-1">buyers haven&apos;t paid yet</div>
-                  </div>
-                </div>
-
-                {/* Pending Payouts by Provider */}
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">
-                    Pending Provider Payouts ({pendingPayouts.length} providers)
-                  </h2>
-                  {pendingPayouts.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">No payouts pending. All caught up!</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {pendingPayouts.map((group) => (
-                        <ProviderPayoutGroup
-                          key={group.providerId}
-                          group={group}
-                          onForwarded={refreshData}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* ===== PROFITABILITY TAB ===== */}
             {activeTab === "profitability" && profitability && (
@@ -494,6 +446,10 @@ export default function AdminPanel() {
                   setPlatformFees(fees);
                   refreshData();
                 }}
+                pendingPayouts={pendingPayouts}
+                completedRevenue={stats.completedRevenue}
+                pendingRevenue={stats.pendingRevenue}
+                onPayoutForwarded={refreshData}
               />
             )}
 
@@ -535,112 +491,3 @@ export default function AdminPanel() {
 }
 
 // Provider Payout Group Component
-function ProviderPayoutGroup({ group, onForwarded }: { group: PendingPayoutGroup; onForwarded: () => void }) {
-  const [expanded, setExpanded] = useState(true);
-  const [forwarding, setForwarding] = useState(false);
-
-  const handleForwardAll = async () => {
-    if (!confirm(`Forward $${group.totalNet.toFixed(2)} to ${group.providerName}? (${group.leads.length} leads)`)) return;
-    setForwarding(true);
-    try {
-      const res = await fetch("/api/admin/forward-payout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadIds: group.leads.map(l => l.id) }),
-      });
-      if (res.ok) {
-        onForwarded();
-      }
-    } catch (e) {
-      console.error("Forward failed:", e);
-    } finally {
-      setForwarding(false);
-    }
-  };
-
-  return (
-    <div className="bg-black/50 rounded-lg border border-gray-700 overflow-hidden">
-      {/* Provider Header */}
-      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-900/50" onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-            <span className="text-blue-400 font-bold text-sm">{group.providerName.charAt(0).toUpperCase()}</span>
-          </div>
-          <div>
-            <div className="text-white font-medium">{group.providerName}</div>
-            <div className="text-gray-400 text-sm">
-              {group.providerVenmo ? `@${group.providerVenmo}` : group.providerPayoutMethod || "No payout method"}
-              {" · "}{group.leads.length} lead{group.leads.length !== 1 ? "s" : ""}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-white">${group.totalNet.toFixed(2)}</span>
-          <svg className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </div>
-
-      {/* Expanded Lead Details */}
-      {expanded && (
-        <div className="border-t border-gray-800">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-2 text-gray-500 text-xs">Date</th>
-                <th className="text-left px-4 py-2 text-gray-500 text-xs">Business</th>
-                <th className="text-left px-4 py-2 text-gray-500 text-xs">Vehicle</th>
-                <th className="text-right px-4 py-2 text-gray-500 text-xs">Net</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.leads.map((lead) => (
-                <tr key={lead.id} className="border-b border-gray-900">
-                  <td className="px-4 py-2 text-gray-400 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-gray-300 text-sm">{lead.buyerName}</td>
-                  <td className="px-4 py-2 text-gray-400 text-sm">{lead.vehicleInfo || "-"}</td>
-                  <td className="px-4 py-2 text-right text-white text-sm">${lead.providerNet.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 p-4 bg-gray-900/30">
-            {group.providerVenmo && (
-              <a
-                href={`https://venmo.com/${group.providerVenmo.replace(/^@/, '')}?txn=pay&amount=${group.totalNet.toFixed(2)}&note=${encodeURIComponent(`WOML Payout - ${group.leads.length} lead${group.leads.length !== 1 ? "s" : ""}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-4 py-2 rounded-lg text-sm font-medium transition"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                Pay ${group.totalNet.toFixed(2)} via Venmo
-              </a>
-            )}
-            <button
-              onClick={handleForwardAll}
-              disabled={forwarding}
-              className="inline-flex items-center gap-1.5 bg-[#C5B358] hover:bg-[#b8a64e] text-black px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
-            >
-              {forwarding ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Forwarding...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Mark All Forwarded
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
