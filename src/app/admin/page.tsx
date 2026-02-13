@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/auth-context";
 import ProfitabilityTab from "./components/ProfitabilityTab";
 import PaymentsTab from "./components/PaymentsTab";
 import InfoTab from "./components/InfoTab";
-import RevenueChart from "./components/RevenueChart";
 
 interface PlatformStats {
   totalLeads: number;
@@ -125,7 +124,7 @@ interface PlatformFees {
 
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"overview" | "leads" | "profitability" | "info" | "payouts" | "payments">("overview");
+  const [activeTab, setActiveTab] = useState<"leads" | "profitability" | "info" | "payouts" | "payments">("payouts");
 
   // Inline login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -402,9 +401,9 @@ export default function AdminPanel() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["overview", "payouts", "profitability", "leads", "info", "payments"] as const).map((tab) => {
+              {(["payouts", "profitability", "leads", "info", "payments"] as const).map((tab) => {
                 const labels: Record<string, string> = {
-                  overview: "Overview", payouts: "Payouts", profitability: "Profitability",
+                  payouts: "Payouts", profitability: "Profitability",
                   leads: "Leads", info: "Info", payments: "Payments",
                 };
                 return (
@@ -427,22 +426,6 @@ export default function AdminPanel() {
                 );
               })}
             </div>
-
-            {/* ===== OVERVIEW TAB ===== */}
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                {/* Revenue Chart */}
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-2">Revenue — Last 30 Days</h2>
-                  <p className="text-gray-400 text-sm mb-4">Platform fee revenue{platformFees?.fee_type === "flat" ? ` ($${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)` : platformFees?.fee_type === "percent" ? ` (${platformFees.fee_percent}%)` : ""}</p>
-                  {revenueByDay.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">No revenue data yet</p>
-                  ) : (
-                    <RevenueChart revenueByDay={revenueByDay} />
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* ===== PAYOUTS TAB ===== */}
             {activeTab === "payouts" && (
@@ -498,6 +481,8 @@ export default function AdminPanel() {
                 operatingCosts={operatingCosts}
                 profitability={profitability}
                 onCostsChanged={refreshData}
+                revenueByDay={revenueByDay}
+                feeLabel={platformFees?.fee_type === "flat" ? `$${(platformFees?.fee_total ?? 2).toFixed(2)}/lead` : platformFees?.fee_type === "percent" ? `${platformFees.fee_percent}%` : ""}
               />
             )}
 

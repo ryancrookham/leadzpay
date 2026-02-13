@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import RevenueChart from "./RevenueChart";
 
 interface OperatingCost {
   id: string;
@@ -29,9 +30,11 @@ interface ProfitabilityTabProps {
   operatingCosts: OperatingCost[];
   profitability: ProfitabilityData;
   onCostsChanged: () => void;
+  revenueByDay: { day: string; revenue: number; txCount: number }[];
+  feeLabel: string;
 }
 
-export default function ProfitabilityTab({ operatingCosts, profitability, onCostsChanged }: ProfitabilityTabProps) {
+export default function ProfitabilityTab({ operatingCosts, profitability, onCostsChanged, revenueByDay, feeLabel }: ProfitabilityTabProps) {
   const [showCostManager, setShowCostManager] = useState(false);
   const [costForm, setCostForm] = useState<{ name: string; amount: number; frequency: "monthly" | "yearly" | "per_transaction"; category: string; description: string }>({ name: "", amount: 0, frequency: "monthly", category: "general", description: "" });
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
@@ -100,6 +103,17 @@ export default function ProfitabilityTab({ operatingCosts, profitability, onCost
 
   return (
     <div className="space-y-6">
+      {/* Revenue Chart — Last 30 Days */}
+      <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
+        <h2 className="text-xl font-semibold text-white mb-2">Revenue — Last 30 Days</h2>
+        <p className="text-gray-400 text-sm mb-4">Platform fee revenue{feeLabel ? ` (${feeLabel})` : ""}</p>
+        {revenueByDay.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No revenue data yet</p>
+        ) : (
+          <RevenueChart revenueByDay={revenueByDay} />
+        )}
+      </div>
+
       {/* Revenue by Period */}
       <div className="grid grid-cols-3 gap-4">
         {([
