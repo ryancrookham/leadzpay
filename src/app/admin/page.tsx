@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import ProfitabilityTab from "./components/ProfitabilityTab";
 import PaymentsTab from "./components/PaymentsTab";
 import InfoTab from "./components/InfoTab";
+import RevenueChart from "./components/RevenueChart";
 
 interface PlatformStats {
   totalLeads: number;
@@ -230,9 +231,6 @@ export default function AdminPanel() {
     }
   };
 
-  // Revenue chart helpers
-  const maxRevenue = Math.max(...revenueByDay.map(d => d.revenue), 1);
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center">
@@ -436,28 +434,11 @@ export default function AdminPanel() {
                 {/* Revenue Chart */}
                 <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-2">Revenue — Last 30 Days</h2>
-                  <p className="text-gray-400 text-sm mb-6">Platform fee revenue{platformFees?.fee_type === "flat" ? ` ($${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)` : platformFees?.fee_type === "percent" ? ` (${platformFees.fee_percent}%)` : ""}</p>
+                  <p className="text-gray-400 text-sm mb-4">Platform fee revenue{platformFees?.fee_type === "flat" ? ` ($${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)` : platformFees?.fee_type === "percent" ? ` (${platformFees.fee_percent}%)` : ""}</p>
                   {revenueByDay.length === 0 ? (
                     <p className="text-gray-500 text-center py-8">No revenue data yet</p>
                   ) : (
-                    <div className="flex items-end gap-1 h-48">
-                      {revenueByDay.map((day) => (
-                        <div key={day.day} className="flex-1 flex flex-col items-center gap-1 group relative">
-                          <div className="hidden group-hover:block absolute -top-10 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                            {new Date(day.day).toLocaleDateString()} — ${day.revenue.toFixed(2)} ({day.txCount} leads)
-                          </div>
-                          <div
-                            className="w-full bg-[#C5B358]/80 rounded-t hover:bg-[#d4c462] transition-colors"
-                            style={{ height: `${Math.max((day.revenue / maxRevenue) * 100, 4)}%` }}
-                          />
-                          {revenueByDay.length <= 14 && (
-                            <span className="text-gray-500 text-[10px]">
-                              {new Date(day.day).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <RevenueChart revenueByDay={revenueByDay} />
                   )}
                 </div>
 

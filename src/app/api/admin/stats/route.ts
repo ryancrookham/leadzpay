@@ -20,7 +20,7 @@ export async function GET() {
       operatingCosts, weeklyRevenue, monthlyRevenue, yearlyRevenue, venmoFees, detailedUsersRaw
     ] = await Promise.all([
       getPlatformStats(),
-      getRevenueByDay(30),
+      getRevenueByDay(37),
       getAllLeadsForAdmin(50),
       getLeadsPendingForwarding(),
       getAllUsers(),
