@@ -404,7 +404,7 @@ export default function AdminPanel() {
               {(["payouts", "profitability", "info", "payments"] as const).map((tab) => {
                 const labels: Record<string, string> = {
                   payouts: "Payouts", profitability: "Profitability",
-                  info: "Info", payments: "Payments",
+                  info: "Users", payments: "Payments",
                 };
                 return (
                   <button
