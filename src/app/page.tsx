@@ -101,9 +101,9 @@ export default function Home() {
           <Image
             src="/woml-logo.png"
             alt="WOML - Word of Mouth Leads"
-            width={1120}
-            height={315}
-            className="mx-auto w-full max-w-3xl h-auto object-contain"
+            width={4480}
+            height={1260}
+            className="mx-auto w-full h-auto object-contain"
             priority
           />
         </div>
