@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import ProfitabilityTab from "./components/ProfitabilityTab";
+import PaymentsTab from "./components/PaymentsTab";
+import InfoTab from "./components/InfoTab";
 
 interface PlatformStats {
   totalLeads: number;
@@ -69,9 +72,59 @@ interface AdminUser {
   totalVolume: number;
 }
 
+interface OperatingCost {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: "monthly" | "yearly" | "per_transaction";
+  category: string;
+  description: string | null;
+}
+
+interface ProfitabilityData {
+  weekly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
+  monthly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
+  yearly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
+  venmoFees: number;
+  venmoTxCount: number;
+}
+
+interface DetailedUser {
+  id: string;
+  email: string;
+  username: string;
+  role: string;
+  displayName: string;
+  businessName: string | null;
+  phone: string | null;
+  location: string | null;
+  isActive: boolean;
+  createdAt: string;
+  payoutMethod: string | null;
+  payoutVenmo: string | null;
+  totalLeads: number;
+  totalVolume: number;
+  lastLeadAt: string | null;
+  platformFeesEarned: number;
+  yearlyEarnings: number;
+  needs1099: boolean;
+}
+
+interface PlatformFees {
+  fee_type: "flat" | "percent" | "mixed";
+  fee_total: number;
+  fee_buyer: number;
+  fee_provider: number;
+  fee_percent: number;
+  fee_percent_buyer_share: number;
+  fee_mixed_flat: number;
+  fee_mixed_percent: number;
+  fee_mixed_buyer_share: number;
+}
+
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"overview" | "leads" | "pnl" | "users" | "payouts" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "leads" | "profitability" | "info" | "payouts" | "payments">("overview");
 
   // Inline login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -115,10 +168,12 @@ export default function AdminPanel() {
   const [error, setError] = useState("");
 
   // Fee settings state
-  const [platformFees, setPlatformFees] = useState<{ fee_total: number; fee_buyer: number; fee_provider: number } | null>(null);
-  const [feeForm, setFeeForm] = useState({ fee_total: 2, fee_buyer: 1, fee_provider: 1 });
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [platformFees, setPlatformFees] = useState<PlatformFees | null>(null);
+
+  // New tab data state
+  const [operatingCosts, setOperatingCosts] = useState<OperatingCost[]>([]);
+  const [profitability, setProfitability] = useState<ProfitabilityData | null>(null);
+  const [detailedUsers, setDetailedUsers] = useState<DetailedUser[]>([]);
 
   // Fetch data when authenticated as admin
   useEffect(() => {
@@ -136,8 +191,10 @@ export default function AdminPanel() {
           setUsers(data.users || []);
           if (data.platformFees) {
             setPlatformFees(data.platformFees);
-            setFeeForm(data.platformFees);
           }
+          if (data.operatingCosts) setOperatingCosts(data.operatingCosts);
+          if (data.profitability) setProfitability(data.profitability);
+          if (data.detailedUsers) setDetailedUsers(data.detailedUsers);
         } else {
           setError(data.error || "Failed to load stats");
         }
@@ -163,8 +220,10 @@ export default function AdminPanel() {
         setUsers(data.users || []);
         if (data.platformFees) {
           setPlatformFees(data.platformFees);
-          setFeeForm(data.platformFees);
         }
+        if (data.operatingCosts) setOperatingCosts(data.operatingCosts);
+        if (data.profitability) setProfitability(data.profitability);
+        if (data.detailedUsers) setDetailedUsers(data.detailedUsers);
       }
     } catch (e) {
       console.error("Refresh failed:", e);
@@ -345,24 +404,30 @@ export default function AdminPanel() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["overview", "payouts", "pnl", "leads", "users", "settings"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 rounded-lg font-medium transition relative ${
-                    activeTab === tab
-                      ? "bg-[#C5B358] text-black"
-                      : "bg-gray-800 text-gray-400 hover:text-white"
-                  }`}
-                >
-                  {tab === "pnl" ? "P&L" : tab === "payouts" ? "Payouts" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  {tab === "payouts" && pendingPayouts.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                      {pendingPayouts.length}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {(["overview", "payouts", "profitability", "leads", "info", "payments"] as const).map((tab) => {
+                const labels: Record<string, string> = {
+                  overview: "Overview", payouts: "Payouts", profitability: "Profitability",
+                  leads: "Leads", info: "Info", payments: "Payments",
+                };
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 rounded-lg font-medium transition relative ${
+                      activeTab === tab
+                        ? "bg-[#C5B358] text-black"
+                        : "bg-gray-800 text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {labels[tab]}
+                    {tab === "payouts" && pendingPayouts.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                        {pendingPayouts.length}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* ===== OVERVIEW TAB ===== */}
@@ -371,7 +436,7 @@ export default function AdminPanel() {
                 {/* Revenue Chart */}
                 <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
                   <h2 className="text-xl font-semibold text-white mb-2">Revenue — Last 30 Days</h2>
-                  <p className="text-gray-400 text-sm mb-6">Platform fee revenue (${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)</p>
+                  <p className="text-gray-400 text-sm mb-6">Platform fee revenue{platformFees?.fee_type === "flat" ? ` ($${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)` : platformFees?.fee_type === "percent" ? ` (${platformFees.fee_percent}%)` : ""}</p>
                   {revenueByDay.length === 0 ? (
                     <p className="text-gray-500 text-center py-8">No revenue data yet</p>
                   ) : (
@@ -402,17 +467,47 @@ export default function AdminPanel() {
                     <h3 className="text-lg font-semibold text-white mb-3">Fee Structure</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Platform fee per lead</span>
-                        <span className="text-white font-medium">${(platformFees?.fee_total ?? 2).toFixed(2)}</span>
+                        <span className="text-gray-400">Fee type</span>
+                        <span className="text-white font-medium capitalize">{platformFees?.fee_type ?? "flat"}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">From buyer (+${(platformFees?.fee_buyer ?? 1).toFixed(2)})</span>
-                        <span className="text-white">${(platformFees?.fee_buyer ?? 1).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">From provider (-${(platformFees?.fee_provider ?? 1).toFixed(2)})</span>
-                        <span className="text-white">${(platformFees?.fee_provider ?? 1).toFixed(2)}</span>
-                      </div>
+                      {platformFees?.fee_type === "flat" ? (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Total fee per lead</span>
+                            <span className="text-white">${(platformFees?.fee_total ?? 2).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Buyer pays extra</span>
+                            <span className="text-white">+${(platformFees?.fee_buyer ?? 1).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Provider deducted</span>
+                            <span className="text-white">-${(platformFees?.fee_provider ?? 1).toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : platformFees?.fee_type === "percent" ? (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Fee percentage</span>
+                            <span className="text-white">{platformFees.fee_percent}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Buyer share</span>
+                            <span className="text-white">{platformFees.fee_percent_buyer_share}%</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Flat portion</span>
+                            <span className="text-white">${(platformFees?.fee_mixed_flat ?? 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Percent portion</span>
+                            <span className="text-white">{platformFees?.fee_mixed_percent ?? 0}%</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
@@ -488,81 +583,13 @@ export default function AdminPanel() {
               </div>
             )}
 
-            {/* ===== P&L TAB ===== */}
-            {activeTab === "pnl" && (
-              <div className="space-y-6">
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">Profit & Loss</h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-[#C5B358]/10 rounded-lg border border-[#C5B358]/20">
-                      <div>
-                        <div className="text-[#C5B358] font-medium">Total Revenue</div>
-                        <div className="text-gray-400 text-sm">Platform fees collected (${(platformFees?.fee_total ?? 2).toFixed(2)}/lead)</div>
-                      </div>
-                      <div className="text-3xl font-bold text-[#C5B358]">
-                        ${(stats.completedRevenue + stats.pendingRevenue).toFixed(2)}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-[#C5B358]/5 rounded-lg border border-gray-800">
-                      <div>
-                        <span className="text-gray-300">Collected</span>
-                        <span className="text-gray-500 text-sm ml-2">(forwarded leads)</span>
-                      </div>
-                      <span className="text-[#C5B358] font-medium">${stats.completedRevenue.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-blue-500/5 rounded-lg border border-gray-800">
-                      <div>
-                        <span className="text-gray-300">Held</span>
-                        <span className="text-gray-500 text-sm ml-2">(awaiting forward to providers)</span>
-                      </div>
-                      <span className="text-blue-400 font-medium">
-                        ${(stats.processingLeads * 2).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-amber-500/5 rounded-lg border border-gray-800">
-                      <div>
-                        <span className="text-gray-300">Pending</span>
-                        <span className="text-gray-500 text-sm ml-2">(buyers haven&apos;t paid yet)</span>
-                      </div>
-                      <span className="text-amber-400 font-medium">${stats.pendingRevenue.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                      <div>
-                        <div className="text-blue-400 font-medium">Total Lead Volume</div>
-                        <div className="text-gray-400 text-sm">Gross value of all leads</div>
-                      </div>
-                      <div className="text-3xl font-bold text-blue-400">${stats.totalLeadVolume.toFixed(2)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Daily Revenue */}
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">Daily Revenue</h2>
-                  {revenueByDay.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">No revenue data yet</p>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-2 text-gray-400 text-sm">Date</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">WOML Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...revenueByDay].reverse().map((day) => (
-                          <tr key={day.day} className="border-b border-gray-800/50">
-                            <td className="py-2 text-gray-300">{new Date(day.day).toLocaleDateString()}</td>
-                            <td className="py-2 text-right text-white">{day.txCount}</td>
-                            <td className="py-2 text-right text-[#C5B358] font-medium">${day.revenue.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
+            {/* ===== PROFITABILITY TAB ===== */}
+            {activeTab === "profitability" && profitability && (
+              <ProfitabilityTab
+                operatingCosts={operatingCosts}
+                profitability={profitability}
+                onCostsChanged={refreshData}
+              />
             )}
 
             {/* ===== LEADS TAB ===== */}
@@ -616,210 +643,41 @@ export default function AdminPanel() {
               </div>
             )}
 
-            {/* ===== SETTINGS TAB ===== */}
-            {activeTab === "settings" && (
-              <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6 max-w-lg">
-                <h2 className="text-xl font-semibold text-white mb-2">Platform Fee Settings</h2>
-                <p className="text-gray-400 text-sm mb-6">Adjust the flat fee charged per lead. Changes apply to new leads only.</p>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  setSettingsLoading(true);
-                  setSettingsSaved(false);
-                  try {
-                    const res = await fetch("/api/admin/settings", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(feeForm),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      setPlatformFees(data.settings);
-                      setFeeForm(data.settings);
-                      setSettingsSaved(true);
-                      setTimeout(() => setSettingsSaved(false), 3000);
-                    }
-                  } catch (err) {
-                    console.error("Save settings failed:", err);
-                  } finally {
-                    setSettingsLoading(false);
-                  }
-                }} className="space-y-4">
-                  <div>
-                    <label className="block text-gray-400 text-sm mb-1">Total Platform Fee ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={feeForm.fee_total}
-                      onChange={(e) => {
-                        const total = Number(e.target.value);
-                        setFeeForm({ fee_total: total, fee_buyer: Math.round(total / 2 * 100) / 100, fee_provider: Math.round(total / 2 * 100) / 100 });
-                      }}
-                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-gray-400 text-sm mb-1">Buyer Portion ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={feeForm.fee_buyer}
-                        onChange={(e) => setFeeForm(prev => ({ ...prev, fee_buyer: Number(e.target.value) }))}
-                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-400 text-sm mb-1">Provider Portion ($)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={feeForm.fee_provider}
-                        onChange={(e) => setFeeForm(prev => ({ ...prev, fee_provider: Number(e.target.value) }))}
-                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition"
-                      />
-                    </div>
-                  </div>
-                  {Math.round((feeForm.fee_buyer + feeForm.fee_provider) * 100) !== Math.round(feeForm.fee_total * 100) && (
-                    <p className="text-red-400 text-sm">Buyer + Provider portions must equal the total fee.</p>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={settingsLoading || Math.round((feeForm.fee_buyer + feeForm.fee_provider) * 100) !== Math.round(feeForm.fee_total * 100)}
-                    className="w-full py-3 bg-[#C5B358] hover:bg-[#b8a64e] text-black rounded-lg font-semibold transition disabled:opacity-50"
-                  >
-                    {settingsLoading ? "Saving..." : settingsSaved ? "Saved!" : "Save Fee Settings"}
-                  </button>
-                </form>
-
-                <div className="mt-8 border-t border-gray-800 pt-6">
-                  <h3 className="text-lg font-semibold text-white mb-3">Payment Method</h3>
-                  <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center gap-3 mb-2">
-                      <svg className="w-6 h-6 text-[#008CFF]" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                      <div>
-                        <div className="text-white font-medium">Venmo @womleads</div>
-                        <div className="text-gray-400 text-sm">All payments processed via Venmo</div>
-                      </div>
-                    </div>
-                    <p className="text-gray-500 text-xs">Buyers pay WOML via Venmo. WOML forwards provider payouts via Venmo.</p>
-                  </div>
-                </div>
-              </div>
+            {/* ===== PAYMENTS TAB ===== */}
+            {activeTab === "payments" && platformFees && (
+              <PaymentsTab
+                platformFees={platformFees}
+                onFeesSaved={(fees) => {
+                  setPlatformFees(fees);
+                  refreshData();
+                }}
+              />
             )}
 
-            {/* ===== USERS TAB ===== */}
-            {activeTab === "users" && (
-              <div className="space-y-6">
-                {/* Providers */}
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">
-                    Providers ({users.filter(u => u.role === "provider").length})
-                  </h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-2 text-gray-400 text-sm">Name</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Email</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Payout</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Volume</th>
-                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.filter(u => u.role === "provider").map((user) => (
-                          <tr key={user.id} className="border-b border-gray-800/50">
-                            <td className="py-3 text-white font-medium">{user.displayName}</td>
-                            <td className="py-3 text-gray-300 text-sm">{user.email}</td>
-                            <td className="py-3 text-gray-400 text-sm">
-                              {user.payoutMethod ? (
-                                <span className="capitalize">{user.payoutMethod}{user.payoutVenmo ? `: @${user.payoutVenmo}` : ""}</span>
-                              ) : (
-                                <span className="text-red-400">Not set</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-right text-white">{user.totalLeads}</td>
-                            <td className="py-3 text-right text-gray-300">${Number(user.totalVolume).toFixed(2)}</td>
-                            <td className="py-3 text-center">
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`${user.isActive ? "Deactivate" : "Activate"} ${user.displayName}?`)) return;
-                                  try {
-                                    const res = await fetch("/api/admin/users", {
-                                      method: "PATCH",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ userId: user.id, isActive: !user.isActive }),
-                                    });
-                                    if (res.ok) {
-                                      setUsers(prev => prev.map(u =>
-                                        u.id === user.id ? { ...u, isActive: !u.isActive } : u
-                                      ));
-                                    }
-                                  } catch (e) {
-                                    console.error("Toggle failed:", e);
-                                  }
-                                }}
-                                className={`px-2 py-1 rounded text-xs font-medium ${
-                                  user.isActive
-                                    ? "bg-[#C5B358]/20 text-[#C5B358] hover:bg-[#C5B358]/40"
-                                    : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                                } transition`}
-                              >
-                                {user.isActive ? "Active" : "Inactive"}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Buyers */}
-                <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                  <h2 className="text-xl font-semibold text-white mb-4">
-                    Businesses ({users.filter(u => u.role === "buyer").length})
-                  </h2>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-2 text-gray-400 text-sm">Business</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Email</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Location</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Leads</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Volume</th>
-                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.filter(u => u.role === "buyer").map((user) => (
-                          <tr key={user.id} className="border-b border-gray-800/50">
-                            <td className="py-3 text-white font-medium">{user.businessName || user.displayName}</td>
-                            <td className="py-3 text-gray-300 text-sm">{user.email}</td>
-                            <td className="py-3 text-gray-400 text-sm">{user.location || "-"}</td>
-                            <td className="py-3 text-right text-white">{user.totalLeads}</td>
-                            <td className="py-3 text-right text-gray-300">${Number(user.totalVolume).toFixed(2)}</td>
-                            <td className="py-3 text-center">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                user.isActive
-                                  ? "bg-[#C5B358]/20 text-[#C5B358]"
-                                  : "bg-red-500/20 text-red-400"
-                              }`}>
-                                {user.isActive ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+            {/* ===== INFO TAB ===== */}
+            {activeTab === "info" && (
+              <InfoTab
+                detailedUsers={detailedUsers}
+                onToggleUser={async (userId, isActive) => {
+                  try {
+                    const res = await fetch("/api/admin/users", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ userId, isActive }),
+                    });
+                    if (res.ok) {
+                      setDetailedUsers(prev => prev.map(u =>
+                        u.id === userId ? { ...u, isActive } : u
+                      ));
+                      setUsers(prev => prev.map(u =>
+                        u.id === userId ? { ...u, isActive } : u
+                      ));
+                    }
+                  } catch (e) {
+                    console.error("Toggle failed:", e);
+                  }
+                }}
+              />
             )}
           </>
         ) : (

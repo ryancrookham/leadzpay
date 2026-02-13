@@ -768,40 +768,226 @@ export interface PlatformSettings {
   fee_total: number;
   fee_buyer: number;
   fee_provider: number;
+  fee_type: 'flat' | 'percent' | 'mixed';
+  fee_percent: number;
+  fee_percent_buyer_share: number;
+  fee_mixed_flat: number;
+  fee_mixed_percent: number;
+  fee_mixed_buyer_share: number;
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {
   const sql = getSql();
-  const result = await sql`SELECT key, value FROM platform_settings WHERE key IN ('fee_total', 'fee_buyer', 'fee_provider')`;
+  const result = await sql`SELECT key, value FROM platform_settings WHERE key LIKE 'fee_%'`;
 
   const settings: PlatformSettings = {
     fee_total: 2.0,
     fee_buyer: 1.0,
     fee_provider: 1.0,
+    fee_type: 'flat',
+    fee_percent: 0,
+    fee_percent_buyer_share: 50,
+    fee_mixed_flat: 0,
+    fee_mixed_percent: 0,
+    fee_mixed_buyer_share: 50,
   };
 
   for (const row of result) {
-    if (row.key === 'fee_total') settings.fee_total = Number(row.value);
-    if (row.key === 'fee_buyer') settings.fee_buyer = Number(row.value);
-    if (row.key === 'fee_provider') settings.fee_provider = Number(row.value);
+    switch (row.key) {
+      case 'fee_total': settings.fee_total = Number(row.value); break;
+      case 'fee_buyer': settings.fee_buyer = Number(row.value); break;
+      case 'fee_provider': settings.fee_provider = Number(row.value); break;
+      case 'fee_type': settings.fee_type = row.value as PlatformSettings['fee_type']; break;
+      case 'fee_percent': settings.fee_percent = Number(row.value); break;
+      case 'fee_percent_buyer_share': settings.fee_percent_buyer_share = Number(row.value); break;
+      case 'fee_mixed_flat': settings.fee_mixed_flat = Number(row.value); break;
+      case 'fee_mixed_percent': settings.fee_mixed_percent = Number(row.value); break;
+      case 'fee_mixed_buyer_share': settings.fee_mixed_buyer_share = Number(row.value); break;
+    }
   }
 
   return settings;
 }
 
+async function upsertSetting(sql: ReturnType<typeof getSql>, key: string, value: string) {
+  await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES (${key}, ${value}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${value}, updated_at = NOW()`;
+}
+
 export async function updatePlatformSettings(settings: Partial<PlatformSettings>): Promise<PlatformSettings> {
   const sql = getSql();
 
-  if (settings.fee_total !== undefined) {
-    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_total', ${String(settings.fee_total)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_total)}, updated_at = NOW()`;
-  }
-  if (settings.fee_buyer !== undefined) {
-    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_buyer', ${String(settings.fee_buyer)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_buyer)}, updated_at = NOW()`;
-  }
-  if (settings.fee_provider !== undefined) {
-    await sql`INSERT INTO platform_settings (key, value, updated_at) VALUES ('fee_provider', ${String(settings.fee_provider)}, NOW()) ON CONFLICT (key) DO UPDATE SET value = ${String(settings.fee_provider)}, updated_at = NOW()`;
+  const entries: [string, string | undefined][] = [
+    ['fee_total', settings.fee_total !== undefined ? String(settings.fee_total) : undefined],
+    ['fee_buyer', settings.fee_buyer !== undefined ? String(settings.fee_buyer) : undefined],
+    ['fee_provider', settings.fee_provider !== undefined ? String(settings.fee_provider) : undefined],
+    ['fee_type', settings.fee_type],
+    ['fee_percent', settings.fee_percent !== undefined ? String(settings.fee_percent) : undefined],
+    ['fee_percent_buyer_share', settings.fee_percent_buyer_share !== undefined ? String(settings.fee_percent_buyer_share) : undefined],
+    ['fee_mixed_flat', settings.fee_mixed_flat !== undefined ? String(settings.fee_mixed_flat) : undefined],
+    ['fee_mixed_percent', settings.fee_mixed_percent !== undefined ? String(settings.fee_mixed_percent) : undefined],
+    ['fee_mixed_buyer_share', settings.fee_mixed_buyer_share !== undefined ? String(settings.fee_mixed_buyer_share) : undefined],
+  ];
+
+  for (const [key, value] of entries) {
+    if (value !== undefined) {
+      await upsertSetting(sql, key, value);
+    }
   }
 
   return getPlatformSettings();
+}
+
+// ============================================
+// Operating Costs queries
+// ============================================
+
+export interface OperatingCost {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: 'monthly' | 'yearly' | 'per_transaction';
+  category: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getOperatingCosts(): Promise<OperatingCost[]> {
+  const sql = getSql();
+  const result = await sql`SELECT * FROM operating_costs WHERE is_active = true ORDER BY category, name`;
+  return result as unknown as OperatingCost[];
+}
+
+export async function upsertOperatingCost(cost: {
+  id?: string;
+  name: string;
+  amount: number;
+  frequency: 'monthly' | 'yearly' | 'per_transaction';
+  category: string;
+  description?: string;
+}): Promise<OperatingCost> {
+  const sql = getSql();
+  if (cost.id) {
+    const result = await sql`
+      UPDATE operating_costs SET
+        name = ${cost.name}, amount = ${cost.amount}, frequency = ${cost.frequency},
+        category = ${cost.category}, description = ${cost.description || null}, updated_at = NOW()
+      WHERE id = ${cost.id}
+      RETURNING *
+    `;
+    return first<OperatingCost>(result)!;
+  } else {
+    const result = await sql`
+      INSERT INTO operating_costs (name, amount, frequency, category, description)
+      VALUES (${cost.name}, ${cost.amount}, ${cost.frequency}, ${cost.category}, ${cost.description || null})
+      RETURNING *
+    `;
+    return first<OperatingCost>(result)!;
+  }
+}
+
+export async function deleteOperatingCost(id: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE operating_costs SET is_active = false, updated_at = NOW() WHERE id = ${id}`;
+}
+
+// ============================================
+// Profitability queries
+// ============================================
+
+export async function getRevenueByPeriod(period: 'week' | 'month' | 'year') {
+  const sql = getSql();
+  const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
+  const result = await sql`
+    SELECT
+      COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0)::numeric as completed_revenue,
+      COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0)::numeric as pending_revenue,
+      COUNT(*) FILTER (WHERE status = 'completed')::int as completed_tx_count
+    FROM transactions
+    WHERE type = 'platform_fee'
+      AND created_at >= NOW() - INTERVAL '1 day' * ${days}
+  `;
+  return {
+    completedRevenue: Number(result[0].completed_revenue),
+    pendingRevenue: Number(result[0].pending_revenue),
+    completedTxCount: result[0].completed_tx_count,
+  };
+}
+
+export async function getVenmoFeeCosts() {
+  const sql = getSql();
+  // Venmo receive fee (1.9% + $0.10) applies to the full buyer payment (payout_amount + buyer fee)
+  // We calculate from completed leads where buyer has paid
+  const result = await sql`
+    SELECT
+      COALESCE(SUM(payout_amount * 0.019 + 0.10), 0)::numeric as total_venmo_fees,
+      COUNT(*)::int as tx_count
+    FROM leads
+    WHERE payout_status IN ('processing', 'completed')
+  `;
+  return {
+    totalVenmoFees: Number(result[0].total_venmo_fees),
+    txCount: result[0].tx_count,
+  };
+}
+
+// ============================================
+// Detailed user stats for Info tab
+// ============================================
+
+export async function getDetailedUserStats() {
+  const sql = getSql();
+  const result = await sql`
+    SELECT
+      u.id, u.email, u.username, u.role, u.display_name, u.phone,
+      u.business_name, u.location, u.is_active, u.created_at,
+      u.payout_method, u.payout_venmo,
+      COALESCE(ls.total_leads, 0)::int as total_leads,
+      COALESCE(ls.total_volume, 0)::numeric as total_volume,
+      ls.last_lead_at,
+      COALESCE(pf.total_platform_fees, 0)::numeric as platform_fees_earned,
+      COALESCE(ye.yearly_earnings, 0)::numeric as yearly_earnings
+    FROM users u
+    LEFT JOIN (
+      SELECT
+        CASE WHEN u2.role = 'provider' THEN l.provider_id ELSE l.buyer_id END as user_id,
+        u2.role,
+        COUNT(*)::int as total_leads,
+        COALESCE(SUM(l.payout_amount), 0)::numeric as total_volume,
+        MAX(l.submitted_at) as last_lead_at
+      FROM leads l
+      JOIN users u2 ON (u2.id = l.provider_id AND u2.role = 'provider') OR (u2.id = l.buyer_id AND u2.role = 'buyer')
+      GROUP BY CASE WHEN u2.role = 'provider' THEN l.provider_id ELSE l.buyer_id END, u2.role
+    ) ls ON u.id = ls.user_id AND u.role = ls.role
+    LEFT JOIN (
+      SELECT
+        CASE WHEN u3.role = 'provider' THEN l2.provider_id ELSE l2.buyer_id END as user_id,
+        u3.role,
+        COALESCE(SUM(t.amount), 0)::numeric as total_platform_fees
+      FROM transactions t
+      JOIN leads l2 ON t.lead_id = l2.id
+      JOIN users u3 ON (u3.id = l2.provider_id AND u3.role = 'provider') OR (u3.id = l2.buyer_id AND u3.role = 'buyer')
+      WHERE t.type = 'platform_fee'
+      GROUP BY CASE WHEN u3.role = 'provider' THEN l2.provider_id ELSE l2.buyer_id END, u3.role
+    ) pf ON u.id = pf.user_id AND u.role = pf.role
+    LEFT JOIN (
+      SELECT to_account_id,
+        COALESCE(SUM(net_amount), 0)::numeric as yearly_earnings
+      FROM transactions
+      WHERE type = 'lead_payout' AND status = 'completed'
+        AND EXTRACT(YEAR FROM completed_at) = EXTRACT(YEAR FROM NOW())
+      GROUP BY to_account_id
+    ) ye ON u.id = ye.to_account_id AND u.role = 'provider'
+    WHERE u.role IN ('provider', 'buyer')
+    ORDER BY u.created_at DESC
+  `;
+  return result as unknown as (DbUser & {
+    total_leads: number;
+    total_volume: number;
+    last_lead_at: string | null;
+    platform_fees_earned: number;
+    yearly_earnings: number;
+  })[];
 }
 

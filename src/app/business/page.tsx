@@ -9,7 +9,7 @@ import { useAuth, useCurrentBuyer } from "@/lib/auth-context";
 import { useConnections, type ApiConnection, type DiscoveryUser } from "@/lib/connection-context";
 import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
-import { calculateFeeBreakdown, PLATFORM_FEE_BUYER } from "@/lib/platform-fees";
+import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import { WOML_PLATFORM } from "@/lib/master-operator";
 
 // Type for leads returned by GET /api/leads
@@ -105,6 +105,7 @@ function BusinessPortalContent() {
   // Fetch leads from database API (not localStorage)
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
   const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
+  const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -122,6 +123,10 @@ function BusinessPortalContent() {
       }
     };
     fetchLeads();
+    // Fetch platform fee settings
+    fetch("/api/platform-fees").then(r => r.json()).then(d => {
+      if (d.success) setFeeSettings(d.settings);
+    }).catch(() => {});
   }, [currentUser]);
 
   // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
@@ -404,7 +409,7 @@ function BusinessPortalContent() {
   // Calculate stats from DB leads
   const totalLeads = dbLeads.length;
   const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing").length;
-  const totalPayouts = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
+  const totalPayouts = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
   const avgLeadValue = totalLeads > 0 ? totalPayouts / totalLeads : 0;
 
   // Get leads by provider for chart
@@ -619,7 +624,7 @@ function BusinessPortalContent() {
                             "bg-amber-100 text-amber-700"
                           }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
                         </td>
-                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</td>
+                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
                       </tr>
                     ))}
                     {dbLeads.length === 0 && (
@@ -1063,6 +1068,7 @@ function BusinessPortalContent() {
               terminateConnection={terminateConnection}
               sendInvitationToProvider={sendInvitationToProvider}
               licensedStates={currentBuyer?.licensedStates || []}
+              feeSettings={feeSettings}
             />
           </TabErrorBoundary>
         )}
@@ -1102,8 +1108,8 @@ function BusinessPortalContent() {
                       </td>
                       <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
                       <td className="py-4">
-                        <div className="text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</div>
-                        <div className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerFee.toFixed(2)} WOML fee</div>
+                        <div className="text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</div>
+                        <div className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerFee.toFixed(2)} WOML fee</div>
                       </td>
                       <td className="py-4">
                         {lead.payoutStatus === "completed" ? (
@@ -1126,17 +1132,17 @@ function BusinessPortalContent() {
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             <a
-                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
+                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
                             >
                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                              Pay @womleads ${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}
+                              Pay @womleads ${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}
                             </a>
                             <button
                               onClick={async () => {
-                                if (!confirm(`Confirm you paid $${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)} to @womleads via Venmo for this lead?`)) return;
+                                if (!confirm(`Confirm you paid $${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)} to @womleads via Venmo for this lead?`)) return;
                                 try {
                                   const res = await fetch(`/api/leads/${lead.id}/mark-paid`, { method: "POST" });
                                   if (res.ok) {
@@ -1179,6 +1185,7 @@ function BusinessPortalContent() {
               updateConnectionTerms={updateConnectionTerms}
               terminateConnection={terminateConnection}
               activeConnections={activeConnections}
+              feeSettings={feeSettings}
             />
           </TabErrorBoundary>
         )}
@@ -1186,21 +1193,21 @@ function BusinessPortalContent() {
         {/* Ledger Tab */}
         {activeTab === "ledger" && (
           <TabErrorBoundary tabName="Ledger">
-            <LedgerTab dbLeads={dbLeads} />
+            <LedgerTab dbLeads={dbLeads} feeSettings={feeSettings} />
           </TabErrorBoundary>
         )}
 
         {/* Rolodex Tab */}
         {activeTab === "rolodex" && (
           <TabErrorBoundary tabName="Rolodex">
-            <RolodexTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} />
+            <RolodexTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} />
           </TabErrorBoundary>
         )}
 
         {/* Settings Tab */}
         {activeTab === "settings" && (
           <TabErrorBoundary tabName="Settings">
-            <SettingsTab currentBuyer={currentBuyer} />
+            <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} />
           </TabErrorBoundary>
         )}
       </div>
@@ -1245,12 +1252,14 @@ function ProvidersTab({
   updateConnectionTerms,
   terminateConnection,
   activeConnections,
+  feeSettings,
 }: {
   fetchUsersByRole: (role: "buyer" | "provider") => Promise<DiscoveryUser[]>;
   sendInvitationToProvider: (email: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }, message?: string) => Promise<ApiConnection | null>;
   updateConnectionTerms: (id: string, terms: { ratePerLead?: number; paymentTiming?: string; weeklyLeadCap?: number | null; monthlyLeadCap?: number | null; terminationNoticeDays?: number }) => Promise<boolean>;
   terminateConnection: (id: string) => Promise<boolean>;
   activeConnections: ApiConnection[];
+  feeSettings?: FeeSettings;
 }) {
   const [allProviders, setAllProviders] = useState<DiscoveryUser[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(true);
@@ -1465,7 +1474,7 @@ function ProvidersTab({
             </span>
           )}
           {connection && (
-            <span className="text-xs text-emerald-600 font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</span>
+            <span className="text-xs text-emerald-600 font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
           )}
         </div>
       </button>
@@ -1658,8 +1667,8 @@ function ProvidersTab({
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <p className="text-emerald-600 text-xs">Rate</p>
-                            <p className="text-emerald-800 font-bold text-lg">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</p>
-                            <p className="text-emerald-600 text-xs">(${Number(connection.rate_per_lead || 0).toFixed(2)} + $${PLATFORM_FEE_BUYER.toFixed(2)} fee)</p>
+                            <p className="text-emerald-800 font-bold text-lg">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</p>
+                            <p className="text-emerald-600 text-xs">(${Number(connection.rate_per_lead || 0).toFixed(2)} + $${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerFee.toFixed(2)} fee)</p>
                           </div>
                           <div>
                             <p className="text-emerald-600 text-xs">Payment</p>
@@ -1987,10 +1996,10 @@ function ProvidersTab({
   );
 }
 
-function LedgerTab({ dbLeads }: { dbLeads: ApiLead[] }) {
+function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?: FeeSettings }) {
   // Build transaction history from DB leads
   const transactions = dbLeads.map(lead => {
-    const fees = calculateFeeBreakdown(lead.payoutAmount || 0);
+    const fees = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings);
     return {
       id: lead.id,
       date: lead.submittedAt,
@@ -2108,12 +2117,14 @@ function RolodexTab({
   providers,
   dbLeads,
   currentBuyer,
-  activeConnections
+  activeConnections,
+  feeSettings,
 }: {
   providers: Provider[];
   dbLeads: ApiLead[];
   currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
   activeConnections: ApiConnection[];
+  feeSettings?: FeeSettings;
 }) {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -2254,7 +2265,7 @@ function RolodexTab({
 
               <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-emerald-600">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}</span>
+                  <span className="font-medium text-emerald-600">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}</span>
                   <span>/lead</span>
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
@@ -2283,6 +2294,7 @@ function RolodexTab({
           provider={selectedProvider}
           dbLeads={dbLeads.filter(l => l.providerId === selectedProvider.id)}
           onClose={() => setSelectedProvider(null)}
+          feeSettings={feeSettings}
         />
       )}
     </div>
@@ -2293,16 +2305,18 @@ function RolodexTab({
 function ProviderDetailModal({
   provider,
   dbLeads,
-  onClose
+  onClose,
+  feeSettings,
 }: {
   provider: Provider;
   dbLeads: ApiLead[];
   onClose: () => void;
+  feeSettings?: FeeSettings;
 }) {
   const [activeView, setActiveView] = useState<"card" | "ledger">("card");
   const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
   const conversionRate = dbLeads.length > 0 ? Math.round((paidLeads.length / dbLeads.length) * 100) : 0;
-  const totalPaid = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0);
+  const totalPaid = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -2427,7 +2441,7 @@ function ProviderDetailModal({
                         <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).buyerTotal.toFixed(2)}</p>
+                        <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           lead.payoutStatus === "completed"
                             ? "bg-emerald-100 text-emerald-700"
@@ -2656,10 +2670,12 @@ function AnalyticsTab({
   dbLeads,
   providers,
   myConnections,
+  feeSettings,
 }: {
   dbLeads: ApiLead[];
   providers: Provider[];
   myConnections: ApiConnection[];
+  feeSettings?: FeeSettings;
 }) {
   const [uploadedData, setUploadedData] = useState<UploadedRecord[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -2932,7 +2948,7 @@ function AnalyticsTab({
     totalLeads: dbLeads.length,
     pendingLeads: dbLeads.filter(l => l.payoutStatus === "pending").length,
     claimedLeads: dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing").length,
-    totalPayout: dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).buyerTotal, 0),
+    totalPayout: dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0),
   };
 
   // Get provider rankings from real leads
@@ -3313,7 +3329,7 @@ function AnalyticsTab({
 }
 
 // Settings Tab
-function SettingsTab({ currentBuyer }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null }) {
+function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings }) {
   const { updateUser } = useAuth();
   const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
   const [phone, setPhone] = useState(currentBuyer?.phone || "");
@@ -3619,6 +3635,7 @@ function RequestsTab({
   terminateConnection,
   sendInvitationToProvider,
   licensedStates,
+  feeSettings,
 }: {
   buyerId: string;
   buyerBusinessName: string;
@@ -3631,6 +3648,7 @@ function RequestsTab({
   terminateConnection: (connectionId: string) => Promise<boolean>;
   sendInvitationToProvider: (providerEmail: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }, message?: string) => Promise<ApiConnection | null>;
   licensedStates: string[];
+  feeSettings?: FeeSettings;
 }) {
   const [selectedRequest, setSelectedRequest] = useState<ApiConnection | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -3924,7 +3942,7 @@ function RequestsTab({
                       <p className="font-semibold text-gray-800">{connection.providerName}</p>
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[#1e3a5f] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0).buyerTotal.toFixed(2)}/lead</span>
+                        <span className="text-[#1e3a5f] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
                         <span className="text-gray-400 text-xs">(incl. $1 fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>

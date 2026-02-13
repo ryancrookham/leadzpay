@@ -33,7 +33,7 @@ import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types"
 import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
 import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
 import { MASTER_OPERATOR } from "@/lib/master-operator";
-import { calculateFeeBreakdown, PLATFORM_FEE_PROVIDER } from "@/lib/platform-fees";
+import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 
 // Lead form data interface (basic info)
 interface LeadFormData {
@@ -163,6 +163,8 @@ export default function ProviderDashboard() {
   // Fetch leads from database API (not localStorage)
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
   const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
+  // Platform fee settings (fetched from API)
+  const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
 
   const {
     getRequestsForProvider,
@@ -203,6 +205,10 @@ export default function ProviderDashboard() {
       }
     };
     fetchLeads();
+    // Fetch platform fee settings
+    fetch("/api/platform-fees").then(r => r.json()).then(d => {
+      if (d.success) setFeeSettings(d.settings);
+    }).catch(() => {});
   }, [currentUser]);
 
   const handleLogout = async () => {
@@ -242,8 +248,9 @@ export default function ProviderDashboard() {
   // Calculate stats from DB leads (net amounts after platform fee)
   const totalLeads = dbLeads.length;
   const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
-  const totalEarnings = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
-  const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "processing").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0).providerNet, 0);
+  const totalEarnings = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0);
+  const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "processing").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0);
+  const providerFeeDisplay = feeSettings ? calculateFeeBreakdown(activeConnection?.rate_per_lead || 50, feeSettings).providerFee : 1;
 
   // Determine connection status message
   const getConnectionStatus = () => {
@@ -405,6 +412,8 @@ export default function ProviderDashboard() {
               totalEarnings={totalEarnings}
               pendingEarnings={pendingEarnings}
               onNavigateToConnection={() => setActiveTab("connection")}
+              feeSettings={feeSettings}
+              providerFeeDisplay={providerFeeDisplay}
             />
           </TabErrorBoundary>
         )}
@@ -433,6 +442,8 @@ export default function ProviderDashboard() {
                 refreshConnections();
               }}
               updateConnectionStats={updateConnectionStats}
+              feeSettings={feeSettings}
+              providerFeeDisplay={providerFeeDisplay}
             />
           </TabErrorBoundary>
         )}
@@ -440,7 +451,7 @@ export default function ProviderDashboard() {
         {/* Leads Tab */}
         {activeTab === "leads" && (
           <TabErrorBoundary tabName="Leads">
-            <LeadsTab dbLeads={dbLeads} dbLeadsLoading={dbLeadsLoading} activeConnection={activeConnection} onNavigateToConnection={() => setActiveTab("connection")} />
+            <LeadsTab dbLeads={dbLeads} dbLeadsLoading={dbLeadsLoading} activeConnection={activeConnection} onNavigateToConnection={() => setActiveTab("connection")} feeSettings={feeSettings} />
           </TabErrorBoundary>
         )}
 
@@ -453,6 +464,7 @@ export default function ProviderDashboard() {
               totalEarnings={totalEarnings}
               pendingEarnings={pendingEarnings}
               activeConnection={activeConnection}
+              feeSettings={feeSettings}
             />
           </TabErrorBoundary>
         )}
@@ -477,6 +489,8 @@ function DashboardTab({
   totalEarnings,
   pendingEarnings,
   onNavigateToConnection,
+  feeSettings,
+  providerFeeDisplay,
 }: {
   activeConnection: ApiConnection | null;
   dbLeads: ApiLead[];
@@ -485,6 +499,8 @@ function DashboardTab({
   totalEarnings: number;
   pendingEarnings: number;
   onNavigateToConnection: () => void;
+  feeSettings?: FeeSettings;
+  providerFeeDisplay: number;
 }) {
   return (
     <div className="space-y-8">
@@ -511,7 +527,7 @@ function DashboardTab({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#1e3a5f]">Submit New Lead</h3>
-                <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)}/lead (after ${PLATFORM_FEE_PROVIDER.toFixed(2)} fee)</p>
+                <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead (after ${providerFeeDisplay.toFixed(2)} fee)</p>
               </div>
             </div>
           </button>
@@ -546,7 +562,7 @@ function DashboardTab({
               </div>
               <div>
                 <p className="font-semibold text-gray-800">{activeConnection.buyerBusinessName}</p>
-                <p className="text-gray-500 text-sm">${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)}/lead (after $1.00 fee) • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
+                <p className="text-gray-500 text-sm">${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead (after ${providerFeeDisplay.toFixed(2)} fee) • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
           ) : (
@@ -596,7 +612,7 @@ function DashboardTab({
                         {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                       </span>
                     </td>
-                    <td className="py-4 text-[#1e3a5f] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
+                    <td className="py-4 text-[#1e3a5f] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                     <td className="py-4 text-gray-500 text-sm">
                       {new Date(lead.submittedAt).toLocaleDateString()}
                     </td>
@@ -630,6 +646,8 @@ function ConnectionTab({
   declineTerms,
   onLeadSubmitted,
   updateConnectionStats,
+  feeSettings,
+  providerFeeDisplay,
 }: {
   currentUser: import("@/lib/auth-types").User;
   currentProvider: import("@/lib/auth-types").LeadProvider | null;
@@ -644,6 +662,8 @@ function ConnectionTab({
   declineTerms: (connectionId: string) => Promise<boolean>;
   onLeadSubmitted: () => Promise<void>;
   updateConnectionStats: (connectionId: string, leadPayout: number) => void;
+  feeSettings?: FeeSettings;
+  providerFeeDisplay: number;
 }) {
   const [requestMessage, setRequestMessage] = useState("");
   const [selectedBuyer, setSelectedBuyer] = useState<{
@@ -1258,8 +1278,8 @@ function ConnectionTab({
                 <p className="text-xl font-bold text-emerald-800">
                   {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
                 </p>
-                <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet.toFixed(2)} for this lead.</p>
-                <p className="text-emerald-500 text-sm">(${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${PLATFORM_FEE_PROVIDER.toFixed(2)} platform fee)</p>
+                <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)} for this lead.</p>
+                <p className="text-emerald-500 text-sm">(${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${providerFeeDisplay.toFixed(2)} platform fee)</p>
               </div>
             </div>
             {channel === "asap" && (
@@ -2504,7 +2524,7 @@ function ConnectionTab({
 }
 
 // Leads Tab
-function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConnection }: { dbLeads: ApiLead[]; dbLeadsLoading: boolean; activeConnection: ApiConnection | null; onNavigateToConnection: () => void }) {
+function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConnection, feeSettings }: { dbLeads: ApiLead[]; dbLeadsLoading: boolean; activeConnection: ApiConnection | null; onNavigateToConnection: () => void; feeSettings?: FeeSettings }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
@@ -2556,7 +2576,7 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                       {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                     </span>
                   </td>
-                  <td className="py-4 text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</td>
+                  <td className="py-4 text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2578,12 +2598,14 @@ function EarningsTab({
   totalEarnings,
   pendingEarnings,
   activeConnection,
+  feeSettings,
 }: {
   dbLeads: ApiLead[];
   totalLeads: number;
   totalEarnings: number;
   pendingEarnings: number;
   activeConnection: ApiConnection | null;
+  feeSettings?: FeeSettings;
 }) {
   return (
     <div className="space-y-6">
@@ -2600,7 +2622,7 @@ function EarningsTab({
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
           <p className="text-3xl font-bold text-[#1e3a5f]">
-            ${(totalLeads > 0 ? (totalEarnings / totalLeads) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0).providerNet : 0).toFixed(2)}
+            ${(totalLeads > 0 ? (totalEarnings / totalLeads) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet : 0).toFixed(2)}
           </p>
         </div>
       </div>
@@ -2617,7 +2639,7 @@ function EarningsTab({
                   <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0).providerNet.toFixed(2)}</p>
+                  <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
                     lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :

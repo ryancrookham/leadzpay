@@ -23,21 +23,27 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Admin access required" }, { status: 401 });
     }
     const body = await request.json();
-    const { fee_total, fee_buyer, fee_provider } = body;
+    const {
+      fee_type, fee_total, fee_buyer, fee_provider,
+      fee_percent, fee_percent_buyer_share,
+      fee_mixed_flat, fee_mixed_percent, fee_mixed_buyer_share
+    } = body;
 
-    // Validation
-    if (fee_total !== undefined && (typeof fee_total !== "number" || fee_total < 0)) {
-      return NextResponse.json({ error: "fee_total must be a non-negative number" }, { status: 400 });
-    }
-    if (fee_buyer !== undefined && (typeof fee_buyer !== "number" || fee_buyer < 0)) {
-      return NextResponse.json({ error: "fee_buyer must be a non-negative number" }, { status: 400 });
-    }
-    if (fee_provider !== undefined && (typeof fee_provider !== "number" || fee_provider < 0)) {
-      return NextResponse.json({ error: "fee_provider must be a non-negative number" }, { status: 400 });
+    // Validate fee_type
+    if (fee_type && !['flat', 'percent', 'mixed'].includes(fee_type)) {
+      return NextResponse.json({ error: "fee_type must be 'flat', 'percent', or 'mixed'" }, { status: 400 });
     }
 
-    // Validate that buyer + provider = total (if all provided)
-    if (fee_total !== undefined && fee_buyer !== undefined && fee_provider !== undefined) {
+    // Validate non-negative numbers
+    const numFields = { fee_total, fee_buyer, fee_provider, fee_percent, fee_percent_buyer_share, fee_mixed_flat, fee_mixed_percent, fee_mixed_buyer_share };
+    for (const [key, val] of Object.entries(numFields)) {
+      if (val !== undefined && (typeof val !== "number" || val < 0)) {
+        return NextResponse.json({ error: `${key} must be a non-negative number` }, { status: 400 });
+      }
+    }
+
+    // Validate flat mode: buyer + provider = total
+    if (fee_type === 'flat' && fee_total !== undefined && fee_buyer !== undefined && fee_provider !== undefined) {
       const sum = Math.round((fee_buyer + fee_provider) * 100);
       const total = Math.round(fee_total * 100);
       if (sum !== total) {
@@ -45,7 +51,27 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const updated = await updatePlatformSettings({ fee_total, fee_buyer, fee_provider });
+    // Validate percent mode
+    if (fee_type === 'percent' && fee_percent !== undefined && fee_percent > 100) {
+      return NextResponse.json({ error: "fee_percent must be between 0 and 100" }, { status: 400 });
+    }
+    if (fee_percent_buyer_share !== undefined && (fee_percent_buyer_share < 0 || fee_percent_buyer_share > 100)) {
+      return NextResponse.json({ error: "buyer_share must be between 0 and 100" }, { status: 400 });
+    }
+
+    // Validate mixed mode
+    if (fee_type === 'mixed' && fee_mixed_percent !== undefined && fee_mixed_percent > 100) {
+      return NextResponse.json({ error: "fee_mixed_percent must be between 0 and 100" }, { status: 400 });
+    }
+    if (fee_mixed_buyer_share !== undefined && (fee_mixed_buyer_share < 0 || fee_mixed_buyer_share > 100)) {
+      return NextResponse.json({ error: "mixed buyer_share must be between 0 and 100" }, { status: 400 });
+    }
+
+    const updated = await updatePlatformSettings({
+      fee_type, fee_total, fee_buyer, fee_provider,
+      fee_percent, fee_percent_buyer_share,
+      fee_mixed_flat, fee_mixed_percent, fee_mixed_buyer_share
+    });
     return NextResponse.json({ success: true, settings: updated });
   } catch (error) {
     console.error("Update settings error:", error);
