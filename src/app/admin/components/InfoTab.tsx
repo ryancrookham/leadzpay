@@ -23,9 +23,24 @@ interface DetailedUser {
   needs1099: boolean;
 }
 
+interface AdminLead {
+  id: string;
+  providerName: string;
+  buyerName: string;
+  payoutAmount: number;
+  buyerTotal: number;
+  providerNet: number;
+  platformFee: number;
+  payoutStatus: string;
+  submittedAt: string;
+  vehicleInfo: string | null;
+  customerState: string | null;
+}
+
 interface InfoTabProps {
   detailedUsers: DetailedUser[];
   onToggleUser: (userId: string, isActive: boolean) => void;
+  recentLeads: AdminLead[];
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -40,7 +55,7 @@ function timeAgo(dateStr: string | null): string {
   return `${Math.floor(days / 365)} years ago`;
 }
 
-export default function InfoTab({ detailedUsers, onToggleUser }: InfoTabProps) {
+export default function InfoTab({ detailedUsers, onToggleUser, recentLeads }: InfoTabProps) {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [expandedBuyer, setExpandedBuyer] = useState<string | null>(null);
 
@@ -49,6 +64,55 @@ export default function InfoTab({ detailedUsers, onToggleUser }: InfoTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* All Leads Section */}
+      <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
+        <h2 className="text-xl font-semibold text-white mb-4">All Leads ({recentLeads.length})</h2>
+        {recentLeads.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No leads yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left py-2 text-gray-400 text-sm">Date</th>
+                  <th className="text-left py-2 text-gray-400 text-sm">Provider</th>
+                  <th className="text-left py-2 text-gray-400 text-sm">Business</th>
+                  <th className="text-left py-2 text-gray-400 text-sm">Vehicle</th>
+                  <th className="text-right py-2 text-gray-400 text-sm">Rate</th>
+                  <th className="text-right py-2 text-gray-400 text-sm">WOML Fee</th>
+                  <th className="text-center py-2 text-gray-400 text-sm">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentLeads.map((lead) => (
+                  <tr key={lead.id} className="border-b border-gray-800/50">
+                    <td className="py-3 text-gray-300 text-sm">
+                      {new Date(lead.submittedAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 text-white font-medium">{lead.providerName}</td>
+                    <td className="py-3 text-gray-300">{lead.buyerName}</td>
+                    <td className="py-3 text-gray-400 text-sm">{lead.vehicleInfo || "-"}</td>
+                    <td className="py-3 text-right text-white">${Number(lead.payoutAmount).toFixed(2)}</td>
+                    <td className="py-3 text-right text-[#C5B358] font-medium">${Number(lead.platformFee).toFixed(2)}</td>
+                    <td className="py-3 text-center">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        lead.payoutStatus === "completed"
+                          ? "bg-[#C5B358]/20 text-[#C5B358]"
+                          : lead.payoutStatus === "processing"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-amber-500/20 text-amber-400"
+                      }`}>
+                        {lead.payoutStatus === "completed" ? "Forwarded" : lead.payoutStatus === "processing" ? "Awaiting Forward" : "Pending"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Providers Section */}
       <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
         <h2 className="text-xl font-semibold text-white mb-4">

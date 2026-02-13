@@ -124,7 +124,7 @@ interface PlatformFees {
 
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"leads" | "profitability" | "info" | "payouts" | "payments">("payouts");
+  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payouts" | "payments">("payouts");
 
   // Inline login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -401,10 +401,10 @@ export default function AdminPanel() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["payouts", "profitability", "leads", "info", "payments"] as const).map((tab) => {
+              {(["payouts", "profitability", "info", "payments"] as const).map((tab) => {
                 const labels: Record<string, string> = {
                   payouts: "Payouts", profitability: "Profitability",
-                  leads: "Leads", info: "Info", payments: "Payments",
+                  info: "Info", payments: "Payments",
                 };
                 return (
                   <button
@@ -486,57 +486,6 @@ export default function AdminPanel() {
               />
             )}
 
-            {/* ===== LEADS TAB ===== */}
-            {activeTab === "leads" && (
-              <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-                <h2 className="text-xl font-semibold text-white mb-4">All Leads ({recentLeads.length})</h2>
-                {recentLeads.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No leads yet</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-2 text-gray-400 text-sm">Date</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Provider</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Business</th>
-                          <th className="text-left py-2 text-gray-400 text-sm">Vehicle</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">Rate</th>
-                          <th className="text-right py-2 text-gray-400 text-sm">WOML Fee</th>
-                          <th className="text-center py-2 text-gray-400 text-sm">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {recentLeads.map((lead) => (
-                          <tr key={lead.id} className="border-b border-gray-800/50">
-                            <td className="py-3 text-gray-300 text-sm">
-                              {new Date(lead.submittedAt).toLocaleDateString()}
-                            </td>
-                            <td className="py-3 text-white font-medium">{lead.providerName}</td>
-                            <td className="py-3 text-gray-300">{lead.buyerName}</td>
-                            <td className="py-3 text-gray-400 text-sm">{lead.vehicleInfo || "-"}</td>
-                            <td className="py-3 text-right text-white">${Number(lead.payoutAmount).toFixed(2)}</td>
-                            <td className="py-3 text-right text-[#C5B358] font-medium">${Number(lead.platformFee).toFixed(2)}</td>
-                            <td className="py-3 text-center">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                lead.payoutStatus === "completed"
-                                  ? "bg-[#C5B358]/20 text-[#C5B358]"
-                                  : lead.payoutStatus === "processing"
-                                  ? "bg-blue-500/20 text-blue-400"
-                                  : "bg-amber-500/20 text-amber-400"
-                              }`}>
-                                {lead.payoutStatus === "completed" ? "Forwarded" : lead.payoutStatus === "processing" ? "Awaiting Forward" : "Pending"}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ===== PAYMENTS TAB ===== */}
             {activeTab === "payments" && platformFees && (
               <PaymentsTab
@@ -552,6 +501,7 @@ export default function AdminPanel() {
             {activeTab === "info" && (
               <InfoTab
                 detailedUsers={detailedUsers}
+                recentLeads={recentLeads}
                 onToggleUser={async (userId, isActive) => {
                   try {
                     const res = await fetch("/api/admin/users", {
