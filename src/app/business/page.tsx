@@ -400,7 +400,7 @@ function BusinessPortalContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f] mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
         </div>
       </div>
     );
@@ -465,11 +465,11 @@ function BusinessPortalContent() {
               />
             </Link>
             <span className="text-gray-300">|</span>
-            <span className="text-[#1e3a5f] font-medium">{currentBuyer?.businessName || "Options Insurance Agency"}</span>
+            <span className="text-[#E8822A] font-medium">{currentBuyer?.businessName || "Options Insurance Agency"}</span>
           </div>
           <button
             onClick={handleLogout}
-            className="text-gray-500 hover:text-[#1e3a5f] transition flex items-center gap-2"
+            className="text-gray-500 hover:text-[#E8822A] transition flex items-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -488,8 +488,8 @@ function BusinessPortalContent() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-[#1e3a5f] text-white shadow-md"
-                  : "bg-white text-gray-600 hover:text-[#1e3a5f] hover:bg-gray-100 border border-gray-200"
+                  ? "bg-[#E8822A] text-white shadow-md"
+                  : "bg-white text-gray-600 hover:text-[#E8822A] hover:bg-gray-100 border border-gray-200"
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -517,7 +517,7 @@ function BusinessPortalContent() {
             <div className="grid md:grid-cols-2 gap-6">
               {/* Leads by Day Chart */}
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Leads This Week</h3>
+                <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Leads This Week</h3>
                 {(() => {
                   const maxCount = Math.max(...leadsByDay.map(d => d.count), 3);
                   const padX = 20;
@@ -540,8 +540,8 @@ function BusinessPortalContent() {
                       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
                         <defs>
                           <linearGradient id="leadsFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#1e3a5f" stopOpacity="0.18" />
-                            <stop offset="100%" stopColor="#1e3a5f" stopOpacity="0.02" />
+                            <stop offset="0%" stopColor="#E8822A" stopOpacity="0.18" />
+                            <stop offset="100%" stopColor="#E8822A" stopOpacity="0.02" />
                           </linearGradient>
                         </defs>
                         {/* Grid lines */}
@@ -552,12 +552,12 @@ function BusinessPortalContent() {
                         {/* Gradient fill */}
                         <polygon points={fillPoints} fill="url(#leadsFill)" />
                         {/* Line */}
-                        <polyline points={linePoints} fill="none" stroke="#1e3a5f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={linePoints} fill="none" stroke="#E8822A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                         {/* Data points and labels */}
                         {pts.map((p, i) => (
                           <g key={i}>
-                            <circle cx={p.x} cy={p.y} r="4" fill="#1e3a5f" stroke="white" strokeWidth="2" />
-                            <text x={p.x} y={p.y - 10} textAnchor="middle" fill="#1e3a5f" fontSize="11" fontWeight="600">{p.count}</text>
+                            <circle cx={p.x} cy={p.y} r="4" fill="#E8822A" stroke="white" strokeWidth="2" />
+                            <text x={p.x} y={p.y - 10} textAnchor="middle" fill="#E8822A" fontSize="11" fontWeight="600">{p.count}</text>
                             <text x={p.x} y={h - 8} textAnchor="middle" fill="#6b7280" fontSize="10">{p.day}</text>
                           </g>
                         ))}
@@ -569,7 +569,7 @@ function BusinessPortalContent() {
 
               {/* Top Providers Chart */}
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Top Providers</h3>
+                <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Top Providers</h3>
                 <div className="space-y-4">
                   {leadsByProvider.slice(0, 5).map((provider, i) => (
                     <div key={provider.id} className="flex items-center gap-4">
@@ -581,7 +581,7 @@ function BusinessPortalContent() {
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-[#1e3a5f] rounded-full"
+                            className="h-full bg-[#E8822A] rounded-full"
                             style={{ width: `${(provider.leadCount / Math.max(...leadsByProvider.map(p => p.leadCount), 1)) * 100}%` }}
                           />
                         </div>
@@ -597,7 +597,7 @@ function BusinessPortalContent() {
 
             {/* Recent Leads */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Recent Leads</h3>
+              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Recent Leads</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -616,11 +616,11 @@ function BusinessPortalContent() {
                         <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
                         <td className="py-4 text-gray-600">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
                         <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
-                        <td className="py-4 text-[#1e3a5f] font-medium">-</td>
+                        <td className="py-4 text-[#E8822A] font-medium">-</td>
                         <td className="py-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                            lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                            lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                             "bg-amber-100 text-amber-700"
                           }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
                         </td>
@@ -648,7 +648,7 @@ function BusinessPortalContent() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-[#1e3a5f]">Import CRM Data</h3>
+                  <h3 className="text-lg font-semibold text-[#E8822A]">Import CRM Data</h3>
                   <p className="text-gray-500 text-sm">Upload monthly data from EZLynx for advanced analytics</p>
                 </div>
               </div>
@@ -658,13 +658,13 @@ function BusinessPortalContent() {
                 onDragLeave={() => setIsDraggingCrm(false)}
                 onDrop={handleCrmDrop}
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
-                  isDraggingCrm ? "border-[#1e3a5f] bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                  isDraggingCrm ? "border-[#E8822A] bg-orange-50" : "border-gray-300 hover:border-gray-400"
                 }`}
               >
                 {isUploadingCrm ? (
                   <div className="space-y-3">
-                    <div className="animate-spin h-10 w-10 border-4 border-[#1e3a5f] border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-[#1e3a5f] font-medium">Processing file...</p>
+                    <div className="animate-spin h-10 w-10 border-4 border-[#E8822A] border-t-transparent rounded-full mx-auto"></div>
+                    <p className="text-[#E8822A] font-medium">Processing file...</p>
                   </div>
                 ) : crmFileName && !crmUploadError ? (
                   <div className="space-y-3">
@@ -677,7 +677,7 @@ function BusinessPortalContent() {
                     <p className="text-gray-500 text-sm">{uploadedCrmData.length} records imported</p>
                     <label className="inline-block cursor-pointer">
                       <input type="file" accept=".xlsx,.xls,.csv" onChange={handleCrmFileChange} className="hidden" />
-                      <span className="text-[#1e3a5f] hover:underline text-sm">Upload different file</span>
+                      <span className="text-[#E8822A] hover:underline text-sm">Upload different file</span>
                     </label>
                   </div>
                 ) : (
@@ -723,18 +723,18 @@ function BusinessPortalContent() {
             {/* CRM Analytics (shown after upload) */}
             {crmAnalytics && (
               <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-[#1e3a5f]">Lead Performance Analytics</h3>
+                <h3 className="text-lg font-semibold text-[#E8822A]">Lead Performance Analytics</h3>
 
                 {/* Summary Metrics */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <p className="text-gray-500 text-sm">Total Leads</p>
-                    <p className="text-3xl font-bold text-[#1e3a5f]">{crmAnalytics.totalLeads}</p>
+                    <p className="text-3xl font-bold text-[#E8822A]">{crmAnalytics.totalLeads}</p>
                     <p className="text-gray-400 text-xs mt-1">From uploaded file</p>
                   </div>
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <p className="text-gray-500 text-sm">Contact Rate</p>
-                    <p className="text-3xl font-bold text-blue-600">{crmAnalytics.overallContactRate.toFixed(1)}%</p>
+                    <p className="text-3xl font-bold text-orange-600">{crmAnalytics.overallContactRate.toFixed(1)}%</p>
                     <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalContacted} contacted</p>
                   </div>
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -751,22 +751,22 @@ function BusinessPortalContent() {
 
                 {/* Lead Funnel Visualization */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Lead Funnel</h4>
+                  <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Lead Funnel</h4>
                   <div className="space-y-3">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-gray-600">Total Leads</span>
-                        <span className="font-bold text-[#1e3a5f]">{crmAnalytics.totalLeads}</span>
+                        <span className="font-bold text-[#E8822A]">{crmAnalytics.totalLeads}</span>
                       </div>
-                      <div className="h-6 bg-[#1e3a5f] rounded"></div>
+                      <div className="h-6 bg-[#E8822A] rounded"></div>
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-gray-600">Contacted</span>
-                        <span className="font-bold text-blue-600">{crmAnalytics.totalContacted} ({crmAnalytics.overallContactRate.toFixed(0)}%)</span>
+                        <span className="font-bold text-orange-600">{crmAnalytics.totalContacted} ({crmAnalytics.overallContactRate.toFixed(0)}%)</span>
                       </div>
                       <div className="h-6 bg-gray-200 rounded overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded" style={{ width: `${crmAnalytics.overallContactRate}%` }}></div>
+                        <div className="h-full bg-orange-500 rounded" style={{ width: `${crmAnalytics.overallContactRate}%` }}></div>
                       </div>
                     </div>
                     <div>
@@ -792,7 +792,7 @@ function BusinessPortalContent() {
 
                 {/* Individual Sender (Provider) Performance Table */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Individual Sender Performance</h4>
+                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Individual Sender Performance</h4>
                   <p className="text-gray-500 text-sm mb-4">Use this to adjust payment rates or lead caps</p>
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -859,7 +859,7 @@ function BusinessPortalContent() {
 
                   return (
                     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                      <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Top 3 Performers Over Time</h4>
+                      <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Top 3 Performers Over Time</h4>
                       <p className="text-gray-500 text-sm mb-4">Weekly source conversion rate (%) for your best performers</p>
 
                       {/* Legend */}
@@ -938,7 +938,7 @@ function BusinessPortalContent() {
 
                 {/* Volume vs Quality Scatter Plot */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Volume vs Quality</h4>
+                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Volume vs Quality</h4>
                   <p className="text-gray-500 text-sm mb-4">Find providers with the best balance of lead volume and conversion quality</p>
 
                   {(() => {
@@ -1004,7 +1004,7 @@ function BusinessPortalContent() {
 
                 {/* Payment Status by Provider */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#1e3a5f] mb-2">Payment Status</h4>
+                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Payment Status</h4>
                   <p className="text-gray-500 text-sm mb-4">Track paid vs unpaid leads by provider</p>
 
                   <div className="space-y-3">
@@ -1077,11 +1077,11 @@ function BusinessPortalContent() {
         {activeTab === "leads" && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({dbLeads.length})</h3>
+              <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
             </div>
             {dbLeadsLoading ? (
               <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
               </div>
             ) : (
             <div className="overflow-x-auto">
@@ -1124,7 +1124,7 @@ function BusinessPortalContent() {
                           </div>
                         ) : lead.payoutStatus === "processing" ? (
                           <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
                               Paid to @womleads
                             </span>
                             <div className="text-gray-400 text-[10px] mt-1">WOML forwarding to provider</div>
@@ -1217,9 +1217,9 @@ function BusinessPortalContent() {
 
 function StatCard({ title, value, color }: { title: string; value: string; color: string }) {
   const colors: Record<string, string> = {
-    navy: "text-[#1e3a5f]",
+    navy: "text-[#E8822A]",
     emerald: "text-emerald-600",
-    blue: "text-blue-600",
+    blue: "text-orange-600",
     amber: "text-amber-600",
   };
 
@@ -1322,7 +1322,7 @@ function ProvidersTab({
     if (!provider.connectionStatus) return { label: "Not Connected", bg: "bg-gray-100", text: "text-gray-600" };
     switch (provider.connectionStatus) {
       case "pending_provider_accept": return { label: "Invitation Sent", bg: "bg-amber-100", text: "text-amber-700" };
-      case "pending_buyer_review": return { label: "Requested Connection", bg: "bg-blue-100", text: "text-blue-700" };
+      case "pending_buyer_review": return { label: "Requested Connection", bg: "bg-orange-100", text: "text-orange-700" };
       case "active": return { label: "Connected", bg: "bg-emerald-100", text: "text-emerald-700" };
       case "terminated": return { label: "Previously Terminated", bg: "bg-gray-100", text: "text-gray-600" };
       case "declined_by_provider": return { label: "Declined", bg: "bg-red-100", text: "text-red-600" };
@@ -1436,7 +1436,7 @@ function ProvidersTab({
       <button
         onClick={() => { setSelectedProvider(provider); setShowTermsForm(false); }}
         className={`text-left bg-white rounded-xl border p-5 shadow-sm hover:shadow-md transition cursor-pointer ${
-          isActive ? "border-emerald-200" : "border-gray-200 hover:border-[#1e3a5f]/30"
+          isActive ? "border-emerald-200" : "border-gray-200 hover:border-[#E8822A]/30"
         }`}
       >
         <div className="flex items-start gap-3">
@@ -1448,7 +1448,7 @@ function ProvidersTab({
             />
           ) : (
             <div className={`h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-              isActive ? "bg-emerald-600" : "bg-[#1e3a5f]"
+              isActive ? "bg-emerald-600" : "bg-[#E8822A]"
             }`}>
               <span className="text-white font-bold text-lg">
                 {(provider.displayName || "?").charAt(0).toUpperCase()}
@@ -1512,7 +1512,7 @@ function ProvidersTab({
 
       {/* Header + Search */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h3 className="text-lg font-semibold text-[#1e3a5f]">Provider Network ({allProviders.length})</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A]">Provider Network ({allProviders.length})</h3>
         <div className="relative">
           <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1522,14 +1522,14 @@ function ProvidersTab({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, email, location..."
-            className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] w-72"
+            className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] w-72"
           />
         </div>
       </div>
 
       {isLoadingProviders ? (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
         </div>
       ) : (
         <>
@@ -1584,14 +1584,14 @@ function ProvidersTab({
                     className="h-16 w-16 rounded-full object-cover flex-shrink-0"
                   />
                 ) : (
-                  <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center flex-shrink-0">
+                  <div className="h-16 w-16 rounded-full bg-[#E8822A] flex items-center justify-center flex-shrink-0">
                     <span className="text-white font-bold text-2xl">
                       {(selectedProvider.displayName || "?").charAt(0).toUpperCase()}
                     </span>
                   </div>
                 )}
                 <div>
-                  <h3 className="text-xl font-bold text-[#1e3a5f]">{selectedProvider.displayName}</h3>
+                  <h3 className="text-xl font-bold text-[#E8822A]">{selectedProvider.displayName}</h3>
                   {selectedProvider.username && selectedProvider.username !== selectedProvider.displayName && (
                     <p className="text-gray-400 text-sm">@{selectedProvider.username}</p>
                   )}
@@ -1609,14 +1609,14 @@ function ProvidersTab({
                 </div>
                 <div>
                   <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Email</p>
-                  <a href={`mailto:${selectedProvider.email}`} className="text-[#1e3a5f] font-medium hover:underline">
+                  <a href={`mailto:${selectedProvider.email}`} className="text-[#E8822A] font-medium hover:underline">
                     {selectedProvider.email}
                   </a>
                 </div>
                 <div>
                   <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Phone</p>
                   {selectedProvider.phone ? (
-                    <a href={`tel:${selectedProvider.phone}`} className="text-[#1e3a5f] font-medium hover:underline">
+                    <a href={`tel:${selectedProvider.phone}`} className="text-[#E8822A] font-medium hover:underline">
                       {selectedProvider.phone}
                     </a>
                   ) : (
@@ -1687,7 +1687,7 @@ function ProvidersTab({
                       <div className="flex gap-3">
                         <button
                           onClick={() => openEditTerms(connection)}
-                          className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition text-sm"
+                          className="flex-1 px-4 py-2.5 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition text-sm"
                         >
                           Edit Terms
                         </button>
@@ -1716,9 +1716,9 @@ function ProvidersTab({
 
                 if (selectedProvider.connectionStatus === "pending_buyer_review") {
                   return (
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
-                      <p className="text-blue-700 font-medium">This provider requested a connection</p>
-                      <p className="text-blue-600 text-sm mt-1">Go to the Requests tab to review and set terms.</p>
+                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-200 text-center">
+                      <p className="text-orange-700 font-medium">This provider requested a connection</p>
+                      <p className="text-orange-600 text-sm mt-1">Go to the Requests tab to review and set terms.</p>
                     </div>
                   );
                 }
@@ -1729,7 +1729,7 @@ function ProvidersTab({
                     return (
                       <button
                         onClick={() => { setShowTermsForm(true); resetTermsForm(); }}
-                        className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+                        className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1742,18 +1742,18 @@ function ProvidersTab({
                   // Inline terms form
                   return (
                     <div className="space-y-4 border-t border-gray-200 pt-4">
-                      <h4 className="font-semibold text-[#1e3a5f]">Set Connection Terms</h4>
+                      <h4 className="font-semibold text-[#E8822A]">Set Connection Terms</h4>
 
                       {/* Rate Per Lead */}
                       <div>
                         <label className="block text-gray-700 text-sm font-medium mb-1">Rate Per Lead</label>
                         <div className="flex items-center gap-2">
-                          <span className="text-[#1e3a5f] text-xl">$</span>
+                          <span className="text-[#E8822A] text-xl">$</span>
                           <input
                             type="number"
                             value={ratePerLead}
                             onChange={(e) => setRatePerLead(Number(e.target.value))}
-                            className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                            className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
                             min={5}
                             max={500}
                           />
@@ -1767,7 +1767,7 @@ function ProvidersTab({
                         <select
                           value={paymentTiming}
                           onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                         >
                           <option value="per_lead">Per Lead (Immediate)</option>
                           <option value="weekly">Weekly</option>
@@ -1789,7 +1789,7 @@ function ProvidersTab({
                               onChange={(e) => setEnableLeadCaps(e.target.checked)}
                               className="sr-only peer"
                             />
-                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#E8822A]"></div>
                           </label>
                         </div>
                         {enableLeadCaps && (
@@ -1800,7 +1800,7 @@ function ProvidersTab({
                                 type="number"
                                 value={weeklyLeadCap || ""}
                                 onChange={(e) => setWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 text-sm"
                                 placeholder="No limit"
                               />
                             </div>
@@ -1810,7 +1810,7 @@ function ProvidersTab({
                                 type="number"
                                 value={monthlyLeadCap || ""}
                                 onChange={(e) => setMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 text-sm"
                                 placeholder="No limit"
                               />
                             </div>
@@ -1824,7 +1824,7 @@ function ProvidersTab({
                         <select
                           value={terminationDays}
                           onChange={(e) => setTerminationDays(Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                         >
                           <option value={0}>Immediate (No notice)</option>
                           <option value={7}>7 days notice</option>
@@ -1839,7 +1839,7 @@ function ProvidersTab({
                         <textarea
                           value={inviteMessage}
                           onChange={(e) => setInviteMessage(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] text-sm"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] text-sm"
                           rows={2}
                           placeholder="Hi! I'd like to partner with you for insurance leads..."
                         />
@@ -1856,7 +1856,7 @@ function ProvidersTab({
                         <button
                           onClick={handleSendTerms}
                           disabled={isSending}
-                          className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                          className="flex-1 px-4 py-2.5 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                           {isSending ? (
                             <>
@@ -1887,7 +1887,7 @@ function ProvidersTab({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-[#1e3a5f]">Edit Terms - {editingConnection.providerName}</h3>
+              <h3 className="text-xl font-bold text-[#E8822A]">Edit Terms - {editingConnection.providerName}</h3>
               <p className="text-gray-500 text-sm mt-1">Update the terms for this provider relationship.</p>
             </div>
             <div className="p-6 space-y-4">
@@ -1895,12 +1895,12 @@ function ProvidersTab({
               <div>
                 <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-[#1e3a5f] text-xl">$</span>
+                  <span className="text-[#E8822A] text-xl">$</span>
                   <input
                     type="number"
                     value={editRate}
                     onChange={(e) => setEditRate(Number(e.target.value))}
-                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
                     min={5}
                     max={500}
                   />
@@ -1913,7 +1913,7 @@ function ProvidersTab({
                 <select
                   value={editPaymentTiming}
                   onChange={(e) => setEditPaymentTiming(e.target.value as typeof editPaymentTiming)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                 >
                   <option value="per_lead">Per Lead (Immediate)</option>
                   <option value="weekly">Weekly</option>
@@ -1932,7 +1932,7 @@ function ProvidersTab({
                       onChange={(e) => setEditEnableLeadCaps(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1e3a5f]"></div>
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#E8822A]"></div>
                   </label>
                 </div>
                 {editEnableLeadCaps && (
@@ -1943,7 +1943,7 @@ function ProvidersTab({
                         type="number"
                         value={editWeeklyLeadCap || ""}
                         onChange={(e) => setEditWeeklyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 text-sm"
                         placeholder="No limit"
                       />
                     </div>
@@ -1953,7 +1953,7 @@ function ProvidersTab({
                         type="number"
                         value={editMonthlyLeadCap || ""}
                         onChange={(e) => setEditMonthlyLeadCap(e.target.value ? Number(e.target.value) : undefined)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 text-sm"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 text-sm"
                         placeholder="No limit"
                       />
                     </div>
@@ -1966,7 +1966,7 @@ function ProvidersTab({
                 <select
                   value={editTerminationDays}
                   onChange={(e) => setEditTerminationDays(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] bg-white"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                 >
                   <option value={0}>Immediate (No notice)</option>
                   <option value={7}>7 days notice</option>
@@ -1984,7 +1984,7 @@ function ProvidersTab({
               </button>
               <button
                 onClick={handleUpdateTerms}
-                className="flex-1 px-4 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition"
+                className="flex-1 px-4 py-2.5 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition"
               >
                 Update Terms
               </button>
@@ -2037,8 +2037,8 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
       {/* Ledger Table */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-[#1e3a5f]">Transaction Ledger</h3>
-          <button className="text-[#1e3a5f] hover:text-[#2a4a6f] text-sm flex items-center gap-1">
+          <h3 className="text-lg font-semibold text-[#E8822A]">Transaction Ledger</h3>
+          <button className="text-[#E8822A] hover:text-[#D47526] text-sm flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
@@ -2076,7 +2076,7 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
                       {tx.status === "completed" ? "Paid" : "Pending"}
                     </span>
                   </td>
-                  <td className="py-4 text-[#1e3a5f] font-bold text-right">${Number(tx.amount).toFixed(2)}</td>
+                  <td className="py-4 text-[#E8822A] font-bold text-right">${Number(tx.amount).toFixed(2)}</td>
                 </tr>
               ))}
               {transactions.length === 0 && (
@@ -2096,7 +2096,7 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
 
 function PaymentMethodBadge({ method }: { method: string }) {
   const styles: Record<string, { bg: string; text: string; icon: string }> = {
-    venmo: { bg: "bg-blue-100", text: "text-blue-700", icon: "V" },
+    venmo: { bg: "bg-orange-100", text: "text-orange-700", icon: "V" },
     paypal: { bg: "bg-indigo-100", text: "text-indigo-700", icon: "P" },
     bank: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "B" },
     pending: { bg: "bg-gray-100", text: "text-gray-500", icon: "?" },
@@ -2163,7 +2163,7 @@ function RolodexTab({
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-[#1e3a5f]">Your Rolodex</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A]">Your Rolodex</h3>
           <p className="text-gray-500 text-sm">View and manage your connected lead providers</p>
         </div>
         <div className="relative w-full sm:w-auto">
@@ -2172,7 +2172,7 @@ function RolodexTab({
             placeholder="Search providers..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#1e3a5f] transition"
+            className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#E8822A] transition"
           />
           <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -2186,10 +2186,10 @@ function RolodexTab({
           <div
             key={provider.id}
             onClick={() => setSelectedProvider(provider)}
-            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#1e3a5f]/30 transition cursor-pointer group"
+            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#E8822A]/30 transition cursor-pointer group"
           >
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-4 text-white">
+            <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] p-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
                   <span className="text-xl font-bold">{(provider.name || "?").charAt(0)}</span>
@@ -2205,7 +2205,7 @@ function RolodexTab({
             <div className="p-4">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[#1e3a5f]">{provider.totalLeads}</p>
+                  <p className="text-2xl font-bold text-[#E8822A]">{provider.totalLeads}</p>
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
                 </div>
                 <div className="text-center">
@@ -2216,7 +2216,7 @@ function RolodexTab({
 
               <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-[#1e3a5f]">${Number(provider.payoutRate || 0).toFixed(2)}</span>
+                  <span className="font-medium text-[#E8822A]">${Number(provider.payoutRate || 0).toFixed(2)}</span>
                   <span>/lead</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${
@@ -2254,7 +2254,7 @@ function RolodexTab({
             <div className="p-4">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[#1e3a5f]">{connection.total_leads}</p>
+                  <p className="text-2xl font-bold text-[#E8822A]">{connection.total_leads}</p>
                   <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
                 </div>
                 <div className="text-center">
@@ -2325,7 +2325,7 @@ function ProviderDetailModal({
         onClick={e => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-6 text-white relative">
+        <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] p-6 text-white relative">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white/70 hover:text-white transition"
@@ -2366,7 +2366,7 @@ function ProviderDetailModal({
             onClick={() => setActiveView("card")}
             className={`flex-1 py-3 font-medium transition ${
               activeView === "card"
-                ? "text-[#1e3a5f] border-b-2 border-[#1e3a5f]"
+                ? "text-[#E8822A] border-b-2 border-[#E8822A]"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -2376,7 +2376,7 @@ function ProviderDetailModal({
             onClick={() => setActiveView("ledger")}
             className={`flex-1 py-3 font-medium transition ${
               activeView === "ledger"
-                ? "text-[#1e3a5f] border-b-2 border-[#1e3a5f]"
+                ? "text-[#E8822A] border-b-2 border-[#E8822A]"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -2393,7 +2393,7 @@ function ProviderDetailModal({
                 <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Career Stats</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-[#1e3a5f]">{dbLeads.length}</p>
+                    <p className="text-3xl font-bold text-[#E8822A]">{dbLeads.length}</p>
                     <p className="text-gray-500 text-sm">Total Leads</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
@@ -2401,7 +2401,7 @@ function ProviderDetailModal({
                     <p className="text-gray-500 text-sm">Total Paid</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-blue-600">{conversionRate}%</p>
+                    <p className="text-3xl font-bold text-orange-600">{conversionRate}%</p>
                     <p className="text-gray-500 text-sm">Conversion</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-4 text-center">
@@ -2420,7 +2420,7 @@ function ProviderDetailModal({
                       <p className="text-gray-800 font-medium">Current Payout Rate</p>
                       <p className="text-gray-500 text-sm">Payment: {provider.paymentMethod || "Not set"}</p>
                     </div>
-                    <p className="text-2xl font-bold text-[#1e3a5f]">${Number(provider.payoutRate || 0).toFixed(2)}/lead</p>
+                    <p className="text-2xl font-bold text-[#E8822A]">${Number(provider.payoutRate || 0).toFixed(2)}/lead</p>
                   </div>
                 </div>
               </div>
@@ -2441,12 +2441,12 @@ function ProviderDetailModal({
                         <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</p>
+                        <p className="text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           lead.payoutStatus === "completed"
                             ? "bg-emerald-100 text-emerald-700"
                             : lead.payoutStatus === "processing"
-                            ? "bg-blue-100 text-blue-700"
+                            ? "bg-orange-100 text-orange-700"
                             : "bg-amber-100 text-amber-700"
                         }`}>
                           {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}
@@ -2598,7 +2598,7 @@ function calculateWeeklyPerformance(
     .sort((a, b) => b.conversionRate - a.conversionRate)
     .slice(0, 3);
 
-  const colors = ["#1e3a5f", "#10b981", "#f59e0b"];
+  const colors = ["#E8822A", "#10b981", "#f59e0b"];
 
   // Group all records by week
   const weekSet = new Set<string>();
@@ -2965,18 +2965,18 @@ function AnalyticsTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#1e3a5f]">Analytics Dashboard</h2>
+          <h2 className="text-2xl font-bold text-[#E8822A]">Analytics Dashboard</h2>
           <p className="text-gray-500 mt-1">Upload your CRM data for advanced insights</p>
         </div>
       </div>
 
       {/* Real-Time Stats from WOML Data */}
       <div>
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Real-Time Lead Stats</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Real-Time Lead Stats</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <p className="text-gray-500 text-sm">Total Leads</p>
-            <p className="text-3xl font-bold text-[#1e3a5f]">{realTimeAnalytics.totalLeads}</p>
+            <p className="text-3xl font-bold text-[#E8822A]">{realTimeAnalytics.totalLeads}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <p className="text-gray-500 text-sm">Pending</p>
@@ -2988,14 +2988,14 @@ function AnalyticsTab({
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <p className="text-gray-500 text-sm">Total Payouts</p>
-            <p className="text-3xl font-bold text-blue-600">${realTimeAnalytics.totalPayout.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-orange-600">${realTimeAnalytics.totalPayout.toFixed(2)}</p>
           </div>
         </div>
       </div>
 
       {/* Top Sellers Leaderboard */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Top Lead Sellers</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Top Lead Sellers</h3>
         {providerRankings.length > 0 ? (
           <div className="space-y-3">
             {providerRankings.slice(0, 10).map((provider, i) => (
@@ -3012,7 +3012,7 @@ function AnalyticsTab({
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#1e3a5f] rounded-full transition-all"
+                      className="h-full bg-[#E8822A] rounded-full transition-all"
                       style={{ width: `${providerRankings[0]?.leads ? (provider.leads / providerRankings[0].leads) * 100 : 0}%` }}
                     />
                   </div>
@@ -3034,7 +3034,7 @@ function AnalyticsTab({
             </svg>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-[#1e3a5f]">Upload CRM Data</h3>
+            <h3 className="text-lg font-semibold text-[#E8822A]">Upload CRM Data</h3>
             <p className="text-gray-500 text-sm">Import your monthly/bi-weekly data for advanced analytics</p>
           </div>
         </div>
@@ -3045,13 +3045,13 @@ function AnalyticsTab({
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
-            isDragging ? "border-[#1e3a5f] bg-blue-50" : "border-gray-300 hover:border-gray-400"
+            isDragging ? "border-[#E8822A] bg-orange-50" : "border-gray-300 hover:border-gray-400"
           }`}
         >
           {isUploading ? (
             <div className="space-y-3">
-              <div className="animate-spin h-10 w-10 border-4 border-[#1e3a5f] border-t-transparent rounded-full mx-auto"></div>
-              <p className="text-[#1e3a5f] font-medium">Processing file...</p>
+              <div className="animate-spin h-10 w-10 border-4 border-[#E8822A] border-t-transparent rounded-full mx-auto"></div>
+              <p className="text-[#E8822A] font-medium">Processing file...</p>
             </div>
           ) : fileName && !uploadError ? (
             <div className="space-y-3">
@@ -3064,7 +3064,7 @@ function AnalyticsTab({
               <p className="text-gray-500 text-sm">{uploadedData.length} records imported</p>
               <label className="inline-block cursor-pointer">
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} className="hidden" />
-                <span className="text-[#1e3a5f] hover:underline text-sm">Upload different file</span>
+                <span className="text-[#E8822A] hover:underline text-sm">Upload different file</span>
               </label>
             </div>
           ) : (
@@ -3105,18 +3105,18 @@ function AnalyticsTab({
       {/* Uploaded Data Analytics */}
       {analytics && (
         <div className="space-y-6">
-          <h3 className="text-lg font-semibold text-[#1e3a5f]">Lead Performance Analytics</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A]">Lead Performance Analytics</h3>
 
           {/* Key Metrics - Funnel */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
               <p className="text-gray-500 text-sm">Total Leads</p>
-              <p className="text-3xl font-bold text-[#1e3a5f]">{analytics.totalLeads}</p>
+              <p className="text-3xl font-bold text-[#E8822A]">{analytics.totalLeads}</p>
               <p className="text-gray-400 text-xs mt-1">From uploaded data</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
               <p className="text-gray-500 text-sm">Contact Rate</p>
-              <p className="text-3xl font-bold text-blue-600">{analytics.overallContactRate.toFixed(1)}%</p>
+              <p className="text-3xl font-bold text-orange-600">{analytics.overallContactRate.toFixed(1)}%</p>
               <p className="text-gray-400 text-xs mt-1">{analytics.totalContacted} / {analytics.totalLeads} contacted</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -3133,24 +3133,24 @@ function AnalyticsTab({
 
           {/* Conversion Funnel Visualization */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Lead Funnel</h4>
+            <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Lead Funnel</h4>
             <div className="space-y-4">
               {/* Total Leads */}
               <div>
                 <div className="flex justify-between mb-1">
                   <span className="text-gray-600">Total Leads</span>
-                  <span className="font-medium text-[#1e3a5f]">{analytics.totalLeads}</span>
+                  <span className="font-medium text-[#E8822A]">{analytics.totalLeads}</span>
                 </div>
-                <div className="h-8 bg-[#1e3a5f] rounded-lg"></div>
+                <div className="h-8 bg-[#E8822A] rounded-lg"></div>
               </div>
               {/* Contacted */}
               <div>
                 <div className="flex justify-between mb-1">
                   <span className="text-gray-600">Contacted</span>
-                  <span className="font-medium text-blue-600">{analytics.totalContacted} ({analytics.overallContactRate.toFixed(0)}%)</span>
+                  <span className="font-medium text-orange-600">{analytics.totalContacted} ({analytics.overallContactRate.toFixed(0)}%)</span>
                 </div>
                 <div className="h-8 bg-gray-200 rounded-lg overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-lg" style={{ width: `${analytics.overallContactRate}%` }}></div>
+                  <div className="h-full bg-orange-500 rounded-lg" style={{ width: `${analytics.overallContactRate}%` }}></div>
                 </div>
               </div>
               {/* Sold */}
@@ -3178,7 +3178,7 @@ function AnalyticsTab({
 
           {/* Provider Performance Table */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Individual Provider Performance</h4>
+            <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Individual Provider Performance</h4>
             <p className="text-gray-500 text-sm mb-4">Use this data to adjust payment rates or lead caps for each provider</p>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -3226,7 +3226,7 @@ function AnalyticsTab({
                         )}
                       </td>
                       <td className="py-4">
-                        <button className="text-xs px-2 py-1 bg-[#1e3a5f] text-white rounded hover:bg-[#2a4a6f] transition">
+                        <button className="text-xs px-2 py-1 bg-[#E8822A] text-white rounded hover:bg-[#D47526] transition">
                           Adjust Rate
                         </button>
                       </td>
@@ -3240,7 +3240,7 @@ function AnalyticsTab({
           {/* Business Sender Breakdown */}
           {analytics.businessStats && analytics.businessStats.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Performance by Business Source</h4>
+              <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Performance by Business Source</h4>
               <div className="space-y-4">
                 {analytics.businessStats.map((business, i) => (
                   <div key={business.name} className="flex items-center gap-4">
@@ -3267,7 +3267,7 @@ function AnalyticsTab({
 
           {/* Retention Breakdown Chart */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-[#1e3a5f] mb-4">Policy Status Breakdown</h4>
+            <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Policy Status Breakdown</h4>
             <div className="flex items-center gap-8">
               {/* Simple donut visualization */}
               <div className="relative w-40 h-40">
@@ -3287,7 +3287,7 @@ function AnalyticsTab({
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-[#1e3a5f]">{analytics.retentionRate.toFixed(0)}%</span>
+                  <span className="text-2xl font-bold text-[#E8822A]">{analytics.retentionRate.toFixed(0)}%</span>
                 </div>
               </div>
               <div className="flex-1 space-y-3">
@@ -3300,7 +3300,7 @@ function AnalyticsTab({
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <span className="w-3 h-3 rounded-full bg-orange-500"></span>
                     <span className="text-gray-600">Bound (New)</span>
                   </div>
                   <span className="font-medium text-gray-800">{analytics.boundPolicies - analytics.renewedPolicies}</span>
@@ -3438,7 +3438,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl shadow-sm">
-      <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Business Settings</h3>
+      <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Business Settings</h3>
 
       {saved && (
         <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm flex items-center gap-2">
@@ -3456,7 +3456,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             {profilePicture ? (
               <img src={profilePicture} alt="Profile" className="h-20 w-20 rounded-full object-cover border-2 border-gray-200" />
             ) : (
-              <div className="h-20 w-20 rounded-full bg-[#1e3a5f] flex items-center justify-center border-2 border-gray-200">
+              <div className="h-20 w-20 rounded-full bg-[#E8822A] flex items-center justify-center border-2 border-gray-200">
                 <span className="text-2xl font-bold text-white">{currentBuyer?.businessName?.charAt(0) || "?"}</span>
               </div>
             )}
@@ -3497,7 +3497,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             type="text"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
           />
         </div>
         <div>
@@ -3506,7 +3506,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
           />
         </div>
         <div>
@@ -3531,12 +3531,12 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                 onClick={() => setPayoutMethod(opt.value)}
                 className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
                   payoutMethod === opt.value
-                    ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                    ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
                     : "border-gray-200 hover:border-gray-300 text-gray-600"
                 }`}
               >
                 <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  payoutMethod === opt.value ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-500"
+                  payoutMethod === opt.value ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-500"
                 }`}>{opt.icon}</span>
                 <span className="font-medium text-sm">{opt.label}</span>
               </button>
@@ -3555,7 +3555,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   value={payoutVenmo}
                   onChange={(e) => setPayoutVenmo(e.target.value)}
                   placeholder="@username"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                 />
               </div>
             )}
@@ -3567,7 +3567,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   value={payoutPaypal}
                   onChange={(e) => setPayoutPaypal(e.target.value)}
                   placeholder="email@example.com"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                 />
               </div>
             )}
@@ -3579,7 +3579,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   value={payoutCashapp}
                   onChange={(e) => setPayoutCashapp(e.target.value)}
                   placeholder="$cashtag"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                 />
               </div>
             )}
@@ -3592,7 +3592,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                     value={payoutBankRouting}
                     onChange={(e) => setPayoutBankRouting(e.target.value)}
                     placeholder="9-digit routing number"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
                 <div>
@@ -3602,7 +3602,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                     value={payoutBankAccount}
                     onChange={(e) => setPayoutBankAccount(e.target.value)}
                     placeholder="Account number"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               </div>
@@ -3613,7 +3613,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
+          className="bg-[#E8822A] hover:bg-[#D47526] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Settings"}
         </button>
@@ -3851,7 +3851,7 @@ function RequestsTab({
       {/* Pending Requests */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-6">
-          <h3 className="text-lg font-semibold text-[#1e3a5f]">Pending Requests</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A]">Pending Requests</h3>
           {(pendingRequests.length + awaitingResponse.length) > 0 && (
             <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
               {pendingRequests.length + awaitingResponse.length} pending
@@ -3864,10 +3864,10 @@ function RequestsTab({
             {[...pendingRequests, ...awaitingResponse]
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
               .map((item) => (
-              <div key={item.id} className={`border rounded-xl p-4 ${item.status === "pending_provider_accept" ? "border-amber-100 bg-amber-50/30" : "border-gray-200 hover:border-[#1e3a5f]/30"} transition`}>
+              <div key={item.id} className={`border rounded-xl p-4 ${item.status === "pending_provider_accept" ? "border-amber-100 bg-amber-50/30" : "border-gray-200 hover:border-[#E8822A]/30"} transition`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${item.status === "pending_provider_accept" ? "bg-amber-100" : "bg-[#1e3a5f]"}`}>
+                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${item.status === "pending_provider_accept" ? "bg-amber-100" : "bg-[#E8822A]"}`}>
                       <span className={`text-xl font-bold ${item.status === "pending_provider_accept" ? "text-amber-600" : "text-white"}`}>{(item.providerName || "?").charAt(0)}</span>
                     </div>
                     <div>
@@ -3891,7 +3891,7 @@ function RequestsTab({
                       <div className="flex gap-2">
                         <button
                           onClick={() => openTermsModal(item)}
-                          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
+                          className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
                         >
                           Set Terms
                         </button>
@@ -3927,7 +3927,7 @@ function RequestsTab({
 
       {/* Active Connections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Active Connections ({activeConnections.length})</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Active Connections ({activeConnections.length})</h3>
 
         {activeConnections.length > 0 ? (
           <div className="space-y-4">
@@ -3942,7 +3942,7 @@ function RequestsTab({
                       <p className="font-semibold text-gray-800">{connection.providerName}</p>
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[#1e3a5f] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
+                        <span className="text-[#E8822A] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
                         <span className="text-gray-400 text-xs">(incl. $1 fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
@@ -3953,7 +3953,7 @@ function RequestsTab({
                     <div className="flex gap-2 mb-2">
                       <button
                         onClick={() => openEditTermsModal(connection)}
-                        className="text-[#1e3a5f] hover:bg-[#1e3a5f]/10 px-3 py-1 rounded-lg font-medium transition text-sm"
+                        className="text-[#E8822A] hover:bg-[#E8822A]/10 px-3 py-1 rounded-lg font-medium transition text-sm"
                       >
                         Edit Terms
                       </button>
@@ -3972,7 +3972,7 @@ function RequestsTab({
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
                   <div>
                     <p className="text-gray-500 text-sm">Total Leads</p>
-                    <p className="text-xl font-bold text-[#1e3a5f]">{connection.total_leads}</p>
+                    <p className="text-xl font-bold text-[#E8822A]">{connection.total_leads}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 text-sm">Total Paid</p>
@@ -4138,7 +4138,7 @@ function TermsModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-xl font-bold text-[#1e3a5f]">{title}</h3>
+          <h3 className="text-xl font-bold text-[#E8822A]">{title}</h3>
           <p className="text-gray-500 text-sm mt-1">Set the terms for this provider relationship. They must accept these terms before they can submit leads.</p>
         </div>
 
@@ -4147,13 +4147,13 @@ function TermsModal({
           <div>
             <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
             <div className="flex items-center gap-2">
-              <span className="text-[#1e3a5f] text-xl">$</span>
+              <span className="text-[#E8822A] text-xl">$</span>
               <input
                 type="number"
                 value={ratePerLead}
                 onChange={(e) => setRatePerLead(parseInt(e.target.value) || 0)}
                 min="1"
-                className="w-32 px-4 py-2 border border-gray-200 rounded-lg text-xl font-bold text-[#1e3a5f] focus:border-[#1e3a5f] focus:outline-none transition"
+                className="w-32 px-4 py-2 border border-gray-200 rounded-lg text-xl font-bold text-[#E8822A] focus:border-[#E8822A] focus:outline-none transition"
               />
               <span className="text-gray-500">per qualified lead</span>
             </div>
@@ -4165,7 +4165,7 @@ function TermsModal({
             <select
               value={paymentTiming}
               onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition bg-white"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition bg-white"
             >
               <option value="per_lead">Per Lead (Immediate)</option>
               <option value="weekly">Weekly</option>
@@ -4187,7 +4187,7 @@ function TermsModal({
                   value={minimumPayout || ""}
                   onChange={(e) => setMinimumPayout(e.target.value ? parseInt(e.target.value) : undefined)}
                   placeholder="No minimum"
-                  className="w-32 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                  className="w-32 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition"
                 />
               </div>
               <p className="text-gray-400 text-xs mt-1">Provider won&apos;t receive payout until this threshold is met</p>
@@ -4211,7 +4211,7 @@ function TermsModal({
                   }}
                   className={`px-3 py-1 rounded-full text-sm font-medium transition capitalize ${
                     leadTypes.includes(type)
-                      ? "bg-[#1e3a5f] text-white"
+                      ? "bg-[#E8822A] text-white"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
@@ -4231,7 +4231,7 @@ function TermsModal({
               type="button"
               onClick={() => setExclusivity(!exclusivity)}
               className={`relative w-12 h-6 rounded-full transition ${
-                exclusivity ? "bg-[#1e3a5f]" : "bg-gray-300"
+                exclusivity ? "bg-[#E8822A]" : "bg-gray-300"
               }`}
             >
               <span
@@ -4251,7 +4251,7 @@ function TermsModal({
                 value={terminationDays}
                 onChange={(e) => setTerminationDays(parseInt(e.target.value) || 1)}
                 min="1"
-                className="w-20 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                className="w-20 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition"
               />
               <span className="text-gray-500">days notice required</span>
             </div>
@@ -4293,7 +4293,7 @@ function TermsModal({
                       onChange={(e) => setWeeklyLeadCap(e.target.value ? parseInt(e.target.value) : undefined)}
                       placeholder="Unlimited"
                       min="1"
-                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition"
                     />
                     <span className="text-gray-500 text-sm">leads per week</span>
                   </div>
@@ -4312,7 +4312,7 @@ function TermsModal({
                       onChange={(e) => setMonthlyLeadCap(e.target.value ? parseInt(e.target.value) : undefined)}
                       placeholder="Unlimited"
                       min="1"
-                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition"
+                      className="w-28 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition"
                     />
                     <span className="text-gray-500 text-sm">leads per month</span>
                   </div>
@@ -4329,7 +4329,7 @@ function TermsModal({
                     type="button"
                     onClick={() => setPauseWhenCapReached(!pauseWhenCapReached)}
                     className={`relative w-12 h-6 rounded-full transition ${
-                      pauseWhenCapReached ? "bg-[#1e3a5f]" : "bg-gray-300"
+                      pauseWhenCapReached ? "bg-[#E8822A]" : "bg-gray-300"
                     }`}
                   >
                     <span
@@ -4364,7 +4364,7 @@ function TermsModal({
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               placeholder="Any specific requirements or expectations..."
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#1e3a5f] focus:outline-none transition resize-none"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition resize-none"
             />
           </div>
         </div>
@@ -4378,7 +4378,7 @@ function TermsModal({
           </button>
           <button
             onClick={onSave}
-            className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg font-semibold transition"
+            className="flex-1 bg-[#E8822A] hover:bg-[#D47526] text-white py-3 rounded-lg font-semibold transition"
           >
             {saveButtonText}
           </button>
@@ -4394,7 +4394,7 @@ function LoadingFallback() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
         <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f] mx-auto"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
       </div>
     </div>
   );

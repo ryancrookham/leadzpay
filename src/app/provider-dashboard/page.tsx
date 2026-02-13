@@ -229,7 +229,7 @@ export default function ProviderDashboard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f] mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
         </div>
       </div>
     );
@@ -291,14 +291,14 @@ export default function ProviderDashboard() {
               />
             </Link>
             <span className="text-gray-300">|</span>
-            <span className="text-[#1e3a5f] font-medium">Provider Portal</span>
+            <span className="text-[#E8822A] font-medium">Provider Portal</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${
                 connectionStatus.status === "active" ? "bg-emerald-500" :
                 connectionStatus.status === "terms_pending" ? "bg-amber-500" :
-                connectionStatus.status === "pending" ? "bg-blue-500" : "bg-gray-400"
+                connectionStatus.status === "pending" ? "bg-orange-500" : "bg-gray-400"
               }`} />
               <span className="text-sm text-gray-500">{connectionStatus.message}</span>
             </div>
@@ -306,7 +306,7 @@ export default function ProviderDashboard() {
             <span className="text-gray-600">{currentProvider?.displayName}</span>
             <button
               onClick={handleLogout}
-              className="text-gray-500 hover:text-[#1e3a5f] transition flex items-center gap-2"
+              className="text-gray-500 hover:text-[#E8822A] transition flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -324,7 +324,7 @@ export default function ProviderDashboard() {
             pendingTermsRequest
               ? "bg-amber-50 border-amber-200"
               : pendingRequest
-              ? "bg-blue-50 border-blue-200"
+              ? "bg-orange-50 border-orange-200"
               : "bg-gray-50 border-gray-200"
           }`}>
             <div className="flex items-center gap-3">
@@ -348,14 +348,14 @@ export default function ProviderDashboard() {
                 </>
               ) : pendingRequest ? (
                 <>
-                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-blue-800">Connection Request Pending</p>
-                    <p className="text-blue-600 text-sm">Waiting for {pendingRequest.buyerBusinessName} to review your request and set terms.</p>
+                    <p className="font-medium text-orange-800">Connection Request Pending</p>
+                    <p className="text-orange-600 text-sm">Waiting for {pendingRequest.buyerBusinessName} to review your request and set terms.</p>
                   </div>
                 </>
               ) : (
@@ -371,7 +371,7 @@ export default function ProviderDashboard() {
                   </div>
                   <button
                     onClick={() => setActiveTab("connection")}
-                    className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition"
+                    className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition"
                   >
                     Find a Business
                   </button>
@@ -389,8 +389,8 @@ export default function ProviderDashboard() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-[#1e3a5f] text-white shadow-md"
-                  : "bg-white text-gray-600 hover:text-[#1e3a5f] hover:bg-gray-100 border border-gray-200"
+                  ? "bg-[#E8822A] text-white shadow-md"
+                  : "bg-white text-gray-600 hover:text-[#E8822A] hover:bg-gray-100 border border-gray-200"
               }`}
             >
               {tab === "connection" ? "Connection" : tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -517,16 +517,16 @@ function DashboardTab({
         {activeConnection ? (
           <button
             onClick={onNavigateToConnection}
-            className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md hover:border-[#1e3a5f]/30 transition group text-left"
+            className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md hover:border-[#E8822A]/30 transition group text-left"
           >
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-[#1e3a5f]/10 flex items-center justify-center group-hover:bg-[#1e3a5f]/20 transition">
-                <svg className="w-6 h-6 text-[#1e3a5f]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="h-12 w-12 rounded-full bg-[#E8822A]/10 flex items-center justify-center group-hover:bg-[#E8822A]/20 transition">
+                <svg className="w-6 h-6 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a5f]">Submit New Lead</h3>
+                <h3 className="text-lg font-semibold text-[#E8822A]">Submit New Lead</h3>
                 <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead (after ${providerFeeDisplay.toFixed(2)} fee)</p>
               </div>
             </div>
@@ -552,7 +552,7 @@ function DashboardTab({
 
         {/* Connection Status Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Connection Status</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Connection Status</h3>
           {activeConnection ? (
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -583,7 +583,7 @@ function DashboardTab({
 
       {/* Recent Leads */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Recent Leads</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Recent Leads</h3>
         {dbLeads.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -606,13 +606,13 @@ function DashboardTab({
                     <td className="py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                        lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                        lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                         "bg-amber-100 text-amber-700"
                       }`}>
                         {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                       </span>
                     </td>
-                    <td className="py-4 text-[#1e3a5f] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
+                    <td className="py-4 text-[#E8822A] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                     <td className="py-4 text-gray-500 text-sm">
                       {new Date(lead.submittedAt).toLocaleDateString()}
                     </td>
@@ -1305,13 +1305,13 @@ function ConnectionTab({
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2">
                       <div className={`h-3 w-3 rounded-full ${capStatus.canSubmitLead ? "bg-emerald-500" : "bg-amber-500"}`}></div>
-                      <h3 className="text-lg font-semibold text-[#1e3a5f]">Active Connection</h3>
+                      <h3 className="text-lg font-semibold text-[#E8822A]">Active Connection</h3>
                     </div>
                     {!showLeadForm && (
                       capStatus.canSubmitLead ? (
                         <button
                           onClick={() => setShowLeadForm(true)}
-                          className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                          className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1349,7 +1349,7 @@ function ConnectionTab({
             })()}
 
             <div className="flex items-center gap-6 mb-6">
-              <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full bg-[#E8822A] flex items-center justify-center">
                 <span className="text-2xl font-bold text-white">{(activeConnection.buyerBusinessName || "?").charAt(0)}</span>
               </div>
               <div>
@@ -1364,7 +1364,7 @@ function ConnectionTab({
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-gray-500 text-sm">Rate per Lead</p>
-                  <p className="text-2xl font-bold text-[#1e3a5f]">${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-[#E8822A]">${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -1397,7 +1397,7 @@ function ConnectionTab({
             {/* Stats */}
             <div className="grid grid-cols-2 gap-4 mt-6">
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-[#1e3a5f]">{activeConnection.total_leads}</p>
+                <p className="text-3xl font-bold text-[#E8822A]">{activeConnection.total_leads}</p>
                 <p className="text-gray-500 text-sm">Total Leads</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
@@ -1410,7 +1410,7 @@ function ConnectionTab({
 
         {/* Lead Submission Flow */}
         {showLeadForm && formStep !== "success" && (
-          <div className="bg-white rounded-xl border-2 border-[#1e3a5f] p-6 shadow-lg">
+          <div className="bg-white rounded-xl border-2 border-[#E8822A] p-6 shadow-lg">
             {/* Header with close button */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
@@ -1425,14 +1425,14 @@ function ConnectionTab({
                       else if (formStep === "quotes") setFormStep("chatbot");
                       else if (formStep === "payment") setFormStep("chatbot");
                     }}
-                    className="text-gray-500 hover:text-[#1e3a5f] transition"
+                    className="text-gray-500 hover:text-[#E8822A] transition"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
                 )}
-                <h3 className="text-lg font-semibold text-[#1e3a5f]">
+                <h3 className="text-lg font-semibold text-[#E8822A]">
                   {formStep === "channel" && "How can we help your customer?"}
                   {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
                   {formStep === "license_upload" && "Submit a Lead"}
@@ -1473,19 +1473,19 @@ function ConnectionTab({
 
                 <button
                   onClick={() => { setChannel("quote"); setFormStep("license_upload"); }}
-                  className="bg-white border-2 border-gray-200 hover:border-blue-500 rounded-xl p-6 text-left transition group"
+                  className="bg-white border-2 border-gray-200 hover:border-orange-500 rounded-xl p-6 text-left transition group"
                 >
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mb-4 group-hover:bg-blue-200 transition">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center mb-4 group-hover:bg-orange-200 transition">
+                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                     </svg>
                   </div>
                   <h4 className="text-lg font-bold text-gray-800 mb-2">Get Quote - Quick & Easy</h4>
                   <p className="text-gray-600 text-sm mb-4">Customer might need insurance. High-value passive lead.</p>
                   <ul className="text-sm text-gray-500 space-y-1">
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> Email, phone &amp; driver&apos;s license</li>
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> AI extracts all customer info</li>
-                    <li className="flex items-center gap-2"><span className="text-blue-500">•</span> High retention potential</li>
+                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> Email, phone &amp; driver&apos;s license</li>
+                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> AI extracts all customer info</li>
+                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> High retention potential</li>
                   </ul>
                 </button>
               </div>
@@ -1494,8 +1494,8 @@ function ConnectionTab({
             {/* Submit a Lead - Single Screen */}
             {formStep === "license_upload" && (
               <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <p className="text-blue-700 text-sm font-medium">
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                  <p className="text-orange-700 text-sm font-medium">
                     You&apos;ll earn ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} for this lead
                   </p>
                 </div>
@@ -1510,7 +1510,7 @@ function ConnectionTab({
                     value={quotePhone}
                     onChange={(e) => setQuotePhone(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
                     placeholder="(555) 123-4567"
                   />
                 </div>
@@ -1525,7 +1525,7 @@ function ConnectionTab({
                     value={quoteEmail}
                     onChange={(e) => setQuoteEmail(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
                     placeholder="customer@email.com"
                   />
                 </div>
@@ -1540,7 +1540,7 @@ function ConnectionTab({
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-blue-500 focus:outline-none transition text-lg"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
                     placeholder="Full name (auto-fills from license)"
                   />
                 </div>
@@ -1550,11 +1550,11 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-blue-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
-                        <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-                        <p className="text-blue-600 font-medium">Checking photo quality...</p>
+                        <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
+                        <p className="text-orange-600 font-medium">Checking photo quality...</p>
                         <p className="text-gray-500 text-sm">Verifying this is a clear driver&apos;s license photo</p>
                       </div>
                     ) : licenseImage ? (
@@ -1601,8 +1601,8 @@ function ConnectionTab({
                           className="hidden"
                         />
                         <div className="space-y-2">
-                          <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto">
-                            <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="h-14 w-14 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
+                            <svg className="w-7 h-7 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
@@ -1666,7 +1666,7 @@ function ConnectionTab({
                           onClick={() => setMaritalStatus(maritalStatus === "married" ? "" : "married")}
                           className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
                             maritalStatus === "married"
-                              ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                              ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
                               : "border-gray-200 text-gray-500 hover:border-gray-300"
                           }`}
                         >
@@ -1677,7 +1677,7 @@ function ConnectionTab({
                           onClick={() => setMaritalStatus(maritalStatus === "single" ? "" : "single")}
                           className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
                             maritalStatus === "single"
-                              ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                              ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
                               : "border-gray-200 text-gray-500 hover:border-gray-300"
                           }`}
                         >
@@ -1722,7 +1722,7 @@ function ConnectionTab({
                 <button
                   onClick={handleSimpleQuoteSubmit}
                   disabled={!quoteEmail || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear}
-                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
+                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -1751,8 +1751,8 @@ function ConnectionTab({
             {/* Basic Info Form (ASAP flow) */}
             {formStep === "basic_info" && (
               <div className="space-y-4">
-                <div className={`${channel === "asap" ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"} border rounded-lg p-3 mb-4`}>
-                  <p className={`${channel === "asap" ? "text-red-700" : "text-blue-700"} text-sm font-medium`}>
+                <div className={`${channel === "asap" ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"} border rounded-lg p-3 mb-4`}>
+                  <p className={`${channel === "asap" ? "text-red-700" : "text-orange-700"} text-sm font-medium`}>
                     {channel === "asap"
                       ? "Get the essentials - agent will call within 60 seconds"
                       : `You'll earn $${Number(activeConnection?.rate_per_lead || 0).toFixed(2)} when this lead converts`}
@@ -1763,43 +1763,43 @@ function ConnectionTab({
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Customer Name *</label>
                     <input type="text" value={formData.customerName} onChange={(e) => setFormData({ ...formData, customerName: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="John Doe" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="John Doe" />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Email *</label>
                     <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="john@example.com" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="john@example.com" />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">Phone *</label>
                   <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="(555) 123-4567" />
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="(555) 123-4567" />
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Vehicle Year *</label>
                     <input type="text" value={formData.carYear} onChange={(e) => setFormData({ ...formData, carYear: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="2022" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="2022" />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Make *</label>
                     <input type="text" value={formData.carMake} onChange={(e) => setFormData({ ...formData, carMake: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="Toyota" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="Toyota" />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Model *</label>
                     <input type="text" value={formData.carModel} onChange={(e) => setFormData({ ...formData, carModel: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" placeholder="Camry" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="Camry" />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-2">State *</label>
                   <select value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                     {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
@@ -1816,7 +1816,7 @@ function ConnectionTab({
                     </button>
                   ) : (
                     <button onClick={() => setFormStep("state_confirm")} disabled={!formData.customerName || !formData.phone || !formData.carYear}
-                      className="flex-1 bg-[#1e3a5f] hover:bg-[#2a4a6f] disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition">
+                      className="flex-1 bg-[#E8822A] hover:bg-[#D47526] disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition">
                       Continue to Get Best Rates
                     </button>
                   )}
@@ -1828,14 +1828,14 @@ function ConnectionTab({
             {formStep === "state_confirm" && channel === "quote" && (
               <div className="space-y-6">
                 {/* State Verification Notice */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                   <div className="flex items-start gap-3">
-                    <svg className="w-6 h-6 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 text-orange-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div>
-                      <p className="font-semibold text-blue-800">Insurance Licensing Verification</p>
-                      <p className="text-blue-700 text-sm mt-1">Insurance rates and regulations vary by state. Please confirm the customer&apos;s state of residence to ensure we provide accurate quotes from licensed carriers.</p>
+                      <p className="font-semibold text-orange-800">Insurance Licensing Verification</p>
+                      <p className="text-orange-700 text-sm mt-1">Insurance rates and regulations vary by state. Please confirm the customer&apos;s state of residence to ensure we provide accurate quotes from licensed carriers.</p>
                     </div>
                   </div>
                 </div>
@@ -1846,7 +1846,7 @@ function ConnectionTab({
                   <select
                     value={formData.state}
                     onChange={(e) => { setFormData({ ...formData, state: e.target.value }); setStateConfirmed(false); }}
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition text-lg"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-lg"
                   >
                     {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
@@ -1867,7 +1867,7 @@ function ConnectionTab({
                     type="checkbox"
                     checked={stateConfirmed}
                     onChange={(e) => setStateConfirmed(e.target.checked)}
-                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#E8822A] focus:ring-[#E8822A]"
                   />
                   <span className="text-gray-700 text-sm">
                     I confirm that the customer is seeking insurance coverage for a vehicle registered in <strong>{US_STATES.find(s => s.value === formData.state)?.label || formData.state}</strong>, and I understand that a licensed agent will finalize their policy.
@@ -1884,7 +1884,7 @@ function ConnectionTab({
                 <button
                   onClick={() => setFormStep("extended_info")}
                   disabled={!stateConfirmed}
-                  className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition"
+                  className="w-full bg-[#E8822A] hover:bg-[#D47526] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition"
                 >
                   Continue to Profile Details
                 </button>
@@ -1900,19 +1900,19 @@ function ConnectionTab({
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Age</label>
                     <input type="number" value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Gender</label>
                     <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value as ExtendedFormData["gender"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Marital Status</label>
                     <select value={formData.maritalStatus} onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value as ExtendedFormData["maritalStatus"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value="single">Single</option><option value="married">Married</option><option value="divorced">Divorced</option><option value="widowed">Widowed</option>
                     </select>
                   </div>
@@ -1922,12 +1922,12 @@ function ConnectionTab({
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Years Licensed</label>
                     <input type="number" value={formData.yearsLicensed} onChange={(e) => setFormData({ ...formData, yearsLicensed: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Driving History</label>
                     <select value={formData.drivingHistory} onChange={(e) => setFormData({ ...formData, drivingHistory: e.target.value as ExtendedFormData["drivingHistory"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value="clean">Clean Record</option><option value="minor_violations">Minor Violations</option><option value="major_violations">Major Violations</option><option value="accidents">At-Fault Accidents</option><option value="dui">DUI/DWI</option>
                     </select>
                   </div>
@@ -1937,14 +1937,14 @@ function ConnectionTab({
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Credit Score</label>
                     <select value={formData.creditScore} onChange={(e) => setFormData({ ...formData, creditScore: e.target.value as ExtendedFormData["creditScore"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value="excellent">Excellent (750+)</option><option value="good">Good (700-749)</option><option value="fair">Fair (650-699)</option><option value="poor">Poor (Below 650)</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Annual Mileage</label>
                     <input type="number" value={formData.annualMileage} onChange={(e) => setFormData({ ...formData, annualMileage: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition" />
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
                   </div>
                 </div>
 
@@ -1952,14 +1952,14 @@ function ConnectionTab({
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Coverage Type</label>
                     <select value={formData.coverageType} onChange={(e) => setFormData({ ...formData, coverageType: e.target.value as ExtendedFormData["coverageType"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value="liability">Liability Only</option><option value="collision">Liability + Collision</option><option value="comprehensive">Liability + Comprehensive</option><option value="full">Full Coverage</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">Deductible</label>
                     <select value={formData.deductible} onChange={(e) => setFormData({ ...formData, deductible: parseInt(e.target.value) as ExtendedFormData["deductible"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition">
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
                       <option value={250}>$250</option><option value={500}>$500</option><option value={1000}>$1,000</option><option value={2000}>$2,000</option>
                     </select>
                   </div>
@@ -1985,7 +1985,7 @@ function ConnectionTab({
                 </div>
 
                 <button onClick={() => { const quotes = generateQuotes(); initializeChatbot(quotes); setFormStep("chatbot"); }}
-                  className="w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg font-semibold transition mt-4">
+                  className="w-full bg-[#E8822A] hover:bg-[#D47526] text-white py-3 rounded-lg font-semibold transition mt-4">
                   Get My Quotes
                 </button>
               </div>
@@ -1996,7 +1996,7 @@ function ConnectionTab({
               <div className="flex flex-col h-[500px]">
                 {/* Quote Header */}
                 {selectedQuote && (
-                  <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-t-xl p-4 text-white -mx-6 -mt-6 mb-4">
+                  <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-t-xl p-4 text-white -mx-6 -mt-6 mb-4">
                     <div className="flex items-center justify-between px-2">
                       <div>
                         <p className="text-sm opacity-80">Best Rate for {formData.customerName.split(" ")[0]}</p>
@@ -2014,7 +2014,7 @@ function ConnectionTab({
                 <div className="flex-1 overflow-y-auto space-y-4 mb-4">
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] rounded-xl px-4 py-3 ${msg.role === "user" ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-800"}`}>
+                      <div className={`max-w-[80%] rounded-xl px-4 py-3 ${msg.role === "user" ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-800"}`}>
                         <p className="whitespace-pre-wrap text-sm">{msg.text}</p>
                       </div>
                     </div>
@@ -2040,8 +2040,8 @@ function ConnectionTab({
                 {/* Chat Input */}
                 <div className="flex gap-2">
                   <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleChatSend(chatInput)}
-                    placeholder="Ask about coverage, discounts, or anything else..." className="flex-1 px-4 py-3 rounded-lg border border-gray-200 focus:border-[#1e3a5f] focus:outline-none" />
-                  <button onClick={() => handleChatSend(chatInput)} className="bg-[#1e3a5f] text-white px-4 py-3 rounded-lg">
+                    placeholder="Ask about coverage, discounts, or anything else..." className="flex-1 px-4 py-3 rounded-lg border border-gray-200 focus:border-[#E8822A] focus:outline-none" />
+                  <button onClick={() => handleChatSend(chatInput)} className="bg-[#E8822A] text-white px-4 py-3 rounded-lg">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                   </button>
                 </div>
@@ -2060,7 +2060,7 @@ function ConnectionTab({
             {formStep === "payment" && selectedQuote && (
               <div className="space-y-6">
                 {/* Selected Quote Summary */}
-                <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] rounded-xl p-4 text-white -mx-6 -mt-6 mb-2">
+                <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-xl p-4 text-white -mx-6 -mt-6 mb-2">
                   <div className="flex items-center justify-between px-2">
                     <div>
                       <p className="text-sm opacity-80">Selected Policy</p>
@@ -2085,8 +2085,8 @@ function ConnectionTab({
                           key={method.id}
                           className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition ${
                             selectedPaymentMethod === method.id
-                              ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
-                              : "border-gray-200 hover:border-[#1e3a5f]/30"
+                              ? "border-[#E8822A] bg-[#E8822A]/5"
+                              : "border-gray-200 hover:border-[#E8822A]/30"
                           }`}
                         >
                           <div className="flex items-center gap-3">
@@ -2096,7 +2096,7 @@ function ConnectionTab({
                               value={method.id}
                               checked={selectedPaymentMethod === method.id}
                               onChange={(e) => setSelectedPaymentMethod(e.target.value as PaymentMethodType)}
-                              className="w-4 h-4 text-[#1e3a5f]"
+                              className="w-4 h-4 text-[#E8822A]"
                             />
                             <div className="text-2xl">{method.icon}</div>
                             <div>
@@ -2149,7 +2149,7 @@ function ConnectionTab({
                         </div>
                         <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold">
                           <span className="text-gray-800">Total Due Today</span>
-                          <span className="text-[#1e3a5f]">${total.toFixed(2)}</span>
+                          <span className="text-[#E8822A]">${total.toFixed(2)}</span>
                         </div>
                       </div>
                     );
@@ -2157,8 +2157,8 @@ function ConnectionTab({
                 </div>
 
                 {/* Fee Information */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                  <p className="text-blue-700 text-xs">
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+                  <p className="text-orange-700 text-xs">
                     <strong>Lower fees with ACH:</strong> Bank transfers (ACH) have the lowest processing fees, capped at $5 max. Credit cards and digital wallets have higher fees but process instantly.
                   </p>
                 </div>
@@ -2201,14 +2201,14 @@ function ConnectionTab({
                 <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {allQuotes.map((quote) => (
                     <button key={quote.companyId} onClick={() => { setSelectedQuote(quote); setFormStep("chatbot"); }}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition ${selectedQuote?.companyId === quote.companyId ? "border-[#1e3a5f] bg-[#1e3a5f]/5" : "border-gray-200 hover:border-[#1e3a5f]/50"}`}>
+                      className={`w-full p-4 rounded-xl border-2 text-left transition ${selectedQuote?.companyId === quote.companyId ? "border-[#E8822A] bg-[#E8822A]/5" : "border-gray-200 hover:border-[#E8822A]/50"}`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-bold text-gray-800">{quote.companyName}</p>
                           <p className="text-sm text-gray-500">{quote.coverageType} coverage • ${quote.deductible.toFixed(2)} deductible</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-[#1e3a5f]">${quote.monthlyPremium.toFixed(2)}/mo</p>
+                          <p className="text-2xl font-bold text-[#E8822A]">${quote.monthlyPremium.toFixed(2)}/mo</p>
                           <p className="text-sm text-emerald-600">{quote.totalDiscount}% savings</p>
                         </div>
                       </div>
@@ -2244,7 +2244,7 @@ function ConnectionTab({
           </div>
 
           <div className="flex items-center gap-6 mb-6">
-            <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+            <div className="h-16 w-16 rounded-full bg-[#E8822A] flex items-center justify-center">
               <span className="text-2xl font-bold text-white">{(pendingInvitation.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
@@ -2266,7 +2266,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${Number(pendingInvitation.rate_per_lead || 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-[#E8822A]">${Number(pendingInvitation.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2334,7 +2334,7 @@ function ConnectionTab({
           </div>
 
           <div className="flex items-center gap-6 mb-6">
-            <div className="h-16 w-16 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+            <div className="h-16 w-16 rounded-full bg-[#E8822A] flex items-center justify-center">
               <span className="text-2xl font-bold text-white">{(pendingTermsRequest.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
@@ -2349,7 +2349,7 @@ function ConnectionTab({
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-gray-500 text-sm">Rate per Lead</p>
-                <p className="text-3xl font-bold text-[#1e3a5f]">${Number(pendingTermsRequest.rate_per_lead || 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-[#E8822A]">${Number(pendingTermsRequest.rate_per_lead || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Payment Schedule</p>
@@ -2401,14 +2401,14 @@ function ConnectionTab({
   return (
     <div className="space-y-6">
       {pendingRequest ? (
-        <div className="bg-white rounded-xl border border-blue-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-orange-200 p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
-            <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse"></div>
-            <h3 className="text-lg font-semibold text-blue-700">Request Pending</h3>
+            <div className="h-3 w-3 rounded-full bg-orange-500 animate-pulse"></div>
+            <h3 className="text-lg font-semibold text-orange-700">Request Pending</h3>
           </div>
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <span className="text-xl font-bold text-blue-600">{(pendingRequest.buyerBusinessName || "?").charAt(0)}</span>
+            <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+              <span className="text-xl font-bold text-orange-600">{(pendingRequest.buyerBusinessName || "?").charAt(0)}</span>
             </div>
             <div>
               <p className="font-semibold text-gray-800">{pendingRequest.buyerBusinessName}</p>
@@ -2418,7 +2418,7 @@ function ConnectionTab({
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Connect with a Business</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Connect with a Business</h3>
           <p className="text-gray-600 mb-6">Select a business to request a connection. They will set the payment terms for your partnership.</p>
 
           {buyers.length > 0 ? (
@@ -2432,16 +2432,16 @@ function ConnectionTab({
                     key={buyer.id}
                     className={`border rounded-xl p-4 transition ${
                       selectedBuyer?.id === buyer.id
-                        ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                        ? "border-[#E8822A] bg-[#E8822A]/5"
                         : isDisabled
                         ? "border-gray-200 bg-gray-50 opacity-60"
-                        : "border-gray-200 hover:border-[#1e3a5f]/50 cursor-pointer"
+                        : "border-gray-200 hover:border-[#E8822A]/50 cursor-pointer"
                     }`}
                     onClick={() => !isDisabled && setSelectedBuyer(buyer)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-[#1e3a5f] flex items-center justify-center">
+                        <div className="h-12 w-12 rounded-full bg-[#E8822A] flex items-center justify-center">
                           <span className="text-xl font-bold text-white">{(buyer.businessName || "?").charAt(0)}</span>
                         </div>
                         <div>
@@ -2453,7 +2453,7 @@ function ConnectionTab({
                         <span className={`text-xs px-2 py-1 rounded-full ${
                           existingRequest.status === "rejected" || existingRequest.status === "declined"
                             ? "bg-red-100 text-red-700"
-                            : "bg-blue-100 text-blue-700"
+                            : "bg-orange-100 text-orange-700"
                         }`}>
                           {existingRequest.status === "rejected" ? "Rejected" :
                            existingRequest.status === "declined" ? "Declined" :
@@ -2481,12 +2481,12 @@ function ConnectionTab({
                 value={requestMessage}
                 onChange={(e) => setRequestMessage(e.target.value)}
                 placeholder="Add a message (optional)"
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#1e3a5f] transition resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#E8822A] transition resize-none"
                 rows={3}
               />
               <button
                 onClick={handleSendRequest}
-                className="mt-4 w-full bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white py-3 rounded-lg font-semibold transition"
+                className="mt-4 w-full bg-[#E8822A] hover:bg-[#D47526] text-white py-3 rounded-lg font-semibold transition"
               >
                 Send Connection Request
               </button>
@@ -2498,7 +2498,7 @@ function ConnectionTab({
       {/* Request History */}
       {myRequests.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Request History</h3>
+          <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Request History</h3>
           <div className="space-y-3">
             {myRequests.map((request) => (
               <div key={request.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -2510,7 +2510,7 @@ function ConnectionTab({
                   request.status === "accepted" ? "bg-emerald-100 text-emerald-700" :
                   request.status === "rejected" || request.status === "declined" ? "bg-red-100 text-red-700" :
                   request.status === "terms_set" ? "bg-amber-100 text-amber-700" :
-                  "bg-blue-100 text-blue-700"
+                  "bg-orange-100 text-orange-700"
                 }`}>
                   {request.status === "terms_set" ? "Terms Ready" : request.status}
                 </span>
@@ -2528,11 +2528,11 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#1e3a5f]">All Leads ({dbLeads.length})</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
         {activeConnection && (
           <button
             onClick={onNavigateToConnection}
-            className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-medium"
+            className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg transition flex items-center gap-2 font-medium"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2543,7 +2543,7 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
       </div>
       {dbLeadsLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
         </div>
       ) : dbLeads.length > 0 ? (
         <div className="overflow-x-auto">
@@ -2570,13 +2570,13 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                   <td className="py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                      lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                      lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                       "bg-amber-100 text-amber-700"
                     }`}>
                       {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                     </span>
                   </td>
-                  <td className="py-4 text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
+                  <td className="py-4 text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2621,7 +2621,7 @@ function EarningsTab({
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
-          <p className="text-3xl font-bold text-[#1e3a5f]">
+          <p className="text-3xl font-bold text-[#E8822A]">
             ${(totalLeads > 0 ? (totalEarnings / totalLeads) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet : 0).toFixed(2)}
           </p>
         </div>
@@ -2629,7 +2629,7 @@ function EarningsTab({
 
       {/* Earnings History */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-4">Earnings History</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Earnings History</h3>
         {dbLeads.length > 0 ? (
           <div className="space-y-3">
             {dbLeads.map((lead) => (
@@ -2639,10 +2639,10 @@ function EarningsTab({
                   <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[#1e3a5f] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
+                  <p className="text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                    lead.payoutStatus === "processing" ? "bg-blue-100 text-blue-700" :
+                    lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                     "bg-amber-100 text-amber-700"
                   }`}>
                     {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
@@ -2780,7 +2780,7 @@ function ProfileTab({
     <div className="grid md:grid-cols-2 gap-6">
       {/* Profile Form */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Edit Profile</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Edit Profile</h3>
 
         {saved && (
           <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm flex items-center gap-2">
@@ -2798,7 +2798,7 @@ function ProfileTab({
               {profilePicture ? (
                 <img src={profilePicture} alt="Profile" className="h-20 w-20 rounded-full object-cover border-2 border-gray-200" />
               ) : (
-                <div className="h-20 w-20 rounded-full bg-[#1e3a5f] flex items-center justify-center border-2 border-gray-200">
+                <div className="h-20 w-20 rounded-full bg-[#E8822A] flex items-center justify-center border-2 border-gray-200">
                   <span className="text-2xl font-bold text-white">{displayName?.charAt(0) || "?"}</span>
                 </div>
               )}
@@ -2820,7 +2820,7 @@ function ProfileTab({
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
             />
           </div>
           <div>
@@ -2829,7 +2829,7 @@ function ProfileTab({
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#1e3a5f] focus:outline-none transition"
+              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
             />
           </div>
           <div>
@@ -2839,7 +2839,7 @@ function ProfileTab({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="City, State"
-              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
             />
           </div>
           <div>
@@ -2849,7 +2849,7 @@ function ProfileTab({
               onChange={(e) => setBio(e.target.value)}
               rows={3}
               placeholder="Tell businesses about yourself..."
-              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition resize-none"
+              className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition resize-none"
             />
           </div>
 
@@ -2864,12 +2864,12 @@ function ProfileTab({
                   onClick={() => setPayoutMethod(opt.value)}
                   className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
                     payoutMethod === opt.value
-                      ? "border-[#1e3a5f] bg-blue-50 text-[#1e3a5f]"
+                      ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
                       : "border-gray-200 hover:border-gray-300 text-gray-600"
                   }`}
                 >
                   <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                    payoutMethod === opt.value ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-500"
+                    payoutMethod === opt.value ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-500"
                   }`}>{opt.icon}</span>
                   <span className="font-medium text-sm">{opt.label}</span>
                 </button>
@@ -2888,7 +2888,7 @@ function ProfileTab({
                     value={payoutVenmo}
                     onChange={(e) => setPayoutVenmo(e.target.value)}
                     placeholder="@username"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               )}
@@ -2900,7 +2900,7 @@ function ProfileTab({
                     value={payoutPaypal}
                     onChange={(e) => setPayoutPaypal(e.target.value)}
                     placeholder="email@example.com"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               )}
@@ -2912,7 +2912,7 @@ function ProfileTab({
                     value={payoutCashapp}
                     onChange={(e) => setPayoutCashapp(e.target.value)}
                     placeholder="$cashtag"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               )}
@@ -2925,7 +2925,7 @@ function ProfileTab({
                       value={payoutBankRouting}
                       onChange={(e) => setPayoutBankRouting(e.target.value)}
                       placeholder="9-digit routing number"
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                     />
                   </div>
                   <div>
@@ -2935,7 +2935,7 @@ function ProfileTab({
                       value={payoutBankAccount}
                       onChange={(e) => setPayoutBankAccount(e.target.value)}
                       placeholder="Account number"
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#1e3a5f] focus:outline-none transition"
+                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
                     />
                   </div>
                 </div>
@@ -2946,7 +2946,7 @@ function ProfileTab({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
+            className="bg-[#E8822A] hover:bg-[#D47526] text-white px-6 py-2 rounded-lg transition font-semibold shadow-md disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Profile"}
           </button>
@@ -2955,10 +2955,10 @@ function ProfileTab({
 
       {/* Baseball Card Preview */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-[#1e3a5f] mb-6">Your Baseball Card Preview</h3>
+        <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Your Baseball Card Preview</h3>
 
         <div className="border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4a6f] p-6 text-white">
+          <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] p-6 text-white">
             <div className="flex items-center gap-4">
               {profilePicture ? (
                 <img src={profilePicture} alt="Profile" className="h-16 w-16 rounded-full object-cover border-2 border-white/30" />
@@ -2982,7 +2982,7 @@ function ProfileTab({
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="text-center bg-gray-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-[#1e3a5f]">{provider?.stats?.totalLeadsSubmitted || 0}</p>
+                <p className="text-2xl font-bold text-[#E8822A]">{provider?.stats?.totalLeadsSubmitted || 0}</p>
                 <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
               </div>
               <div className="text-center bg-gray-50 rounded-lg p-3">
@@ -3006,9 +3006,9 @@ function ProfileTab({
 
 function StatCard({ title, value, color }: { title: string; value: string; color: string }) {
   const colors: Record<string, string> = {
-    navy: "text-[#1e3a5f]",
+    navy: "text-[#E8822A]",
     emerald: "text-emerald-600",
-    blue: "text-blue-600",
+    blue: "text-orange-600",
     amber: "text-amber-600",
   };
 
@@ -3025,7 +3025,7 @@ function StatusBadge({ status }: { status: string }) {
     pending: "bg-amber-100 text-amber-700",
     claimed: "bg-emerald-100 text-emerald-700",
     expired: "bg-red-100 text-red-700",
-    converted: "bg-blue-100 text-blue-700",
+    converted: "bg-orange-100 text-orange-700",
   };
 
   return (
