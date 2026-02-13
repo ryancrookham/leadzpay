@@ -290,26 +290,6 @@ export default function PaymentsTab({ platformFees, onFeesSaved }: PaymentsTabPr
         </div>
       </div>
 
-      {/* Fee Flow Transparency */}
-      <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
-        <h2 className="text-xl font-semibold text-white mb-4">How WOML Fees Work</h2>
-        <div className="space-y-4">
-          {[
-            { step: "1", text: "Provider submits a lead at the agreed rate per lead", color: "text-blue-400" },
-            { step: "2", text: `Business pays rate + buyer fee = total to @womleads via Venmo`, color: "text-purple-400" },
-            { step: "3", text: "WOML keeps the platform fee, forwards the rest to provider", color: "text-[#C5B358]" },
-            { step: "4", text: `Provider receives rate - provider fee via Venmo from @womleads`, color: "text-emerald-400" },
-          ].map(({ step, text, color }) => (
-            <div key={step} className="flex items-start gap-3">
-              <div className={`h-7 w-7 rounded-full bg-gray-800 flex items-center justify-center shrink-0 ${color} font-bold text-sm`}>
-                {step}
-              </div>
-              <p className="text-gray-300 text-sm pt-0.5">{text}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Venmo Info Card */}
       <div className="bg-gray-900/50 rounded-xl border border-gray-800 p-6">
         <h3 className="text-lg font-semibold text-white mb-3">Payment Method</h3>
