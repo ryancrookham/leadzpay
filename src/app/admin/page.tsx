@@ -124,7 +124,7 @@ interface PlatformFees {
 
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payments">("payments");
+  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payments">("profitability");
 
   // Inline login form state
   const [loginEmail, setLoginEmail] = useState("");
@@ -401,7 +401,7 @@ export default function AdminPanel() {
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["payments", "profitability", "info"] as const).map((tab) => {
+              {(["profitability", "payments", "info"] as const).map((tab) => {
                 const labels: Record<string, string> = {
                   payments: "Payments", profitability: "Profitability",
                   info: "Users",
