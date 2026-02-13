@@ -58,7 +58,7 @@ function LoginContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
   }
@@ -88,7 +88,7 @@ function LoginContent() {
               className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">Welcome Back</h1>
+          <h1 className="text-2xl font-bold text-[#E8822A] mb-2">Welcome Back</h1>
           <p className="text-gray-500">Sign in to your account</p>
         </div>
 
@@ -105,7 +105,7 @@ function LoginContent() {
         )}
 
         {debugInfo && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-xs font-mono">
+          <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 text-xs font-mono">
             {debugInfo}
           </div>
         )}
@@ -119,7 +119,7 @@ function LoginContent() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
               placeholder="you@example.com"
               required
               disabled={isSubmitting}
@@ -134,7 +134,7 @@ function LoginContent() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
               placeholder="Enter your password"
               required
               disabled={isSubmitting}
@@ -148,13 +148,13 @@ function LoginContent() {
                 checked={staySignedIn}
                 onChange={(e) => setStaySignedIn(e.target.checked)}
                 disabled={isSubmitting}
-                className="w-4 h-4 text-[#1e3a5f] rounded border-gray-300 focus:ring-[#1e3a5f]"
+                className="w-4 h-4 text-[#E8822A] rounded border-gray-300 focus:ring-[#E8822A]"
               />
               Stay signed in
             </label>
             <Link
               href="/auth/forgot-password"
-              className="text-sm text-[#1e3a5f] hover:underline"
+              className="text-sm text-[#E8822A] hover:underline"
             >
               Forgot Password?
             </Link>
@@ -163,7 +163,7 @@ function LoginContent() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>
@@ -182,7 +182,7 @@ function LoginContent() {
           </p>
           <Link
             href="/auth/register?role=provider"
-            className="block w-full py-3 px-4 border border-[#1e3a5f] bg-[#1e3a5f]/5 rounded-lg text-center font-medium transition hover:bg-[#1e3a5f]/10 text-[#1e3a5f]"
+            className="block w-full py-3 px-4 border border-[#E8822A] bg-[#E8822A]/5 rounded-lg text-center font-medium transition hover:bg-[#E8822A]/10 text-[#E8822A]"
           >
             Sign up as Lead Provider
           </Link>
@@ -191,7 +191,7 @@ function LoginContent() {
         <div className="mt-6 text-center">
           <Link
             href="/"
-            className="text-sm text-gray-500 hover:text-[#1e3a5f] transition"
+            className="text-sm text-gray-500 hover:text-[#E8822A] transition"
           >
             Back to Home
           </Link>
@@ -204,7 +204,7 @@ function LoginContent() {
 function LoadingFallback() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
     </div>
   );
 }

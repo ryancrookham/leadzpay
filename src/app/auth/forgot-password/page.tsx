@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
               className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">
+          <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
             Forgot Password?
           </h1>
           <p className="text-gray-500">
@@ -101,13 +101,13 @@ export default function ForgotPasswordPage() {
                   setIsSubmitted(false);
                   setEmail("");
                 }}
-                className="w-full py-3 border border-[#1e3a5f] text-[#1e3a5f] rounded-lg font-medium transition hover:bg-[#1e3a5f]/5"
+                className="w-full py-3 border border-[#E8822A] text-[#E8822A] rounded-lg font-medium transition hover:bg-[#E8822A]/5"
               >
                 Try a different email
               </button>
               <Link
                 href="/auth/login"
-                className="block w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition text-center"
+                className="block w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition text-center"
               >
                 Back to Login
               </Link>
@@ -130,7 +130,7 @@ export default function ForgotPasswordPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="you@example.com"
                   required
                   disabled={isSubmitting}
@@ -141,7 +141,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -157,7 +157,7 @@ export default function ForgotPasswordPage() {
             <div className="mt-6 text-center">
               <Link
                 href="/auth/login"
-                className="text-sm text-gray-500 hover:text-[#1e3a5f] transition"
+                className="text-sm text-gray-500 hover:text-[#E8822A] transition"
               >
                 Back to Login
               </Link>

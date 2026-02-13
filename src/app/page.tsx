@@ -35,7 +35,7 @@ export default function Home() {
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <button
           onClick={() => { window.location.href = "/admin"; }}
-          className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#1e3a5f] transition cursor-pointer"
+          className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E8822A] transition cursor-pointer"
         >
           <Image
             src="/woml-logo.png"
@@ -50,7 +50,7 @@ export default function Home() {
             <div className="flex gap-2 items-center">
               <Link
                 href={dashboardUrl}
-                className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
               >
                 Go to Dashboard
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,19 +74,19 @@ export default function Home() {
             <>
               <Link
                 href="/auth/forgot-password"
-                className="text-gray-500 hover:text-[#1e3a5f] px-3 py-2 text-sm transition"
+                className="text-gray-500 hover:text-[#E8822A] px-3 py-2 text-sm transition"
               >
                 Forgot Password?
               </Link>
               <Link
                 href="/auth/login"
-                className="text-[#1e3a5f] hover:text-[#2a4a6f] px-3 py-2 font-medium transition"
+                className="text-[#E8822A] hover:text-[#D47526] px-3 py-2 font-medium transition"
               >
                 Sign In
               </Link>
               <Link
                 href="/auth/register?role=provider"
-                className="bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white px-4 py-2 rounded-lg font-medium transition"
+                className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition"
               >
                 Sign Up
               </Link>

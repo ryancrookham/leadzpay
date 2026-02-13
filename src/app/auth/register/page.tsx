@@ -258,7 +258,7 @@ function RegisterContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
   }
@@ -289,7 +289,7 @@ function RegisterContent() {
               className="mx-auto mb-4 h-18 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-[#1e3a5f] mb-2">
+          <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
             {step === 1 ? "Create Your Profile" : "Set Up Your Payouts"}
           </h1>
           <p className="text-gray-500">
@@ -301,13 +301,13 @@ function RegisterContent() {
         <div className="flex items-center justify-center mb-6">
           <div className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
-              step >= 1 ? "bg-[#1e3a5f] text-white" : "bg-gray-200 text-gray-500"
+              step >= 1 ? "bg-[#E8822A] text-white" : "bg-gray-200 text-gray-500"
             }`}>
               1
             </div>
-            <div className={`w-16 h-1 ${step >= 2 ? "bg-[#1e3a5f]" : "bg-gray-200"}`}></div>
+            <div className={`w-16 h-1 ${step >= 2 ? "bg-[#E8822A]" : "bg-gray-200"}`}></div>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
-              step >= 2 ? "bg-[#1e3a5f] text-white" : "bg-gray-200 text-gray-500"
+              step >= 2 ? "bg-[#E8822A] text-white" : "bg-gray-200 text-gray-500"
             }`}>
               2
             </div>
@@ -335,7 +335,7 @@ function RegisterContent() {
               <button
                 type="button"
                 onClick={handleProfilePictureClick}
-                className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-[#1e3a5f] hover:bg-gray-50 transition group"
+                className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-[#E8822A] hover:bg-gray-50 transition group"
               >
                 {profilePicture ? (
                   <img
@@ -345,7 +345,7 @@ function RegisterContent() {
                   />
                 ) : (
                   <div className="text-center">
-                    <svg className="w-8 h-8 mx-auto text-gray-400 group-hover:text-[#1e3a5f] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-8 h-8 mx-auto text-gray-400 group-hover:text-[#E8822A] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -367,7 +367,7 @@ function RegisterContent() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="johndoe"
                   required
                 />
@@ -380,7 +380,7 @@ function RegisterContent() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="you@example.com"
                   required
                 />
@@ -396,7 +396,7 @@ function RegisterContent() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                 placeholder="John Doe"
                 required
               />
@@ -412,7 +412,7 @@ function RegisterContent() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="(555) 123-4567"
                 />
               </div>
@@ -424,7 +424,7 @@ function RegisterContent() {
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="Philadelphia, PA"
                 />
               </div>
@@ -440,7 +440,7 @@ function RegisterContent() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="Min. 8 characters"
                   required
                 />
@@ -453,7 +453,7 @@ function RegisterContent() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                   placeholder="Confirm password"
                   required
                 />
@@ -466,7 +466,7 @@ function RegisterContent() {
 
             <button
               type="submit"
-              className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition flex items-center justify-center gap-2 mt-6"
+              className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition flex items-center justify-center gap-2 mt-6"
             >
               Continue
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -487,7 +487,7 @@ function RegisterContent() {
             <div
               className={`border rounded-lg p-4 cursor-pointer transition ${
                 payoutMethod === "venmo"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  ? "border-[#E8822A] bg-[#E8822A]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
               onClick={() => setPayoutMethod("venmo")}
@@ -498,7 +498,7 @@ function RegisterContent() {
                   name="payoutMethod"
                   checked={payoutMethod === "venmo"}
                   onChange={() => setPayoutMethod("venmo")}
-                  className="w-4 h-4 text-[#1e3a5f]"
+                  className="w-4 h-4 text-[#E8822A]"
                 />
                 <span className="ml-3 font-medium text-gray-900">Venmo</span>
               </label>
@@ -508,7 +508,7 @@ function RegisterContent() {
                     type="text"
                     value={venmoUsername}
                     onChange={(e) => setVenmoUsername(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                     placeholder="@john-doe"
                   />
                 </div>
@@ -519,7 +519,7 @@ function RegisterContent() {
             <div
               className={`border rounded-lg p-4 cursor-pointer transition ${
                 payoutMethod === "paypal"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  ? "border-[#E8822A] bg-[#E8822A]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
               onClick={() => setPayoutMethod("paypal")}
@@ -530,7 +530,7 @@ function RegisterContent() {
                   name="payoutMethod"
                   checked={payoutMethod === "paypal"}
                   onChange={() => setPayoutMethod("paypal")}
-                  className="w-4 h-4 text-[#1e3a5f]"
+                  className="w-4 h-4 text-[#E8822A]"
                 />
                 <span className="ml-3 font-medium text-gray-900">PayPal</span>
               </label>
@@ -540,7 +540,7 @@ function RegisterContent() {
                     type="email"
                     value={paypalEmail}
                     onChange={(e) => setPaypalEmail(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                     placeholder="paypal@example.com"
                   />
                 </div>
@@ -551,7 +551,7 @@ function RegisterContent() {
             <div
               className={`border rounded-lg p-4 cursor-pointer transition ${
                 payoutMethod === "cashapp"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  ? "border-[#E8822A] bg-[#E8822A]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
               onClick={() => setPayoutMethod("cashapp")}
@@ -562,7 +562,7 @@ function RegisterContent() {
                   name="payoutMethod"
                   checked={payoutMethod === "cashapp"}
                   onChange={() => setPayoutMethod("cashapp")}
-                  className="w-4 h-4 text-[#1e3a5f]"
+                  className="w-4 h-4 text-[#E8822A]"
                 />
                 <span className="ml-3 font-medium text-gray-900">Cash App</span>
               </label>
@@ -572,7 +572,7 @@ function RegisterContent() {
                     type="text"
                     value={cashappTag}
                     onChange={(e) => setCashappTag(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                     placeholder="$johndoe"
                   />
                 </div>
@@ -583,7 +583,7 @@ function RegisterContent() {
             <div
               className={`border rounded-lg p-4 cursor-pointer transition ${
                 payoutMethod === "bank"
-                  ? "border-[#1e3a5f] bg-[#1e3a5f]/5"
+                  ? "border-[#E8822A] bg-[#E8822A]/5"
                   : "border-gray-200 hover:border-gray-300"
               }`}
               onClick={() => setPayoutMethod("bank")}
@@ -594,7 +594,7 @@ function RegisterContent() {
                   name="payoutMethod"
                   checked={payoutMethod === "bank"}
                   onChange={() => setPayoutMethod("bank")}
-                  className="w-4 h-4 text-[#1e3a5f]"
+                  className="w-4 h-4 text-[#E8822A]"
                 />
                 <span className="ml-3 font-medium text-gray-900">Bank Account</span>
               </label>
@@ -604,14 +604,14 @@ function RegisterContent() {
                     type="text"
                     value={bankRouting}
                     onChange={(e) => setBankRouting(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                     placeholder="Routing Number (9 digits)"
                   />
                   <input
                     type="text"
                     value={bankAccount}
                     onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
                     placeholder="Account Number"
                   />
                 </div>
@@ -634,7 +634,7 @@ function RegisterContent() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 py-3 bg-[#1e3a5f] hover:bg-[#2a4a6f] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -654,7 +654,7 @@ function RegisterContent() {
             Already have an account?{" "}
             <Link
               href="/auth/login"
-              className="text-[#1e3a5f] hover:underline font-medium"
+              className="text-[#E8822A] hover:underline font-medium"
             >
               Sign in
             </Link>
@@ -664,7 +664,7 @@ function RegisterContent() {
         <div className="mt-4 text-center">
           <Link
             href="/"
-            className="text-sm text-gray-500 hover:text-[#1e3a5f] transition"
+            className="text-sm text-gray-500 hover:text-[#E8822A] transition"
           >
             Back to Home
           </Link>
@@ -677,7 +677,7 @@ function RegisterContent() {
 function LoadingFallback() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1e3a5f]"></div>
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
     </div>
   );
 }
