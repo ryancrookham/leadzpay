@@ -671,13 +671,14 @@ export async function getRevenueByDay(days: number = 30) {
   const sql = getSql();
   const result = await sql`
     SELECT
-      DATE(created_at) as day,
+      DATE(completed_at AT TIME ZONE 'America/New_York') as day,
       COALESCE(SUM(amount), 0)::numeric as revenue,
       COUNT(*)::int as tx_count
     FROM transactions
     WHERE type = 'platform_fee'
-      AND created_at >= NOW() - INTERVAL '1 day' * ${days}
-    GROUP BY DATE(created_at)
+      AND status = 'completed'
+      AND completed_at >= NOW() - INTERVAL '1 day' * ${days}
+    GROUP BY DATE(completed_at AT TIME ZONE 'America/New_York')
     ORDER BY day ASC
   `;
   return result.map((r: any) => ({
@@ -906,7 +907,7 @@ export async function getRevenueByPeriod(period: 'week' | 'month' | 'year') {
       COUNT(*) FILTER (WHERE status = 'completed')::int as completed_tx_count
     FROM transactions
     WHERE type = 'platform_fee'
-      AND created_at >= NOW() - INTERVAL '1 day' * ${days}
+      AND COALESCE(completed_at, created_at) >= NOW() - INTERVAL '1 day' * ${days}
   `;
   return {
     completedRevenue: Number(result[0].completed_revenue),

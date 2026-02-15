@@ -20,6 +20,13 @@ interface ChartPoint {
   rollingAvg: number;
 }
 
+function toLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function computeChartData(rawData: RevenueDay[]): ChartPoint[] {
   if (rawData.length === 0) return [];
 
@@ -32,7 +39,7 @@ function computeChartData(rawData: RevenueDay[]): ChartPoint[] {
   for (let i = 36; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    allDays.push(date.toISOString().split("T")[0]);
+    allDays.push(toLocalDateStr(date));
   }
 
   // Fill in missing days with zero
@@ -132,7 +139,7 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
               y1={getY(tick)}
               x2={svgWidth - paddingRight}
               y2={getY(tick)}
-              stroke="#374151"
+              stroke="#E5E7EB"
               strokeDasharray="4 3"
               strokeWidth={0.5}
             />
@@ -145,7 +152,7 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
               x={paddingLeft - 8}
               y={getY(tick) + 3.5}
               textAnchor="end"
-              fill="#9CA3AF"
+              fill="#6B7280"
               fontSize={10}
             >
               ${tick % 1 === 0 ? tick : tick.toFixed(2)}
@@ -161,7 +168,7 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
               width={barWidth}
               height={Math.max(chartHeight - (chartHeight - (d.revenue / yMax) * chartHeight), 0)}
               rx={2}
-              fill={hoveredIndex === i ? "#d4c462" : "#C5B358"}
+              fill={hoveredIndex === i ? "#F09040" : "#E8822A"}
               fillOpacity={hoveredIndex === i ? 1 : 0.8}
               className="transition-colors duration-150"
             />
@@ -184,7 +191,7 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
               cy={getY(hoveredData.rollingAvg)}
               r={4}
               fill="#60A5FA"
-              stroke="#1e3a5f"
+              stroke="#fff"
               strokeWidth={1.5}
             />
           )}
@@ -197,7 +204,7 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
                 x={getX(i)}
                 y={svgHeight - 6}
                 textAnchor="middle"
-                fill="#9CA3AF"
+                fill="#6B7280"
                 fontSize={9}
               >
                 {d.dateLabel}
@@ -223,24 +230,24 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
         {/* Tooltip */}
         {hoveredIndex !== null && hoveredData && (
           <div
-            className="absolute bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 shadow-lg pointer-events-none z-10"
+            className="absolute bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-lg pointer-events-none z-10"
             style={{
               left: `${((getX(hoveredIndex)) / svgWidth) * 100}%`,
               top: "0px",
               transform: hoveredIndex > barCount - 5 ? "translateX(-100%)" : "translateX(-50%)",
             }}
           >
-            <p className="text-white text-xs font-medium mb-1">
+            <p className="text-gray-900 text-xs font-medium mb-1">
               {new Date(hoveredData.day + "T12:00:00").toLocaleDateString(undefined, {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
               })}
             </p>
-            <p className="text-[#C5B358] text-xs">
+            <p className="text-[#E8822A] text-xs">
               Revenue: ${hoveredData.revenue.toFixed(2)}
             </p>
-            <p className="text-gray-400 text-[10px]">
+            <p className="text-gray-600 text-[10px]">
               {hoveredData.txCount} lead{hoveredData.txCount !== 1 ? "s" : ""}
             </p>
             <p className="text-blue-400 text-xs mt-0.5">
@@ -253,12 +260,12 @@ export default function RevenueChart({ revenueByDay }: RevenueChartProps) {
       {/* Legend */}
       <div className="flex items-center gap-5 mt-3 ml-1">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-[#C5B358]/80" />
-          <span className="text-gray-400 text-xs">Daily Revenue</span>
+          <div className="w-3 h-3 rounded-sm bg-[#E8822A]/80" />
+          <span className="text-gray-600 text-xs">Daily Revenue</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-4 h-0.5 bg-blue-400 rounded" />
-          <span className="text-gray-400 text-xs">7-Day Average</span>
+          <span className="text-gray-600 text-xs">7-Day Average</span>
         </div>
       </div>
     </div>
