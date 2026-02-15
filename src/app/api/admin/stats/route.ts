@@ -7,6 +7,8 @@ import {
 } from "@/lib/db";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Verify admin via NextAuth session
@@ -32,6 +34,9 @@ export async function GET() {
       getVenmoFeeCosts(),
       getDetailedUserStats(),
     ]);
+
+    // Debug: log revenue dates to verify timezone fix
+    console.log("[admin/stats] revenueByDay:", JSON.stringify(revenueByDay));
 
     // Sanitize leads for admin view (no encrypted PII)
     const sanitizedLeads = recentLeads.map((lead) => {
