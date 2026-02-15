@@ -103,7 +103,7 @@ export default function Home() {
             alt="WOML - Word of Mouth Leads"
             width={4480}
             height={1260}
-            className="mx-auto w-full h-auto object-contain scale-[2]"
+            className="mx-auto w-full h-auto object-contain"
             priority
           />
         </div>
