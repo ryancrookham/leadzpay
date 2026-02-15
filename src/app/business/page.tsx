@@ -11,6 +11,7 @@ import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import { WOML_PLATFORM } from "@/lib/master-operator";
+import BusinessRevenueChart from "./components/BusinessRevenueChart";
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -425,17 +426,21 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
-  // Get leads by day for chart (last 7 days)
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toISOString().split('T')[0];
-  });
-
-  const leadsByDay = last7Days.map(day => ({
-    day: new Date(day).toLocaleDateString('en-US', { weekday: 'short' }),
-    count: dbLeads.filter(l => l.submittedAt.split('T')[0] === day).length,
-  }));
+  // Compute spending by day for revenue chart (all leads, grouped by submission date)
+  const spendingByDay = (() => {
+    const dayMap = new Map<string, { revenue: number; txCount: number }>();
+    dbLeads.forEach(lead => {
+      const day = lead.submittedAt.split('T')[0];
+      const cost = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal;
+      const existing = dayMap.get(day) || { revenue: 0, txCount: 0 };
+      existing.revenue += cost;
+      existing.txCount++;
+      dayMap.set(day, existing);
+    });
+    return Array.from(dayMap.entries()).map(([day, data]) => ({
+      day, revenue: data.revenue, txCount: data.txCount,
+    }));
+  })();
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
@@ -513,85 +518,36 @@ function BusinessPortalContent() {
               <StatCard title="Avg Lead Value" value={`$${avgLeadValue.toFixed(2)}`} color="amber" />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Leads by Day Chart */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Leads This Week</h3>
-                {(() => {
-                  const maxCount = Math.max(...leadsByDay.map(d => d.count), 3);
-                  const padX = 20;
-                  const padTop = 22;
-                  const padBot = 28;
-                  const w = 320;
-                  const h = 200;
-                  const chartW = w - padX * 2;
-                  const chartH = h - padTop - padBot;
-                  const stepX = chartW / (leadsByDay.length - 1);
-                  const pts = leadsByDay.map((d, i) => ({
-                    x: padX + i * stepX,
-                    y: padTop + chartH - (d.count / maxCount) * chartH,
-                    ...d,
-                  }));
-                  const linePoints = pts.map(p => `${p.x},${p.y}`).join(" ");
-                  const fillPoints = `${pts[0].x},${padTop + chartH} ${linePoints} ${pts[pts.length - 1].x},${padTop + chartH}`;
-                  return (
-                    <div className="h-64">
-                      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-                        <defs>
-                          <linearGradient id="leadsFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#E8822A" stopOpacity="0.18" />
-                            <stop offset="100%" stopColor="#E8822A" stopOpacity="0.02" />
-                          </linearGradient>
-                        </defs>
-                        {/* Grid lines */}
-                        {[0, 1, 2, 3].map(i => {
-                          const y = padTop + (chartH / 3) * i;
-                          return <line key={i} x1={padX} y1={y} x2={w - padX} y2={y} stroke="#e5e7eb" strokeWidth="0.5" strokeDasharray="4 3" />;
-                        })}
-                        {/* Gradient fill */}
-                        <polygon points={fillPoints} fill="url(#leadsFill)" />
-                        {/* Line */}
-                        <polyline points={linePoints} fill="none" stroke="#E8822A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        {/* Data points and labels */}
-                        {pts.map((p, i) => (
-                          <g key={i}>
-                            <circle cx={p.x} cy={p.y} r="4" fill="#E8822A" stroke="white" strokeWidth="2" />
-                            <text x={p.x} y={p.y - 10} textAnchor="middle" fill="#E8822A" fontSize="11" fontWeight="600">{p.count}</text>
-                            <text x={p.x} y={h - 8} textAnchor="middle" fill="#6b7280" fontSize="10">{p.day}</text>
-                          </g>
-                        ))}
-                      </svg>
-                    </div>
-                  );
-                })()}
-              </div>
+            {/* Lead Spending Chart (30-day) */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Lead Spending (Last 30 Days)</h3>
+              <BusinessRevenueChart spendingByDay={spendingByDay} />
+            </div>
 
-              {/* Top Providers Chart */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Top Providers</h3>
-                <div className="space-y-4">
-                  {leadsByProvider.slice(0, 5).map((provider, i) => (
-                    <div key={provider.id} className="flex items-center gap-4">
-                      <span className="text-gray-400 w-6">{i + 1}.</span>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="text-gray-800 font-medium">{provider.name}</span>
-                          <span className="text-gray-500">{provider.leadCount} leads</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#E8822A] rounded-full"
-                            style={{ width: `${(provider.leadCount / Math.max(...leadsByProvider.map(p => p.leadCount), 1)) * 100}%` }}
-                          />
-                        </div>
+            {/* Top Providers */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Top Providers</h3>
+              <div className="space-y-4">
+                {leadsByProvider.slice(0, 5).map((provider, i) => (
+                  <div key={provider.id} className="flex items-center gap-4">
+                    <span className="text-gray-400 w-6">{i + 1}.</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-800 font-medium">{provider.name}</span>
+                        <span className="text-gray-500">{provider.leadCount} leads</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#E8822A] rounded-full"
+                          style={{ width: `${(provider.leadCount / Math.max(...leadsByProvider.map(p => p.leadCount), 1)) * 100}%` }}
+                        />
                       </div>
                     </div>
-                  ))}
-                  {leadsByProvider.length === 0 && (
-                    <p className="text-gray-400 text-center py-8">No providers yet</p>
-                  )}
-                </div>
+                  </div>
+                ))}
+                {leadsByProvider.length === 0 && (
+                  <p className="text-gray-400 text-center py-8">No providers yet</p>
+                )}
               </div>
             </div>
 
