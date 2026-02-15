@@ -13,7 +13,7 @@ export default function Home() {
   // Show minimal loading state only while checking auth
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#E57C34] flex items-center justify-center">
+      <div className="min-h-screen bg-[#E77500] flex items-center justify-center">
         <div className="text-center">
           <Image
             src="/woml-v3.png"
@@ -30,9 +30,9 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#E57C34] flex flex-col">
+    <div className="min-h-screen bg-[#E77500] flex flex-col">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/20 bg-[#E57C34]/80 backdrop-blur-sm">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/20 bg-[#E77500]/80 backdrop-blur-sm">
         <button
           onClick={() => { window.location.href = "/admin"; }}
           className="flex items-center border-2 border-white/30 rounded-lg px-3 py-2 hover:border-white transition cursor-pointer"
@@ -50,7 +50,7 @@ export default function Home() {
             <div className="flex gap-2 items-center">
               <Link
                 href={dashboardUrl}
-                className="bg-white hover:bg-white/90 text-[#E57C34] px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                className="bg-white hover:bg-white/90 text-[#E77500] px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
               >
                 Go to Dashboard
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/auth/register?role=provider"
-                className="bg-white hover:bg-white/90 text-[#E57C34] px-4 py-2 rounded-lg font-medium transition"
+                className="bg-white hover:bg-white/90 text-[#E77500] px-4 py-2 rounded-lg font-medium transition"
               >
                 Sign Up
               </Link>
@@ -110,7 +110,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/20 py-8 px-8 bg-[#E57C34]">
+      <footer className="border-t border-white/20 py-8 px-8 bg-[#E77500]">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center">
             <Image
