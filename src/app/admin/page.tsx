@@ -232,20 +232,18 @@ export default function AdminPanel() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C5B358]"></div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
   }
 
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
-        <div className="bg-gray-900 p-8 rounded-2xl max-w-md w-full border border-gray-800">
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-200">
           <div className="text-center mb-6">
-            <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4 h-14 w-auto object-contain" />
-            <h1 className="text-2xl font-bold text-white mb-1">WOML Admin Portal</h1>
-            <p className="text-gray-400 text-sm">Sign in to access the owner dashboard</p>
+            <Image src="/woml-v3.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
           </div>
 
           {loginError && (
@@ -256,7 +254,7 @@ export default function AdminPanel() {
 
           <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
             <div>
-              <label className="block text-gray-400 text-sm mb-1.5">Email</label>
+              <label className="block text-gray-600 text-sm mb-1.5">Email</label>
               <input
                 type="email"
                 value={loginEmail}
@@ -264,11 +262,11 @@ export default function AdminPanel() {
                 placeholder="womleads@outlook.com"
                 required
                 disabled={loginLoading}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition disabled:opacity-50"
+                className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E8822A]/40 focus:border-[#E8822A] transition disabled:opacity-50"
               />
             </div>
             <div>
-              <label className="block text-gray-400 text-sm mb-1.5">Password</label>
+              <label className="block text-gray-600 text-sm mb-1.5">Password</label>
               <input
                 type="password"
                 value={loginPassword}
@@ -276,13 +274,13 @@ export default function AdminPanel() {
                 placeholder="Enter admin password"
                 required
                 disabled={loginLoading}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#C5B358]/40 focus:border-[#C5B358] transition disabled:opacity-50"
+                className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E8822A]/40 focus:border-[#E8822A] transition disabled:opacity-50"
               />
             </div>
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full py-3 bg-[#C5B358] hover:bg-[#b8a64e] text-black rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-black rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loginLoading ? (
                 <>
@@ -295,7 +293,7 @@ export default function AdminPanel() {
             </button>
           </form>
 
-          <Link href="/" className="block text-gray-500 hover:text-[#C5B358] mt-6 text-sm text-center transition">
+          <Link href="/" className="block text-gray-500 hover:text-[#E8822A] mt-6 text-sm text-center transition">
             Back to Home
           </Link>
         </div>
@@ -304,21 +302,21 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
+    <div className="min-h-screen bg-black">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-800">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-logo.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
+            <Image src="/woml-v3.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
           </Link>
           <div>
             <h1 className="text-white font-bold text-lg">WOML Owner Portal</h1>
-            <p className="text-gray-400 text-xs">{currentUser.email}</p>
+            <p className="text-gray-500 text-xs">{currentUser.email}</p>
           </div>
         </div>
         <button
           onClick={async () => { await logout(); window.location.href = "/auth/login"; }}
-          className="text-gray-400 hover:text-[#C5B358] transition text-sm"
+          className="text-gray-500 hover:text-[#E8822A] transition text-sm"
         >
           Sign Out
         </button>
@@ -327,12 +325,12 @@ export default function AdminPanel() {
       <main className="max-w-7xl mx-auto px-8 py-8">
         {statsLoading ? (
           <div className="flex justify-center py-24">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#C5B358]"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#E8822A]"></div>
           </div>
         ) : error ? (
           <div className="text-center py-24">
             <p className="text-red-400 mb-4">{error}</p>
-            <button onClick={refreshData} className="text-[#C5B358] hover:text-[#d4c462] underline">
+            <button onClick={refreshData} className="text-[#E8822A] hover:text-[#D47526] underline">
               Try Again
             </button>
           </div>
@@ -340,23 +338,23 @@ export default function AdminPanel() {
           <>
             {/* Top Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
-                <div className="text-gray-400 text-sm mb-1">WOML Revenue</div>
-                <div className="text-3xl font-bold text-[#C5B358]">${stats.completedRevenue.toFixed(2)}</div>
+              <div className="bg-white p-5 rounded-xl border border-gray-200">
+                <div className="text-gray-600 text-sm mb-1">WOML Revenue</div>
+                <div className="text-3xl font-bold text-[#E8822A]">${stats.completedRevenue.toFixed(2)}</div>
                 <div className="text-gray-500 text-xs mt-1">collected fees</div>
               </div>
-              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
-                <div className="text-gray-400 text-sm mb-1">Awaiting Forward</div>
+              <div className="bg-white p-5 rounded-xl border border-gray-200">
+                <div className="text-gray-600 text-sm mb-1">Awaiting Forward</div>
                 <div className="text-3xl font-bold text-blue-400">{stats.processingLeads}</div>
                 <div className="text-gray-500 text-xs mt-1">leads to forward</div>
               </div>
-              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
-                <div className="text-gray-400 text-sm mb-1">Total Leads</div>
-                <div className="text-3xl font-bold text-white">{stats.totalLeads}</div>
+              <div className="bg-white p-5 rounded-xl border border-gray-200">
+                <div className="text-gray-600 text-sm mb-1">Total Leads</div>
+                <div className="text-3xl font-bold text-gray-900">{stats.totalLeads}</div>
                 <div className="text-gray-500 text-xs mt-1">{stats.paidLeads} completed</div>
               </div>
-              <div className="bg-gray-900/50 p-5 rounded-xl border border-gray-800">
-                <div className="text-gray-400 text-sm mb-1">Lead Volume</div>
+              <div className="bg-white p-5 rounded-xl border border-gray-200">
+                <div className="text-gray-600 text-sm mb-1">Lead Volume</div>
                 <div className="text-3xl font-bold text-purple-400">${stats.totalLeadVolume.toFixed(2)}</div>
                 <div className="text-gray-500 text-xs mt-1">total transacted</div>
               </div>
@@ -364,40 +362,70 @@ export default function AdminPanel() {
 
             {/* Marketplace Health */}
             <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
                 <div className="h-12 w-12 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{stats.activeProviders}</div>
-                  <div className="text-gray-400 text-sm">Providers</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.activeProviders}</div>
+                  <div className="text-gray-600 text-sm">Providers</div>
                 </div>
               </div>
-              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
+              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
                 <div className="h-12 w-12 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{stats.activeBuyers}</div>
-                  <div className="text-gray-400 text-sm">Businesses</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.activeBuyers}</div>
+                  <div className="text-gray-600 text-sm">Businesses</div>
                 </div>
               </div>
-              <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-[#C5B358]/20 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-[#C5B358]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
+                <div className="h-12 w-12 rounded-lg bg-[#E8822A]/20 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{stats.activeConnections}</div>
-                  <div className="text-gray-400 text-sm">Connections</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.activeConnections}</div>
+                  <div className="text-gray-600 text-sm">Connections</div>
                 </div>
               </div>
             </div>
+
+            {/* Action Banner — Pending Payouts */}
+            {pendingPayouts.length > 0 && (
+              <div className="mb-6 bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold">
+                      {pendingPayouts.length} provider{pendingPayouts.length !== 1 ? "s" : ""} awaiting payout
+                    </div>
+                    <div className="text-white/70 text-sm">
+                      ${pendingPayouts.reduce((sum, p) => sum + p.totalNet, 0).toFixed(2)} to forward
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("payments")}
+                  className="bg-white hover:bg-white/90 text-[#E8822A] px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2"
+                >
+                  Go to Payouts
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
@@ -412,8 +440,8 @@ export default function AdminPanel() {
                     onClick={() => setActiveTab(tab)}
                     className={`px-4 py-2 rounded-lg font-medium transition relative ${
                       activeTab === tab
-                        ? "bg-[#C5B358] text-black"
-                        : "bg-gray-800 text-gray-400 hover:text-white"
+                        ? "bg-[#E8822A] text-white"
+                        : "bg-gray-100 text-gray-500 hover:text-gray-900"
                     }`}
                   >
                     {labels[tab]}

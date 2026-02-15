@@ -13,32 +13,32 @@ export default function Home() {
   // Show minimal loading state only while checking auth
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#E57C34] flex items-center justify-center">
         <div className="text-center">
           <Image
-            src="/woml-logo.png"
+            src="/woml-v3.png"
             alt="WOML"
             width={200}
             height={60}
             className="mx-auto mb-4 animate-pulse"
             priority
           />
-          <div className="text-gray-400 text-sm">Loading...</div>
+          <div className="text-white/70 text-sm">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-[#E57C34] flex flex-col">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/20 bg-[#E57C34]/80 backdrop-blur-sm">
         <button
           onClick={() => { window.location.href = "/admin"; }}
-          className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E8822A] transition cursor-pointer"
+          className="flex items-center border-2 border-white/30 rounded-lg px-3 py-2 hover:border-white transition cursor-pointer"
         >
           <Image
-            src="/woml-logo.png"
+            src="/woml-v3.png"
             alt="WOML - Word of Mouth Leads"
             width={280}
             height={80}
@@ -50,7 +50,7 @@ export default function Home() {
             <div className="flex gap-2 items-center">
               <Link
                 href={dashboardUrl}
-                className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                className="bg-white hover:bg-white/90 text-[#E57C34] px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
               >
                 Go to Dashboard
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -62,7 +62,7 @@ export default function Home() {
                   await logout();
                   window.location.reload();
                 }}
-                className="text-gray-500 hover:text-red-600 px-3 py-2 rounded-lg transition flex items-center gap-1"
+                className="text-white/70 hover:text-red-300 px-3 py-2 rounded-lg transition flex items-center gap-1"
                 title="Log Out"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,19 +74,19 @@ export default function Home() {
             <>
               <Link
                 href="/auth/forgot-password"
-                className="text-gray-500 hover:text-[#E8822A] px-3 py-2 text-sm transition"
+                className="text-white/70 hover:text-white px-3 py-2 text-sm transition"
               >
                 Forgot Password?
               </Link>
               <Link
                 href="/auth/login"
-                className="text-[#E8822A] hover:text-[#D47526] px-3 py-2 font-medium transition"
+                className="text-white hover:text-white/80 px-3 py-2 font-medium transition"
               >
                 Sign In
               </Link>
               <Link
                 href="/auth/register?role=provider"
-                className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition"
+                className="bg-white hover:bg-white/90 text-[#E57C34] px-4 py-2 rounded-lg font-medium transition"
               >
                 Sign Up
               </Link>
@@ -99,7 +99,7 @@ export default function Home() {
       <main className="flex-1 flex items-center justify-center px-8">
         <div className="text-center">
           <Image
-            src="/woml-logo.png"
+            src="/woml-v3.png"
             alt="WOML - Word of Mouth Leads"
             width={4480}
             height={1260}
@@ -110,18 +110,18 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 py-8 px-8 bg-white">
+      <footer className="border-t border-white/20 py-8 px-8 bg-[#E57C34]">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center">
             <Image
-              src="/woml-logo.png"
+              src="/woml-v3.png"
               alt="WOML - Word of Mouth Leads"
               width={120}
               height={36}
               className="h-9 w-auto object-contain"
             />
           </div>
-          <div className="text-gray-400 text-sm">© 2025 WOML. All rights reserved.</div>
+          <div className="text-white/60 text-sm">© 2025 WOML. All rights reserved.</div>
         </div>
       </footer>
     </div>

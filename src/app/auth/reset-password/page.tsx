@@ -68,7 +68,7 @@ function ResetPasswordContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
           <Image
-            src="/woml-logo.png"
+            src="/woml-v3.png"
             alt=""
             width={500}
             height={500}
@@ -115,7 +115,7 @@ function ResetPasswordContent() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-logo.png"
+          src="/woml-v3.png"
           alt=""
           width={500}
           height={500}
@@ -128,7 +128,7 @@ function ResetPasswordContent() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
             <Image
-              src="/woml-logo.png"
+              src="/woml-v3.png"
               alt="WOML - Word of Mouth Leads"
               width={260}
               height={75}
