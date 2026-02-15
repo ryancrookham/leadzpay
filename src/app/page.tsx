@@ -40,9 +40,9 @@ export default function Home() {
           <Image
             src="/woml-v3.png"
             alt="WOML - Word of Mouth Leads"
-            width={280}
-            height={80}
-            className="h-20 w-auto object-contain"
+            width={560}
+            height={160}
+            className="h-40 w-auto object-contain"
           />
         </button>
         <div className="flex gap-3 items-center">
@@ -96,7 +96,7 @@ export default function Home() {
       </nav>
 
       {/* Center Logo */}
-      <main className="flex-1 flex items-center justify-center px-8">
+      <main className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <Image
             src="/woml-v3.png"
