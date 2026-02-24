@@ -1075,6 +1075,7 @@ function ConnectionTab({
             email: quoteEmail,
             phone: quotePhone,
             licenseData: extractedLicenseData || undefined,
+            licenseImage: licenseImage || undefined,
             maritalStatus: maritalStatus || undefined,
             hasInsurance: hasInsurance || undefined,
           },

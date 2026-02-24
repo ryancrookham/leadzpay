@@ -21,6 +21,11 @@ interface ApiLead {
   connectionId: string;
   status: string;
   customerName: string;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  customerLicenseImage?: string | null;
+  customerMaritalStatus?: string | null;
+  customerHasInsurance?: string | null;
   customerState: string | null;
   vehicleYear: number | null;
   vehicleMake: string | null;
@@ -109,6 +114,7 @@ function BusinessPortalContent() {
   const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1182,9 +1188,14 @@ function BusinessPortalContent() {
                             const breakdown = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings);
                             const isPending = lead.payoutStatus === "pending";
                             const isSelected = selectedLeads.has(lead.id);
+                            const isExpanded = expandedLeadId === lead.id;
                             return (
-                              <tr key={lead.id} className={`border-b border-gray-50 ${isSelected ? "bg-orange-50/50" : ""}`}>
-                                <td className="pl-6 pr-2 py-3">
+                              <React.Fragment key={lead.id}>
+                              <tr
+                                className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition ${isSelected ? "bg-orange-50/50" : ""} ${isExpanded ? "bg-blue-50/30" : ""}`}
+                                onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
+                              >
+                                <td className="pl-6 pr-2 py-3" onClick={e => e.stopPropagation()}>
                                   {isPending ? (
                                     <input
                                       type="checkbox"
@@ -1201,7 +1212,12 @@ function BusinessPortalContent() {
                                   ) : null}
                                 </td>
                                 <td className="px-2 py-3 text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
-                                <td className="px-2 py-3 text-gray-800 font-medium text-sm">{lead.customerName}</td>
+                                <td className="px-2 py-3 text-gray-800 font-medium text-sm">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                    {lead.customerName}
+                                  </span>
+                                </td>
                                 <td className="px-2 py-3 text-gray-600 text-sm">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
                                 <td className="px-2 py-3">
                                   <div className="text-gray-800 font-medium text-sm">${breakdown.buyerTotal.toFixed(2)}</div>
@@ -1222,6 +1238,74 @@ function BusinessPortalContent() {
                                   )}
                                 </td>
                               </tr>
+                              {/* Expanded detail row */}
+                              {isExpanded && (
+                                <tr className="bg-gray-50/80">
+                                  <td colSpan={6} className="px-6 py-4">
+                                    <div className="flex gap-6 flex-wrap">
+                                      {/* License photo */}
+                                      {lead.customerLicenseImage && (
+                                        <div className="shrink-0">
+                                          <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">License Photo</p>
+                                          <img
+                                            src={lead.customerLicenseImage}
+                                            alt="License"
+                                            className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
+                                          />
+                                        </div>
+                                      )}
+                                      {/* Contact info */}
+                                      <div className="space-y-2 min-w-[200px]">
+                                        <div>
+                                          <p className="text-gray-500 text-[10px] uppercase tracking-wide">Name</p>
+                                          <p className="text-gray-800 text-sm font-medium">{lead.customerName}</p>
+                                        </div>
+                                        {lead.customerEmail && (
+                                          <div>
+                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Email</p>
+                                            <a href={`mailto:${lead.customerEmail}`} className="text-blue-600 text-sm hover:underline">{lead.customerEmail}</a>
+                                          </div>
+                                        )}
+                                        {lead.customerPhone && (
+                                          <div>
+                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Phone</p>
+                                            <a href={`tel:${lead.customerPhone}`} className="text-blue-600 text-sm hover:underline">{lead.customerPhone}</a>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* Optional fields */}
+                                      <div className="space-y-2 min-w-[150px]">
+                                        {lead.customerMaritalStatus && (
+                                          <div>
+                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Marital Status</p>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize">
+                                              {lead.customerMaritalStatus}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {lead.customerHasInsurance && (
+                                          <div>
+                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Currently Insured?</p>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.customerHasInsurance === "yes" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                              {lead.customerHasInsurance === "yes" ? "Yes" : "No"}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {lead.customerState && (
+                                          <div>
+                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">State</p>
+                                            <p className="text-gray-800 text-sm">{lead.customerState}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {!lead.customerEmail && !lead.customerPhone && !lead.customerLicenseImage && !lead.customerMaritalStatus && !lead.customerHasInsurance && (
+                                      <p className="text-gray-400 text-sm italic">No additional details available for this lead.</p>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>

@@ -158,13 +158,25 @@ export async function GET() {
       leads = await getLeadsByBuyerId(session.user.id);
     }
 
-    // Decrypt customer name only (not email/phone/address for security)
+    // Decrypt customer data — buyers see full PII they paid for
     const sanitized = await Promise.all(leads.map(async (lead) => {
       let customerName = "Unknown";
+      let customerEmail: string | null = null;
+      let customerPhone: string | null = null;
+      let customerLicenseImage: string | null = null;
+      let customerMaritalStatus: string | null = null;
+      let customerHasInsurance: string | null = null;
       try {
         const decrypted = await decrypt(lead.customer_data_encrypted, lead.customer_data_iv);
         const parsed = JSON.parse(decrypted);
         customerName = parsed.name || parsed.customerName || "Unknown";
+        if (role === "buyer") {
+          customerEmail = parsed.email || null;
+          customerPhone = parsed.phone || null;
+          customerLicenseImage = parsed.licenseImage || null;
+          customerMaritalStatus = parsed.maritalStatus || null;
+          customerHasInsurance = parsed.hasInsurance || null;
+        }
       } catch { /* decryption may fail if key changed */ }
 
       return {
@@ -174,6 +186,11 @@ export async function GET() {
         connectionId: lead.connection_id,
         status: lead.status,
         customerName,
+        customerEmail: role === "buyer" ? customerEmail : undefined,
+        customerPhone: role === "buyer" ? customerPhone : undefined,
+        customerLicenseImage: role === "buyer" ? customerLicenseImage : undefined,
+        customerMaritalStatus: role === "buyer" ? customerMaritalStatus : undefined,
+        customerHasInsurance: role === "buyer" ? customerHasInsurance : undefined,
         customerState: lead.customer_state,
         vehicleYear: lead.vehicle_year,
         vehicleMake: lead.vehicle_make,
