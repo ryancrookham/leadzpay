@@ -107,6 +107,8 @@ function BusinessPortalContent() {
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
   const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
   const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1029,108 +1031,209 @@ function BusinessPortalContent() {
           </TabErrorBoundary>
         )}
 
-        {/* Leads Tab */}
-        {activeTab === "leads" && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
+        {/* Leads Tab — Grouped by Provider */}
+        {activeTab === "leads" && (() => {
+          // Group leads by provider
+          const providerGroups = (() => {
+            const groups = new Map<string, { providerId: string; providerName: string; leads: ApiLead[] }>();
+            dbLeads.forEach(lead => {
+              const key = lead.providerId;
+              if (!groups.has(key)) {
+                groups.set(key, { providerId: key, providerName: lead.providerName || "Unknown", leads: [] });
+              }
+              groups.get(key)!.leads.push(lead);
+            });
+            return Array.from(groups.values()).sort((a, b) => b.leads.length - a.leads.length);
+          })();
+
+          const selectedTotal = Array.from(selectedLeads).reduce((sum, id) => {
+            const lead = dbLeads.find(l => l.id === id);
+            return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
+          }, 0);
+
+          const handleBatchMarkPaid = async (ids: string[]) => {
+            const total = ids.reduce((sum, id) => {
+              const lead = dbLeads.find(l => l.id === id);
+              return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
+            }, 0);
+            if (!confirm(`Confirm you paid $${total.toFixed(2)} to @womleads via Venmo for ${ids.length} lead${ids.length !== 1 ? "s" : ""}?`)) return;
+            setBatchMarkingPaid(true);
+            try {
+              const res = await fetch("/api/leads/batch-mark-paid", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ leadIds: ids }),
+              });
+              if (res.ok) {
+                setDbLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, payoutStatus: "processing" } : l));
+                setSelectedLeads(prev => {
+                  const next = new Set(prev);
+                  ids.forEach(id => next.delete(id));
+                  return next;
+                });
+              }
+            } catch (e) {
+              console.error("Batch mark paid failed:", e);
+            } finally {
+              setBatchMarkingPaid(false);
+            }
+          };
+
+          return (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
+                {selectedLeads.size > 0 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-600">{selectedLeads.size} selected &middot; <span className="font-semibold">${selectedTotal.toFixed(2)}</span></span>
+                  </div>
+                )}
+              </div>
+              {selectedLeads.size > 0 && (
+                <p className="text-gray-400 text-xs mb-4">Select leads below, then use the batch actions on each provider group to pay via Venmo.</p>
+              )}
             </div>
+
             {dbLeadsLoading ? (
               <div className="flex justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
               </div>
+            ) : providerGroups.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 shadow-sm text-center text-gray-400">No leads yet</div>
             ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-200">
-                    <th className="pb-3 font-medium">Date</th>
-                    <th className="pb-3 font-medium">Customer</th>
-                    <th className="pb-3 font-medium">Vehicle</th>
-                    <th className="pb-3 font-medium">Provider</th>
-                    <th className="pb-3 font-medium">Cost</th>
-                    <th className="pb-3 font-medium">Payment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dbLeads.map((lead) => (
-                    <tr key={lead.id} className="border-b border-gray-100">
-                      <td className="py-4 text-gray-500 text-sm">
-                        {new Date(lead.submittedAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                      <td className="py-4 text-gray-600">
-                        {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}
-                      </td>
-                      <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
-                      <td className="py-4">
-                        <div className="text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</div>
-                        <div className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} + ${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerFee.toFixed(2)} WOML fee</div>
-                      </td>
-                      <td className="py-4">
-                        {lead.payoutStatus === "completed" ? (
+              providerGroups.map(group => {
+                const pendingLeads = group.leads.filter(l => l.payoutStatus === "pending");
+                const selectedInGroup = pendingLeads.filter(l => selectedLeads.has(l.id));
+                const allPendingSelected = pendingLeads.length > 0 && selectedInGroup.length === pendingLeads.length;
+                const groupSelectedTotal = selectedInGroup.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+                const groupSelectedIds = selectedInGroup.map(l => l.id);
+
+                return (
+                  <div key={group.providerId} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    {/* Provider group header */}
+                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          {pendingLeads.length > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={allPendingSelected}
+                              onChange={() => {
+                                setSelectedLeads(prev => {
+                                  const next = new Set(prev);
+                                  if (allPendingSelected) {
+                                    pendingLeads.forEach(l => next.delete(l.id));
+                                  } else {
+                                    pendingLeads.forEach(l => next.add(l.id));
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-4 h-4 text-[#E8822A] border-gray-300 rounded cursor-pointer"
+                            />
+                          )}
                           <div>
-                            <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Completed
+                            <span className="font-semibold text-gray-800">{group.providerName}</span>
+                            <span className="text-gray-500 text-sm ml-2">
+                              {group.leads.length} lead{group.leads.length !== 1 ? "s" : ""}
+                              {pendingLeads.length > 0 && <span className="text-amber-600 ml-1">({pendingLeads.length} unpaid)</span>}
                             </span>
-                            <div className="text-gray-400 text-[10px]">Provider paid by WOML</div>
                           </div>
-                        ) : lead.payoutStatus === "processing" ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                              Paid to @womleads
-                            </span>
-                            <div className="text-gray-400 text-[10px] mt-1">WOML forwarding to provider</div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1.5">
+                        </div>
+                        {/* Batch action buttons */}
+                        {groupSelectedIds.length > 0 && (
+                          <div className="flex items-center gap-2">
                             <a
-                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Lead Payment - ${lead.customerName}`)}`}
+                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${groupSelectedTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Batch - ${groupSelectedIds.length} leads from ${group.providerName}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
                             >
                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                              Pay @womleads ${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}
+                              Pay ${groupSelectedTotal.toFixed(2)} via Venmo
                             </a>
                             <button
-                              onClick={async () => {
-                                if (!confirm(`Confirm you paid $${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)} to @womleads via Venmo for this lead?`)) return;
-                                try {
-                                  const res = await fetch(`/api/leads/${lead.id}/mark-paid`, { method: "POST" });
-                                  if (res.ok) {
-                                    setDbLeads(prev => prev.map(l =>
-                                      l.id === lead.id ? { ...l, payoutStatus: "processing" } : l
-                                    ));
-                                  }
-                                } catch (e) {
-                                  console.error("Mark sent failed:", e);
-                                }
-                              }}
-                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1 rounded-lg text-sm font-medium transition border border-amber-200"
+                              onClick={() => handleBatchMarkPaid(groupSelectedIds)}
+                              disabled={batchMarkingPaid}
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1.5 rounded-lg text-sm font-medium transition border border-amber-200 disabled:opacity-50"
                             >
-                              Mark Sent to WOML
+                              {batchMarkingPaid ? "Processing..." : `Mark ${groupSelectedIds.length} Sent to WOML`}
                             </button>
-                            <p className="text-gray-400 text-[10px]">Pay WOML first. Provider paid after processing.</p>
                           </div>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                  {dbLeads.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center text-gray-400 py-12">No leads yet</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                    {/* Leads table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-left text-gray-500 text-xs border-b border-gray-100">
+                            <th className="pl-6 pr-2 py-2 w-8"></th>
+                            <th className="px-2 py-2 font-medium">Date</th>
+                            <th className="px-2 py-2 font-medium">Customer</th>
+                            <th className="px-2 py-2 font-medium">Vehicle</th>
+                            <th className="px-2 py-2 font-medium">Cost</th>
+                            <th className="px-2 py-2 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.leads.map(lead => {
+                            const breakdown = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings);
+                            const isPending = lead.payoutStatus === "pending";
+                            const isSelected = selectedLeads.has(lead.id);
+                            return (
+                              <tr key={lead.id} className={`border-b border-gray-50 ${isSelected ? "bg-orange-50/50" : ""}`}>
+                                <td className="pl-6 pr-2 py-3">
+                                  {isPending ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {
+                                        setSelectedLeads(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(lead.id)) next.delete(lead.id); else next.add(lead.id);
+                                          return next;
+                                        });
+                                      }}
+                                      className="w-4 h-4 text-[#E8822A] border-gray-300 rounded cursor-pointer"
+                                    />
+                                  ) : null}
+                                </td>
+                                <td className="px-2 py-3 text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
+                                <td className="px-2 py-3 text-gray-800 font-medium text-sm">{lead.customerName}</td>
+                                <td className="px-2 py-3 text-gray-600 text-sm">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
+                                <td className="px-2 py-3">
+                                  <div className="text-gray-800 font-medium text-sm">${breakdown.buyerTotal.toFixed(2)}</div>
+                                  <div className="text-gray-400 text-[10px]">${Number(lead.payoutAmount || 0).toFixed(2)} + ${breakdown.buyerFee.toFixed(2)} fee</div>
+                                </td>
+                                <td className="px-2 py-3">
+                                  {lead.payoutStatus === "completed" ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                      Completed
+                                    </span>
+                                  ) : lead.payoutStatus === "processing" ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">
+                                      Paid to @womleads
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-600 text-xs font-medium">Unpaid</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* Providers Tab */}
         {activeTab === "providers" && (

@@ -619,6 +619,32 @@ export async function updateLeadPayoutStatus(
 }
 
 // ============================================
+// Batch operations
+// ============================================
+
+export async function getLeadsByIds(ids: string[]): Promise<DbLead[]> {
+  if (ids.length === 0) return [];
+  const sql = getSql();
+  const result = await sql`SELECT * FROM leads WHERE id = ANY(${ids})`;
+  return result as unknown as DbLead[];
+}
+
+export async function batchMarkLeadsPaid(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET payout_status = 'processing', payout_completed_at = NOW()
+    WHERE id = ANY(${ids}) AND payout_status = 'pending'
+    RETURNING id
+  `;
+  await sql`
+    UPDATE transactions SET status = 'completed', completed_at = NOW()
+    WHERE lead_id = ANY(${ids}) AND type = 'platform_fee' AND status = 'pending'
+  `;
+  return result.length;
+}
+
+// ============================================
 // Admin / Platform stats queries
 // ============================================
 
