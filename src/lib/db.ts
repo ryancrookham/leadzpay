@@ -1018,3 +1018,76 @@ export async function getDetailedUserStats() {
   })[];
 }
 
+// ============================================
+// Stripe helper queries
+// ============================================
+
+export async function updateUserStripeAccount(userId: string, stripeAccountId: string, onboardingComplete: boolean): Promise<DbUser | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE users SET
+      stripe_account_id = ${stripeAccountId},
+      stripe_onboarding_complete = ${onboardingComplete},
+      updated_at = NOW()
+    WHERE id = ${userId}
+    RETURNING *
+  `;
+  return first<DbUser>(result);
+}
+
+export async function updateUserStripeCustomer(userId: string, stripeCustomerId: string): Promise<DbUser | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE users SET
+      stripe_customer_id = ${stripeCustomerId},
+      updated_at = NOW()
+    WHERE id = ${userId}
+    RETURNING *
+  `;
+  return first<DbUser>(result);
+}
+
+export async function getProvidersByIds(ids: string[]): Promise<DbUser[]> {
+  if (ids.length === 0) return [];
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM users WHERE id = ANY(${ids}) AND role = 'provider'
+  `;
+  return result as unknown as DbUser[];
+}
+
+export async function batchUpdateLeadStripeTransfer(leadIds: string[], stripeTransferId: string, payoutStatus: 'completed' | 'failed'): Promise<number> {
+  if (leadIds.length === 0) return 0;
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET
+      stripe_transfer_id = ${stripeTransferId},
+      payout_status = ${payoutStatus},
+      payout_completed_at = CASE WHEN ${payoutStatus === 'completed'} THEN NOW() ELSE payout_completed_at END
+    WHERE id = ANY(${leadIds})
+    RETURNING id
+  `;
+  return result.length;
+}
+
+export async function batchUpdateLeadPayoutStatus(leadIds: string[], payoutStatus: 'pending' | 'processing' | 'completed' | 'failed'): Promise<number> {
+  if (leadIds.length === 0) return 0;
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET
+      payout_status = ${payoutStatus},
+      payout_completed_at = CASE WHEN ${payoutStatus === 'completed'} THEN NOW() ELSE payout_completed_at END
+    WHERE id = ANY(${leadIds})
+    RETURNING id
+  `;
+  return result.length;
+}
+
+export async function updateLeadStripePayment(leadId: string, stripePaymentId: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE leads SET stripe_payment_id = ${stripePaymentId}
+    WHERE id = ${leadId}
+  `;
+}
+

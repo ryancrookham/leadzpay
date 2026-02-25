@@ -115,6 +115,7 @@ function BusinessPortalContent() {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -137,6 +138,31 @@ function BusinessPortalContent() {
       if (d.success) setFeeSettings(d.settings);
     }).catch(() => {});
   }, [currentUser]);
+
+  // Handle Stripe payment return
+  useEffect(() => {
+    const payment = searchParams.get("payment");
+    if (payment === "success") {
+      setPaymentNotice("Payment successful! Leads are being processed.");
+      setActiveTab("leads");
+      // Re-fetch leads to get updated statuses
+      fetch("/api/leads").then(r => r.json()).then(d => {
+        if (d.success) setDbLeads(d.leads);
+      }).catch(() => {});
+      // Clear the query param
+      const url = new URL(window.location.href);
+      url.searchParams.delete("payment");
+      window.history.replaceState({}, "", url.toString());
+      setTimeout(() => setPaymentNotice(null), 8000);
+    } else if (payment === "cancelled") {
+      setPaymentNotice("Payment was cancelled. No charges were made.");
+      setActiveTab("leads");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("payment");
+      window.history.replaceState({}, "", url.toString());
+      setTimeout(() => setPaymentNotice(null), 5000);
+    }
+  }, [searchParams]);
 
   // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
   const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_buyer_review") : [];
@@ -1057,6 +1083,31 @@ function BusinessPortalContent() {
             return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
           }, 0);
 
+          const handleStripePayment = async (ids: string[]) => {
+            setBatchMarkingPaid(true);
+            try {
+              const res = await fetch("/api/stripe/create-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ leadIds: ids }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.url) {
+                  window.location.href = data.url;
+                }
+              } else {
+                const data = await res.json();
+                alert(data.error || "Failed to create payment session");
+              }
+            } catch (e) {
+              console.error("Stripe payment failed:", e);
+              alert("Failed to create payment session. Please try again.");
+            } finally {
+              setBatchMarkingPaid(false);
+            }
+          };
+
           const handleBatchMarkPaid = async (ids: string[]) => {
             const total = ids.reduce((sum, id) => {
               const lead = dbLeads.find(l => l.id === id);
@@ -1087,6 +1138,21 @@ function BusinessPortalContent() {
 
           return (
           <div className="space-y-4">
+            {paymentNotice && (
+              <div className={`rounded-xl border p-4 shadow-sm flex items-center gap-3 ${paymentNotice.includes("successful") ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {paymentNotice.includes("successful") ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  )}
+                </svg>
+                <span className="text-sm font-medium">{paymentNotice}</span>
+                <button onClick={() => setPaymentNotice(null)} className="ml-auto text-current opacity-50 hover:opacity-100">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
@@ -1097,7 +1163,7 @@ function BusinessPortalContent() {
                 )}
               </div>
               {selectedLeads.size > 0 && (
-                <p className="text-gray-400 text-xs mb-4">Select leads below, then use the batch actions on each provider group to pay via Venmo.</p>
+                <p className="text-gray-400 text-xs mb-4">Select leads below, then use the batch actions on each provider group to pay via Stripe.</p>
               )}
             </div>
 
@@ -1150,14 +1216,22 @@ function BusinessPortalContent() {
                         {/* Batch action buttons */}
                         {groupSelectedIds.length > 0 && (
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleStripePayment(groupSelectedIds)}
+                              disabled={batchMarkingPaid}
+                              className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                              {batchMarkingPaid ? "Processing..." : `Pay $${groupSelectedTotal.toFixed(2)} via Stripe`}
+                            </button>
                             <a
                               href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${groupSelectedTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Batch - ${groupSelectedIds.length} leads from ${group.providerName}`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-white bg-[#008CFF] hover:bg-[#0074d4] px-3 py-1.5 rounded-lg text-sm font-medium transition"
+                              className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium transition border border-gray-200 hover:bg-gray-50"
                             >
                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                              Pay ${groupSelectedTotal.toFixed(2)} via Venmo
+                              Venmo
                             </a>
                             <button
                               onClick={() => handleBatchMarkPaid(groupSelectedIds)}

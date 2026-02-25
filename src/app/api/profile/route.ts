@@ -41,6 +41,8 @@ export async function GET() {
         payoutCashapp: user.payout_cashapp,
         payoutBankRouting: bankRouting,
         payoutBankAccount: bankAccount,
+        stripeAccountId: user.stripe_account_id || null,
+        stripeOnboardingComplete: user.stripe_onboarding_complete || false,
       },
     });
   } catch (error) {

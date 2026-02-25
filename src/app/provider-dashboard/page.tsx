@@ -2696,6 +2696,8 @@ function ProfileTab({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<"not_connected" | "pending" | "connected">("not_connected");
+  const [stripeLoading, setStripeLoading] = useState(false);
 
   // Fetch full profile (including payout details) and Stripe status on mount
   useEffect(() => {
@@ -2712,6 +2714,12 @@ function ProfileTab({
           if (p.payoutBankRouting) setPayoutBankRouting(p.payoutBankRouting);
           if (p.payoutBankAccount) setPayoutBankAccount(p.payoutBankAccount);
           if (p.profilePictureUrl) setProfilePicture(p.profilePictureUrl);
+          // Stripe Connect status
+          if (p.stripeOnboardingComplete) {
+            setStripeStatus("connected");
+          } else if (p.stripeAccountId) {
+            setStripeStatus("pending");
+          }
         }
       } catch (e) {
         console.error("Failed to load profile:", e);
@@ -2866,6 +2874,61 @@ function ProfileTab({
               placeholder="Tell businesses about yourself..."
               className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition resize-none"
             />
+          </div>
+
+          {/* Stripe Connect — Direct Payouts */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[#635BFF]" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                <span className="text-sm font-semibold text-gray-800">Stripe Connect</span>
+              </div>
+              {stripeStatus === "connected" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  Connected
+                </span>
+              )}
+              {stripeStatus === "pending" && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                  Pending
+                </span>
+              )}
+            </div>
+            <p className="text-gray-500 text-xs mb-3">
+              {stripeStatus === "connected"
+                ? "Your bank account is connected. Payouts from Stripe-paying businesses go directly to your bank."
+                : "Connect your bank account to receive automatic payouts when businesses pay via Stripe."}
+            </p>
+            <button
+              onClick={async () => {
+                setStripeLoading(true);
+                try {
+                  const res = await fetch("/api/stripe/connect", { method: "POST" });
+                  const data = await res.json();
+                  if (data.onboardingUrl) {
+                    window.location.href = data.onboardingUrl;
+                  } else if (data.dashboardUrl) {
+                    window.open(data.dashboardUrl, "_blank");
+                  } else if (data.error) {
+                    alert(data.error);
+                  }
+                } catch (e) {
+                  console.error("Stripe Connect error:", e);
+                  alert("Failed to connect Stripe. Please try again.");
+                } finally {
+                  setStripeLoading(false);
+                }
+              }}
+              disabled={stripeLoading}
+              className={`text-sm font-medium px-4 py-2 rounded-lg transition disabled:opacity-50 ${
+                stripeStatus === "connected"
+                  ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+                  : "bg-[#635BFF] hover:bg-[#5248e5] text-white"
+              }`}
+            >
+              {stripeLoading ? "Loading..." : stripeStatus === "connected" ? "Open Stripe Dashboard" : stripeStatus === "pending" ? "Complete Setup" : "Connect Bank Account"}
+            </button>
           </div>
 
           {/* Payout Method */}
