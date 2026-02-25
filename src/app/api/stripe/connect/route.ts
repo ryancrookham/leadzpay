@@ -80,9 +80,10 @@ export async function POST(request: NextRequest) {
       status: "created",
       onboardingUrl: accountLink.url,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Stripe Connect error:", error);
-    return NextResponse.json({ error: "Failed to set up Stripe Connect" }, { status: 500 });
+    const message = error?.message || "Failed to set up Stripe Connect";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

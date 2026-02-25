@@ -104,8 +104,9 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ url: checkoutSession.url });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create payment error:", error);
-    return NextResponse.json({ error: "Failed to create payment session" }, { status: 500 });
+    const message = error?.message || "Failed to create payment session";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
