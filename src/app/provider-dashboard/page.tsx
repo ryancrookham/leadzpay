@@ -684,6 +684,7 @@ function ConnectionTab({
   const [formStep, setFormStep] = useState<FormStep>("channel");
   const [leadSubmitted, setLeadSubmitted] = useState(false);
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "completed" | "failed">("idle");
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState<ExtendedFormData>({
@@ -1040,9 +1041,11 @@ function ConnectionTab({
 
   // Handle simple quote submission (license upload flow)
   const handleSimpleQuoteSubmit = async () => {
+    if (isSubmittingLead) return;
     if (!activeConnection || !currentProvider) return;
     if (!quoteEmail || !quotePhone) return;
     if (!licenseImage) return;
+    setIsSubmittingLead(true);
 
     // Check lead caps before submission
     const capStatus = checkLeadCaps(activeConnection);
@@ -1120,6 +1123,8 @@ function ConnectionTab({
     } catch (err) {
       console.error("Lead API call failed:", err);
       alert("Lead submission failed. Please check your connection and try again.");
+    } finally {
+      setIsSubmittingLead(false);
     }
   };
 
@@ -1722,13 +1727,22 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={!quoteEmail || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear}
+                  disabled={isSubmittingLead || !quoteEmail || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                  Submit Lead
+                  {isSubmittingLead ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      Submit Lead
+                    </>
+                  )}
                 </button>
 
                 {/* Photo quality warnings */}
