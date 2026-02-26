@@ -54,12 +54,14 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `Look at this image and answer these questions:
-1. Is this a photo of a US driver's license?
+              text: `Analyze this image of a supposed US driver's license. Answer these questions:
+
+1. Is this a photo of a REAL US driver's license? (Not a fake, novelty, movie prop, costume prop, joke ID, or obviously fabricated document. Look for signs like: "McLovin", single-word names, clearly fictional information, "Superbad", novelty watermarks, missing standard license elements)
 2. Is the photo clear and readable (not blurry, dark, or overexposed)?
 3. Is the license fully visible and reasonably centered (not cut off)?
 4. If you can read it, what is the person's full name on the license?
 5. What US state issued the license (two-letter code)?
+6. Does the license look suspicious? Check for: single-word names, obviously fake DOB (age under 16 or over 100), missing required fields (no DOB, no license number, no expiry), state codes that don't exist, organ donor or other details that look clearly fabricated or inconsistent.
 
 Return ONLY a valid JSON object, no other text:
 {
@@ -67,10 +69,16 @@ Return ONLY a valid JSON object, no other text:
   "isClear": true or false,
   "name": "Full Name" or null,
   "state": "XX" or null,
-  "reason": "brief explanation of any issues"
+  "reason": "brief explanation of any issues",
+  "isSuspicious": true or false,
+  "suspiciousReason": "why this looks fake/suspicious" or null
 }
 
-Be lenient on quality — if the text on the license is readable at all, mark isClear as true. Only mark isClear as false if the photo is genuinely too blurry, dark, or cut off to read.`,
+IMPORTANT:
+- If the ID is clearly a fake, movie prop, or novelty item, set isLicense to FALSE and isSuspicious to TRUE.
+- If the name is a single word (no first+last name), set isSuspicious to TRUE.
+- Be lenient on photo quality — if the text is readable at all, mark isClear as true.
+- Only mark isClear as false if genuinely too blurry, dark, or cut off to read.`,
             },
           ],
         },
@@ -105,6 +113,8 @@ Be lenient on quality — if the text on the license is readable at all, mark is
         name: verificationData.name || null,
         state: verificationData.state || null,
         reason: verificationData.reason || null,
+        isSuspicious: !!verificationData.isSuspicious,
+        suspiciousReason: verificationData.suspiciousReason || null,
       },
     });
   } catch (error) {

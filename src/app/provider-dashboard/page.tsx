@@ -737,6 +737,8 @@ function ConnectionTab({
     name: string | null;
     state: string | null;
     reason?: string;
+    isSuspicious?: boolean;
+    suspiciousReason?: string | null;
   } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -1044,6 +1046,7 @@ function ConnectionTab({
     if (isSubmittingLead) return;
     if (!activeConnection || !currentProvider) return;
     if (!quoteEmail || !quotePhone) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail)) return;
     if (!licenseImage) return;
     setIsSubmittingLead(true);
 
@@ -1531,9 +1534,16 @@ function ConnectionTab({
                     value={quoteEmail}
                     onChange={(e) => setQuoteEmail(e.target.value)}
                     required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
+                    className={`w-full px-4 py-3 rounded-lg bg-gray-50 border text-gray-900 focus:outline-none transition text-lg ${
+                      quoteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail)
+                        ? "border-red-400 focus:border-red-500"
+                        : "border-gray-200 focus:border-orange-500"
+                    }`}
                     placeholder="customer@email.com"
                   />
+                  {quoteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) && (
+                    <p className="text-red-500 text-xs mt-1">Enter a valid email (e.g. name@gmail.com)</p>
+                  )}
                 </div>
 
                 {/* Customer Name */}
@@ -1556,7 +1566,7 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isSuspicious ? "border-red-400 bg-red-50" : extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
@@ -1630,8 +1640,25 @@ function ConnectionTab({
 
                 {/* License Verification Result */}
                 {extractedLicenseData && (
-                  <div className={`border rounded-xl p-4 ${extractedLicenseData.isLicense && extractedLicenseData.isClear ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-                    {extractedLicenseData.isLicense && extractedLicenseData.isClear ? (
+                  <div className={`border rounded-xl p-4 ${
+                    extractedLicenseData.isSuspicious ? "bg-red-50 border-red-200" :
+                    extractedLicenseData.isLicense && extractedLicenseData.isClear ? "bg-emerald-50 border-emerald-200" :
+                    "bg-red-50 border-red-200"
+                  }`}>
+                    {extractedLicenseData.isSuspicious ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <p className="text-red-800 font-medium text-sm">This ID appears to be fake or suspicious</p>
+                        </div>
+                        {extractedLicenseData.suspiciousReason && (
+                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.suspiciousReason}</p>
+                        )}
+                        <p className="text-red-700 text-xs ml-7 font-medium">Please upload a real, valid driver&apos;s license to continue.</p>
+                      </div>
+                    ) : extractedLicenseData.isLicense && extractedLicenseData.isClear ? (
                       <div className="flex items-center gap-2">
                         <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1727,7 +1754,7 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear}
+                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear || extractedLicenseData.isSuspicious}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   {isSubmittingLead ? (
@@ -1746,7 +1773,12 @@ function ConnectionTab({
                 </button>
 
                 {/* Photo quality warnings */}
-                {extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) && (
+                {extractedLicenseData && extractedLicenseData.isSuspicious && (
+                  <p className="text-center text-red-600 text-sm font-medium">
+                    This ID was flagged as suspicious. Please upload a valid driver&apos;s license.
+                  </p>
+                )}
+                {extractedLicenseData && !extractedLicenseData.isSuspicious && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) && (
                   <p className="text-center text-red-600 text-sm font-medium">
                     Photo does not meet quality requirements. Please upload a clear, centered photo of the full license.
                   </p>

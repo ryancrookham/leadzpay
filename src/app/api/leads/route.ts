@@ -42,6 +42,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!customerData.email || !emailRegex.test(customerData.email)) {
+      return NextResponse.json(
+        { error: "A valid email address is required (e.g. name@gmail.com)" },
+        { status: 400 }
+      );
+    }
+
     // 1. Validate the connection
     const connection = await getConnectionById(connectionId);
     if (!connection) {
