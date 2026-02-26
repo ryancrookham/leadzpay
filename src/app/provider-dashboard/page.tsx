@@ -732,13 +732,17 @@ function ConnectionTab({
   const [quoteEmail, setQuoteEmail] = useState("");
   const [quotePhone, setQuotePhone] = useState("");
   const [extractedLicenseData, setExtractedLicenseData] = useState<{
-    isLicense: boolean;
-    isClear: boolean;
+    isValid: boolean;
     name: string | null;
+    dateOfBirth: string | null;
+    address: string | null;
+    idNumber: string | null;
+    expirationDate: string | null;
     state: string | null;
-    reason?: string;
-    isSuspicious?: boolean;
-    suspiciousReason?: string | null;
+    errorType: string | null;
+    errorMessage: string | null;
+    isSuspicious: boolean;
+    suspiciousReason: string | null;
   } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -1131,6 +1135,40 @@ function ConnectionTab({
     }
   };
 
+  // Compress image before upload — resize to max 1600px, convert to JPEG
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        const MAX_DIM = 1600;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Failed to load image"));
+      };
+      img.src = url;
+    });
+  };
+
   // Handle license image upload
   const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1138,51 +1176,50 @@ function ConnectionTab({
 
     // Validate file type
     if (!file.type.startsWith("image/")) {
-      alert("Please upload an image file");
+      setExtractionError("Please upload an image file (JPG, PNG, etc.)");
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
+    // Validate file size (max 15MB before compression)
+    if (file.size > 15 * 1024 * 1024) {
+      setExtractionError("Image is too large. Please use a photo under 15MB.");
       return;
     }
 
-    // Reset previous extraction
+    // Reset state
     setExtractedLicenseData(null);
     setExtractionError(null);
     setIsExtracting(true);
 
-    // Convert to base64 for storage
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64Image = reader.result as string;
-      setLicenseImage(base64Image);
+    try {
+      // Compress image before upload (resizes + converts to JPEG)
+      const compressedImage = await compressImage(file);
+      setLicenseImage(compressedImage);
 
-      // Extract license data using AI
-      try {
-        const response = await fetch("/api/extract-license", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ licenseImage: base64Image }),
-        });
+      // Send to API for extraction
+      const response = await fetch("/api/extract-license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseImage: compressedImage }),
+      });
 
-        const result = await response.json();
+      const result = await response.json();
 
-        if (result.success && result.data) {
-          setExtractedLicenseData(result.data);
-          setExtractionError(null);
-          if (result.data.name) setCustomerName(result.data.name);
-        } else {
-          setExtractionError(result.error || "Could not verify license photo. Please try again.");
-        }
-      } catch {
-        setExtractionError("Failed to verify license photo. Please try again.");
-      } finally {
-        setIsExtracting(false);
+      if (result.success && result.data) {
+        setExtractedLicenseData(result.data);
+        setExtractionError(null);
+        if (result.data.name) setCustomerName(result.data.name);
+      } else {
+        setExtractionError(result.error || "Could not process the license photo. Please try again.");
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setExtractionError("Connection error. Please check your internet and try again.");
+    } finally {
+      setIsExtracting(false);
+    }
+
+    // Reset file input so the same file can be re-selected
+    e.target.value = "";
   };
 
   // Handle plate image upload
@@ -1566,24 +1603,24 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isSuspicious ? "border-red-400 bg-red-50" : extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? "border-green-400 bg-green-50" : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isSuspicious ? "border-red-400 bg-red-50" : extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
-                        <p className="text-orange-600 font-medium">Checking photo quality...</p>
-                        <p className="text-gray-500 text-sm">Verifying this is a clear driver&apos;s license photo</p>
+                        <p className="text-orange-600 font-medium">Scanning ID...</p>
+                        <p className="text-gray-500 text-sm">Extracting information from your license</p>
                       </div>
                     ) : licenseImage ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isLicense && extractedLicenseData?.isClear ? (
+                          {extractedLicenseData?.isValid && !extractedLicenseData?.isSuspicious ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                               </svg>
-                              <span className="font-medium">Clear License</span>
+                              <span className="font-medium">ID Verified</span>
                             </span>
-                          ) : extractedLicenseData && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) ? (
+                          ) : extractedLicenseData && !extractedLicenseData.isValid ? (
                             <span className="text-red-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1595,11 +1632,11 @@ function ConnectionTab({
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              <span className="font-medium">License Uploaded</span>
+                              <span className="font-medium">Processing...</span>
                             </span>
                           )}
                         </div>
-                        <img src={licenseImage} alt="License preview" className="max-h-32 mx-auto rounded-lg shadow-sm" />
+                        <img src={licenseImage} alt="License preview" className="max-h-48 mx-auto rounded-lg shadow-sm" />
                         <button
                           onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
                           className="text-sm text-red-600 hover:text-red-700 underline"
@@ -1612,7 +1649,6 @@ function ConnectionTab({
                         <input
                           type="file"
                           accept="image/*"
-                          capture="environment"
                           onChange={handleLicenseUpload}
                           className="hidden"
                         />
@@ -1624,7 +1660,7 @@ function ConnectionTab({
                             </svg>
                           </div>
                           <p className="text-gray-700 font-medium">Tap to take photo or upload</p>
-                          <p className="text-gray-500 text-sm">JPG, PNG up to 5MB - must be clear and fully visible</p>
+                          <p className="text-gray-500 text-sm">Take a clear photo of the full license</p>
                         </div>
                       </label>
                     )}
@@ -1633,8 +1669,19 @@ function ConnectionTab({
 
                 {/* Verification Error */}
                 {extractionError && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-yellow-700 text-sm">{extractionError}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                    <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-red-700 text-sm">{extractionError}</p>
+                      <button
+                        onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
+                        className="text-red-600 text-sm font-medium underline mt-1"
+                      >
+                        Try again
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1642,7 +1689,7 @@ function ConnectionTab({
                 {extractedLicenseData && (
                   <div className={`border rounded-xl p-4 ${
                     extractedLicenseData.isSuspicious ? "bg-red-50 border-red-200" :
-                    extractedLicenseData.isLicense && extractedLicenseData.isClear ? "bg-emerald-50 border-emerald-200" :
+                    extractedLicenseData.isValid ? "bg-emerald-50 border-emerald-200" :
                     "bg-red-50 border-red-200"
                   }`}>
                     {extractedLicenseData.isSuspicious ? (
@@ -1658,14 +1705,34 @@ function ConnectionTab({
                         )}
                         <p className="text-red-700 text-xs ml-7 font-medium">Please upload a real, valid driver&apos;s license to continue.</p>
                       </div>
-                    ) : extractedLicenseData.isLicense && extractedLicenseData.isClear ? (
-                      <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <p className="text-emerald-800 font-medium text-sm">
-                          License verified{extractedLicenseData.name ? ` — ${extractedLicenseData.name}` : ""}{extractedLicenseData.state ? ` (${extractedLicenseData.state})` : ""}
-                        </p>
+                    ) : extractedLicenseData.isValid ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <p className="text-emerald-800 font-medium text-sm">ID Verified — Confirm Details</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm ml-7">
+                          {extractedLicenseData.name && (
+                            <div><span className="text-gray-500">Name:</span> <span className="font-medium text-gray-900">{extractedLicenseData.name}</span></div>
+                          )}
+                          {extractedLicenseData.state && (
+                            <div><span className="text-gray-500">State:</span> <span className="font-medium text-gray-900">{extractedLicenseData.state}</span></div>
+                          )}
+                          {extractedLicenseData.dateOfBirth && (
+                            <div><span className="text-gray-500">DOB:</span> <span className="font-medium text-gray-900">{extractedLicenseData.dateOfBirth}</span></div>
+                          )}
+                          {extractedLicenseData.expirationDate && (
+                            <div><span className="text-gray-500">Expires:</span> <span className="font-medium text-gray-900">{extractedLicenseData.expirationDate}</span></div>
+                          )}
+                          {extractedLicenseData.idNumber && (
+                            <div className="col-span-2"><span className="text-gray-500">ID #:</span> <span className="font-medium text-gray-900">{extractedLicenseData.idNumber}</span></div>
+                          )}
+                          {extractedLicenseData.address && (
+                            <div className="col-span-2"><span className="text-gray-500">Address:</span> <span className="font-medium text-gray-900">{extractedLicenseData.address}</span></div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1674,13 +1741,16 @@ function ConnectionTab({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                           <p className="text-red-800 font-medium text-sm">
-                            {!extractedLicenseData.isLicense ? "This does not appear to be a driver's license" : "Photo is not clear enough to read"}
+                            {extractedLicenseData.errorType === "not_license" ? "This doesn't appear to be a driver's license or state ID" :
+                             extractedLicenseData.errorType === "blurry" ? "Photo is too blurry — please retake with better lighting" :
+                             extractedLicenseData.errorType === "cut_off" ? "License is cut off — make sure the full ID is visible" :
+                             extractedLicenseData.errorType === "screenshot" ? "Please take a direct photo of the ID, not a screenshot" :
+                             "Photo is not clear enough to read"}
                           </p>
                         </div>
-                        {extractedLicenseData.reason && (
-                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.reason}</p>
+                        {extractedLicenseData.errorMessage && (
+                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.errorMessage}</p>
                         )}
-                        <p className="text-red-700 text-xs ml-7 font-medium">Please upload a clear, centered photo of the full license.</p>
                       </div>
                     )}
                   </div>
@@ -1754,7 +1824,7 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isLicense || !extractedLicenseData.isClear || extractedLicenseData.isSuspicious}
+                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid || !!extractedLicenseData.isSuspicious}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   {isSubmittingLead ? (
@@ -1778,9 +1848,9 @@ function ConnectionTab({
                     This ID was flagged as suspicious. Please upload a valid driver&apos;s license.
                   </p>
                 )}
-                {extractedLicenseData && !extractedLicenseData.isSuspicious && (!extractedLicenseData.isLicense || !extractedLicenseData.isClear) && (
+                {extractedLicenseData && !extractedLicenseData.isSuspicious && !extractedLicenseData.isValid && (
                   <p className="text-center text-red-600 text-sm font-medium">
-                    Photo does not meet quality requirements. Please upload a clear, centered photo of the full license.
+                    Please retake the photo and try again.
                   </p>
                 )}
                 {licenseImage && !extractedLicenseData && !isExtracting && (

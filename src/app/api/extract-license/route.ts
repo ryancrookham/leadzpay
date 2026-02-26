@@ -12,6 +12,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reject oversized payloads (compressed images should be well under this)
+    if (licenseImage.length > 15_000_000) {
+      return NextResponse.json(
+        { error: "Image is too large. Please use a smaller or lower-resolution photo." },
+        { status: 400 }
+      );
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -27,8 +35,9 @@ export async function POST(request: NextRequest) {
       ? licenseImage.split("base64,")[1]
       : licenseImage;
 
-    // Determine media type
-    let mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" = "image/jpeg";
+    // Determine media type from data URL prefix
+    let mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" =
+      "image/jpeg";
     if (licenseImage.includes("data:image/png")) {
       mediaType = "image/png";
     } else if (licenseImage.includes("data:image/gif")) {
@@ -38,8 +47,8 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 1024,
       messages: [
         {
           role: "user",
@@ -54,32 +63,30 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `Look at this image and answer these questions:
+              text: `You are analyzing a photo of a driver's license or state ID for a car dealership lead system. Extract the information from this ID.
 
-1. Is this a photo of a US driver's license?
-2. Is the photo clear and readable (not blurry, dark, or overexposed)?
-3. Is the license fully visible and reasonably centered (not cut off)?
-4. If you can read it, what is the person's full name on the license?
-5. What US state issued the license (two-letter code)?
-6. Is this OBVIOUSLY a fake, novelty, or movie prop? Only flag as suspicious if it is clearly not a real ID — for example, it says "McLovin", has a single-word name, is from the movie Superbad, says "novelty" or "not a government document", or is otherwise an obvious joke/prop.
-
-Return ONLY a valid JSON object, no other text:
+Return ONLY a valid JSON object with no other text:
 {
-  "isLicense": true or false,
-  "isClear": true or false,
+  "isValid": true or false,
   "name": "Full Name" or null,
-  "state": "XX" or null,
-  "reason": "brief explanation of any issues",
+  "dateOfBirth": "MM/DD/YYYY" or null,
+  "address": "Full address as shown on ID" or null,
+  "idNumber": "License/ID number" or null,
+  "expirationDate": "MM/DD/YYYY" or null,
+  "state": "XX" (two-letter state code) or null,
+  "errorType": null or one of "not_license", "blurry", "cut_off", "screenshot", "unreadable",
+  "errorMessage": null or "brief description of the issue",
   "isSuspicious": true or false,
-  "suspiciousReason": "why this looks fake/suspicious" or null
+  "suspiciousReason": null or "reason"
 }
 
-IMPORTANT:
-- Default to trusting the ID. Most images will be real licenses — only set isSuspicious to true for OBVIOUS fakes/props/novelty items.
-- If the image looks like a normal US driver's license, set isLicense to TRUE even if you can't verify every detail.
-- Be lenient on photo quality — if the text is readable at all, mark isClear as true.
-- Only mark isClear as false if genuinely too blurry, dark, or cut off to read.
-- A real license with an unusual name or slightly worn appearance is still a real license.`,
+Rules:
+- Set isValid to TRUE if this is a photo of a real government-issued driver's license or state ID and the text is readable. Most uploads will be valid — default to trusting the document.
+- Extract ALL fields you can read. Only leave a field as null if it is truly not visible or unreadable.
+- Set isValid to FALSE only if: it is not an ID/license at all (errorType: "not_license"), the photo is too blurry to read any text (errorType: "blurry"), the ID is significantly cut off (errorType: "cut_off"), it is a screenshot of an ID rather than a direct photo (errorType: "screenshot"), or the text is completely unreadable (errorType: "unreadable").
+- Be LENIENT on photo quality. If you can read the name and most fields, mark it valid even if slightly tilted, slightly dark, or has minor glare.
+- Only set isSuspicious to true for OBVIOUS fakes: movie props (e.g. "McLovin" from Superbad), novelty IDs, or items that say "not a government document".
+- A real ID with an unusual name, worn edges, or older design is still valid.`,
             },
           ],
         },
@@ -91,17 +98,17 @@ IMPORTANT:
       throw new Error("Unexpected response format");
     }
 
-    let verificationData;
+    let parsed;
     try {
       const jsonMatch = content.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error("No JSON found in response");
       }
-      verificationData = JSON.parse(jsonMatch[0]);
+      parsed = JSON.parse(jsonMatch[0]);
     } catch {
       console.error("Failed to parse verification response:", content.text);
       return NextResponse.json(
-        { error: "Could not verify license photo. Please try again." },
+        { error: "Could not process the license photo. Please try again." },
         { status: 422 }
       );
     }
@@ -109,19 +116,23 @@ IMPORTANT:
     return NextResponse.json({
       success: true,
       data: {
-        isLicense: !!verificationData.isLicense,
-        isClear: !!verificationData.isClear,
-        name: verificationData.name || null,
-        state: verificationData.state || null,
-        reason: verificationData.reason || null,
-        isSuspicious: !!verificationData.isSuspicious,
-        suspiciousReason: verificationData.suspiciousReason || null,
+        isValid: !!parsed.isValid,
+        name: parsed.name || null,
+        dateOfBirth: parsed.dateOfBirth || null,
+        address: parsed.address || null,
+        idNumber: parsed.idNumber || null,
+        expirationDate: parsed.expirationDate || null,
+        state: parsed.state || null,
+        errorType: parsed.errorType || null,
+        errorMessage: parsed.errorMessage || null,
+        isSuspicious: !!parsed.isSuspicious,
+        suspiciousReason: parsed.suspiciousReason || null,
       },
     });
   } catch (error) {
     console.error("License verification error:", error);
     return NextResponse.json(
-      { error: "Failed to verify license photo" },
+      { error: "Failed to verify license photo. Please try again." },
       { status: 500 }
     );
   }
