@@ -54,14 +54,14 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `Analyze this image of a supposed US driver's license. Answer these questions:
+              text: `Look at this image and answer these questions:
 
-1. Is this a photo of a REAL US driver's license? (Not a fake, novelty, movie prop, costume prop, joke ID, or obviously fabricated document. Look for signs like: "McLovin", single-word names, clearly fictional information, "Superbad", novelty watermarks, missing standard license elements)
+1. Is this a photo of a US driver's license?
 2. Is the photo clear and readable (not blurry, dark, or overexposed)?
 3. Is the license fully visible and reasonably centered (not cut off)?
 4. If you can read it, what is the person's full name on the license?
 5. What US state issued the license (two-letter code)?
-6. Does the license look suspicious? Check for: single-word names, obviously fake DOB (age under 16 or over 100), missing required fields (no DOB, no license number, no expiry), state codes that don't exist, organ donor or other details that look clearly fabricated or inconsistent.
+6. Is this OBVIOUSLY a fake, novelty, or movie prop? Only flag as suspicious if it is clearly not a real ID — for example, it says "McLovin", has a single-word name, is from the movie Superbad, says "novelty" or "not a government document", or is otherwise an obvious joke/prop.
 
 Return ONLY a valid JSON object, no other text:
 {
@@ -75,10 +75,11 @@ Return ONLY a valid JSON object, no other text:
 }
 
 IMPORTANT:
-- If the ID is clearly a fake, movie prop, or novelty item, set isLicense to FALSE and isSuspicious to TRUE.
-- If the name is a single word (no first+last name), set isSuspicious to TRUE.
+- Default to trusting the ID. Most images will be real licenses — only set isSuspicious to true for OBVIOUS fakes/props/novelty items.
+- If the image looks like a normal US driver's license, set isLicense to TRUE even if you can't verify every detail.
 - Be lenient on photo quality — if the text is readable at all, mark isClear as true.
-- Only mark isClear as false if genuinely too blurry, dark, or cut off to read.`,
+- Only mark isClear as false if genuinely too blurry, dark, or cut off to read.
+- A real license with an unusual name or slightly worn appearance is still a real license.`,
             },
           ],
         },
