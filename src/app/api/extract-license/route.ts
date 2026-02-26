@@ -85,7 +85,8 @@ Rules:
 - Extract ALL fields you can read. Only leave a field as null if it is truly not visible or unreadable.
 - Set isValid to FALSE only if: it is not an ID/license at all (errorType: "not_license"), the photo is too blurry to read any text (errorType: "blurry"), the ID is significantly cut off (errorType: "cut_off"), it is a screenshot of an ID rather than a direct photo (errorType: "screenshot"), or the text is completely unreadable (errorType: "unreadable").
 - Be LENIENT on photo quality. If you can read the name and most fields, mark it valid even if slightly tilted, slightly dark, or has minor glare.
-- Only set isSuspicious to true for OBVIOUS fakes: movie props (e.g. "McLovin" from Superbad), novelty IDs, or items that say "not a government document".
+- Only set isSuspicious to true for OBVIOUS fakes: movie props (e.g. "McLovin" from Superbad), or items explicitly labeled "novelty", "souvenir", or "fake ID".
+- These are NORMAL markings found on real US licenses and must NOT be flagged as suspicious: "NOT FOR REAL ID PURPOSES", "FEDERAL LIMITS APPLY", "UNDER 21 UNTIL [date]", "TEMPORARY", "DUPLICATE", "PROVISIONAL", "RESTRICTED". An expired license is still a real license.
 - A real ID with an unusual name, worn edges, or older design is still valid.`,
             },
           ],
