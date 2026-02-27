@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-const PROMPT = `Extract information from this driver's license or state ID photo.
+const PROMPT = `You are analyzing a photo for a car dealership lead system. Your job is to:
+1. Determine if this image contains a driver's license or state ID
+2. Extract all readable fields
+3. Determine if the ID is a novelty, prop, or fake item
 
 Return ONLY a valid JSON object with no other text:
 {
@@ -12,15 +15,41 @@ Return ONLY a valid JSON object with no other text:
   "idNumber": "License/ID number" or null,
   "expirationDate": "MM/DD/YYYY" or null,
   "state": "XX" (two-letter state code) or null,
+  "isSuspicious": true or false,
+  "suspiciousReason": "explanation" or null,
   "errorType": null or one of "not_license", "blurry", "cut_off", "unreadable",
   "errorMessage": null or "brief description of the issue"
 }
 
-Rules:
-- Set isValid to TRUE if this image contains any government-issued driver's license or state ID and you can read the text on it. Most uploads will be valid.
-- Extract every field you can read. Only leave a field as null if truly not visible.
-- Set isValid to FALSE only if: it is not an ID/license at all (errorType: "not_license"), or the photo is too blurry/dark/cut off to read (errorType: "blurry", "cut_off", or "unreadable").
-- Be lenient on photo quality — if you can read the name and most fields, it is valid.`;
+RULES FOR isValid:
+- TRUE if the image contains ANY driver's license or state ID and you can read text on it
+- FALSE only if: not an ID at all (errorType: "not_license"), or too blurry/dark/cut off to read
+- Be lenient on photo quality — if you can read the name and most fields, it is valid
+- An ID being expired, under-21, provisional, or restricted does NOT make it invalid
+
+RULES FOR isSuspicious (CRITICAL — read carefully):
+- TRUE only for obvious novelty/prop/fake IDs: movie props (e.g. "McLovin" from Superbad), joke IDs, items explicitly labeled "novelty" or "souvenir", obviously fabricated documents
+- FALSE for ALL real government-issued IDs, regardless of:
+  - "NOT FOR REAL ID PURPOSES" (standard federal REAL ID Act marking on millions of real licenses)
+  - "FEDERAL LIMITS APPLY" (standard compliance marking)
+  - "UNDER 21 UNTIL [date]" (standard youth license marking)
+  - "TEMPORARY", "DUPLICATE", "PROVISIONAL", "RESTRICTED" (all standard markings)
+  - Expired dates (an expired license is still a real license)
+  - Wear, creases, lamination damage, or aging
+  - Any standard state-issued formatting or markings
+- When in doubt, set isSuspicious to FALSE. Real licenses vastly outnumber fakes in this system.
+
+EXTRACTION: Extract every field you can read. Only leave a field as null if truly not visible.`;
+
+// Valid US state/territory codes for programmatic validation
+const US_STATES = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+  "DC","PR","GU","VI","AS","MP",
+]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -90,17 +119,17 @@ export async function POST(request: NextRequest) {
       ],
     };
 
-    // Try Sonnet first (best accuracy), fall back to Haiku (proven reliable)
+    // Try Opus first (best reasoning for fake detection), fall back to Sonnet
     let response;
     try {
       response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-opus-4-6",
         ...messageParams,
       });
-    } catch (sonnetError) {
-      console.warn("Sonnet failed, falling back to Haiku:", sonnetError);
+    } catch (opusError) {
+      console.warn("Opus failed, falling back to Sonnet:", opusError);
       response = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-sonnet-4-6",
         ...messageParams,
       });
     }
@@ -125,6 +154,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // --- Programmatic fake detection safety net ---
+    let isSuspicious = !!parsed.isSuspicious;
+    let suspiciousReason: string | null = parsed.suspiciousReason || null;
+
+    // Check for single-word names (McLovin pattern)
+    if (parsed.name && parsed.isValid) {
+      const nameParts = parsed.name.trim().split(/\s+/);
+      if (nameParts.length === 1 && nameParts[0].length > 0) {
+        isSuspicious = true;
+        suspiciousReason = suspiciousReason || "Single-word name detected — real IDs have first and last names";
+      }
+    }
+
+    // Check for invalid state code
+    if (parsed.state && !US_STATES.has(parsed.state.toUpperCase())) {
+      isSuspicious = true;
+      suspiciousReason = suspiciousReason || `"${parsed.state}" is not a valid US state code`;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -135,6 +183,8 @@ export async function POST(request: NextRequest) {
         idNumber: parsed.idNumber || null,
         expirationDate: parsed.expirationDate || null,
         state: parsed.state || null,
+        isSuspicious,
+        suspiciousReason,
         errorType: parsed.errorType || null,
         errorMessage: parsed.errorMessage || null,
       },
