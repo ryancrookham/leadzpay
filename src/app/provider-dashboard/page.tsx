@@ -741,8 +741,6 @@ function ConnectionTab({
     state: string | null;
     errorType: string | null;
     errorMessage: string | null;
-    isSuspicious: boolean;
-    suspiciousReason: string | null;
   } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -1603,7 +1601,7 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isSuspicious ? "border-red-400 bg-red-50" : extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
@@ -1613,7 +1611,7 @@ function ConnectionTab({
                     ) : licenseImage ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isValid && !extractedLicenseData?.isSuspicious ? (
+                          {extractedLicenseData?.isValid ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -1688,24 +1686,10 @@ function ConnectionTab({
                 {/* License Verification Result */}
                 {extractedLicenseData && (
                   <div className={`border rounded-xl p-4 ${
-                    extractedLicenseData.isSuspicious ? "bg-red-50 border-red-200" :
                     extractedLicenseData.isValid ? "bg-emerald-50 border-emerald-200" :
                     "bg-red-50 border-red-200"
                   }`}>
-                    {extractedLicenseData.isSuspicious ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <p className="text-red-800 font-medium text-sm">This ID appears to be fake or suspicious</p>
-                        </div>
-                        {extractedLicenseData.suspiciousReason && (
-                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.suspiciousReason}</p>
-                        )}
-                        <p className="text-red-700 text-xs ml-7 font-medium">Please upload a real, valid driver&apos;s license to continue.</p>
-                      </div>
-                    ) : extractedLicenseData.isValid ? (
+                    {extractedLicenseData.isValid ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1824,7 +1808,7 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid || !!extractedLicenseData.isSuspicious}
+                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   {isSubmittingLead ? (
@@ -1843,12 +1827,7 @@ function ConnectionTab({
                 </button>
 
                 {/* Photo quality warnings */}
-                {extractedLicenseData && extractedLicenseData.isSuspicious && (
-                  <p className="text-center text-red-600 text-sm font-medium">
-                    This ID was flagged as suspicious. Please upload a valid driver&apos;s license.
-                  </p>
-                )}
-                {extractedLicenseData && !extractedLicenseData.isSuspicious && !extractedLicenseData.isValid && (
+                {extractedLicenseData && !extractedLicenseData.isValid && (
                   <p className="text-center text-red-600 text-sm font-medium">
                     Please retake the photo and try again.
                   </p>

@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `You are analyzing a photo of a driver's license or state ID for a car dealership lead system. Extract the information from this ID.
+              text: `Extract information from this driver's license or state ID photo.
 
 Return ONLY a valid JSON object with no other text:
 {
@@ -74,20 +74,15 @@ Return ONLY a valid JSON object with no other text:
   "idNumber": "License/ID number" or null,
   "expirationDate": "MM/DD/YYYY" or null,
   "state": "XX" (two-letter state code) or null,
-  "errorType": null or one of "not_license", "blurry", "cut_off", "screenshot", "unreadable",
-  "errorMessage": null or "brief description of the issue",
-  "isSuspicious": true or false,
-  "suspiciousReason": null or "reason"
+  "errorType": null or one of "not_license", "blurry", "cut_off", "unreadable",
+  "errorMessage": null or "brief description of the issue"
 }
 
 Rules:
-- Set isValid to TRUE if this is a photo of a real government-issued driver's license or state ID and the text is readable. Most uploads will be valid — default to trusting the document.
-- Extract ALL fields you can read. Only leave a field as null if it is truly not visible or unreadable.
-- Set isValid to FALSE only if: it is not an ID/license at all (errorType: "not_license"), the photo is too blurry to read any text (errorType: "blurry"), the ID is significantly cut off (errorType: "cut_off"), it is a screenshot of an ID rather than a direct photo (errorType: "screenshot"), or the text is completely unreadable (errorType: "unreadable").
-- Be LENIENT on photo quality. If you can read the name and most fields, mark it valid even if slightly tilted, slightly dark, or has minor glare.
-- Only set isSuspicious to true for OBVIOUS fakes: movie props (e.g. "McLovin" from Superbad), or items explicitly labeled "novelty", "souvenir", or "fake ID".
-- These are NORMAL markings found on real US licenses and must NOT be flagged as suspicious: "NOT FOR REAL ID PURPOSES", "FEDERAL LIMITS APPLY", "UNDER 21 UNTIL [date]", "TEMPORARY", "DUPLICATE", "PROVISIONAL", "RESTRICTED". An expired license is still a real license.
-- A real ID with an unusual name, worn edges, or older design is still valid.`,
+- Set isValid to TRUE if this image contains any government-issued driver's license or state ID and you can read the text on it. Most uploads will be valid.
+- Extract every field you can read. Only leave a field as null if truly not visible.
+- Set isValid to FALSE only if: it is not an ID/license at all (errorType: "not_license"), or the photo is too blurry/dark/cut off to read (errorType: "blurry", "cut_off", or "unreadable").
+- Be lenient on photo quality — if you can read the name and most fields, it is valid.`,
             },
           ],
         },
@@ -126,8 +121,6 @@ Rules:
         state: parsed.state || null,
         errorType: parsed.errorType || null,
         errorMessage: parsed.errorMessage || null,
-        isSuspicious: !!parsed.isSuspicious,
-        suspiciousReason: parsed.suspiciousReason || null,
       },
     });
   } catch (error) {
