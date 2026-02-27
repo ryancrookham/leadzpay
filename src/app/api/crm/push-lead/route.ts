@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       state: licenseData?.state || null,
       maritalStatus,
       hasInsurance,
-      licenseVerified: !!(licenseData?.isLicense && licenseData?.isClear),
+      licenseVerified: !!licenseData?.isValid,
       plateNumber,
       plateState,
       plateVerified,
