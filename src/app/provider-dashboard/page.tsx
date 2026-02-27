@@ -739,8 +739,6 @@ function ConnectionTab({
     idNumber: string | null;
     expirationDate: string | null;
     state: string | null;
-    isSuspicious: boolean;
-    suspiciousReason: string | null;
     errorType: string | null;
     errorMessage: string | null;
   } | null>(null);
@@ -1603,7 +1601,7 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isSuspicious ? "border-red-500 bg-red-50" : extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
@@ -1613,14 +1611,7 @@ function ConnectionTab({
                     ) : licenseImage ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isSuspicious ? (
-                            <span className="text-red-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                              </svg>
-                              <span className="font-medium">Fake ID Detected</span>
-                            </span>
-                          ) : extractedLicenseData?.isValid ? (
+                          {extractedLicenseData?.isValid ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -1695,26 +1686,10 @@ function ConnectionTab({
                 {/* License Verification Result */}
                 {extractedLicenseData && (
                   <div className={`border rounded-xl p-4 ${
-                    extractedLicenseData.isSuspicious ? "bg-red-50 border-red-300" :
                     extractedLicenseData.isValid ? "bg-emerald-50 border-emerald-200" :
                     "bg-red-50 border-red-200"
                   }`}>
-                    {extractedLicenseData.isSuspicious ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                          </svg>
-                          <p className="text-red-800 font-semibold text-sm">This ID cannot be used for lead submission</p>
-                        </div>
-                        <p className="text-red-600 text-xs ml-7">
-                          {extractedLicenseData.suspiciousReason || "This ID appears to be a novelty or prop item."}
-                        </p>
-                        <p className="text-gray-500 text-xs ml-7">
-                          Please use an authentic government-issued driver&apos;s license or state ID.
-                        </p>
-                      </div>
-                    ) : extractedLicenseData.isValid ? (
+                    {extractedLicenseData.isValid ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1750,11 +1725,7 @@ function ConnectionTab({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                           <p className="text-red-800 font-medium text-sm">
-                            {extractedLicenseData.errorType === "not_license" ? "This doesn't appear to be a driver's license or state ID" :
-                             extractedLicenseData.errorType === "blurry" ? "Photo is too blurry — please retake with better lighting" :
-                             extractedLicenseData.errorType === "cut_off" ? "License is cut off — make sure the full ID is visible" :
-                             extractedLicenseData.errorType === "screenshot" ? "Please take a direct photo of the ID, not a screenshot" :
-                             "Photo is not clear enough to read"}
+                            We could not read your ID. Please take a clearer photo and try again.
                           </p>
                         </div>
                         {extractedLicenseData.errorMessage && (
@@ -1833,7 +1804,7 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid || !!extractedLicenseData.isSuspicious}
+                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   {isSubmittingLead ? (
