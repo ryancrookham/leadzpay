@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const PROMPT = `You are a data extraction tool. Your only job is to read a driver's license or state ID image and extract the following fields: full name, date of birth, address, license number, expiration date, and issuing state.
 
-Do not evaluate whether the ID appears real or fake. Do not flag handwriting, stickers, damage, or unusual markings. Simply extract the data you can read.
+Do not evaluate whether the ID appears real or fake. Do not flag signatures, handwriting, stickers, damage, unusual formatting, lighting conditions, or any visual anomalies. These are normal features of real IDs. Simply extract the data you can read.
 
 Return ONLY a valid JSON object with no other text:
 {
