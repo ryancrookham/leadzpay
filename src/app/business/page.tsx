@@ -85,7 +85,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "leads", "requests", "providers", "rolodex", "ledger", "settings"];
+  const validTabs: Tab[] = ["dashboard", "leads", "requests", "providers", "rolodex", "ledger", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
