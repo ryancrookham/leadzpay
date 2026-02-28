@@ -126,6 +126,7 @@ interface ConnectionContextType {
   getConnectionsForBuyer: (buyerId: string) => ApiConnection[];
   getConnectionsForProvider: (providerId: string) => ApiConnection[];
   getActiveConnectionForProvider: (providerId: string) => ApiConnection | null;
+  getActiveConnectionsForProvider: (providerId: string) => ApiConnection[];
   getPendingRequestsForBuyer: (buyerId: string) => ApiConnection[];
   getPendingTermsForProvider: (providerId: string) => ApiConnection[];
 
@@ -446,13 +447,23 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     [connections]
   );
 
-  // Helper: Get active connection for provider
+  // Helper: Get active connection for provider (returns first active, for compat)
   const getActiveConnectionForProvider = useCallback(
     (providerId: string): ApiConnection | null => {
       return (
         connections.find(
           (c) => c.provider_id === providerId && c.status === "active"
         ) || null
+      );
+    },
+    [connections]
+  );
+
+  // Helper: Get ALL active connections for provider (multi-channel support)
+  const getActiveConnectionsForProvider = useCallback(
+    (providerId: string): ApiConnection[] => {
+      return connections.filter(
+        (c) => c.provider_id === providerId && c.status === "active"
       );
     },
     [connections]
@@ -543,6 +554,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         getConnectionsForBuyer,
         getConnectionsForProvider,
         getActiveConnectionForProvider,
+        getActiveConnectionsForProvider,
         getPendingRequestsForBuyer,
         getPendingTermsForProvider,
         // Discovery

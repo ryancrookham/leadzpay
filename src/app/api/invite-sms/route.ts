@@ -8,7 +8,7 @@ const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phoneNumber, businessName } = body;
+    const { phoneNumber, businessName, inviteToken, ratePerLead } = body;
 
     if (!phoneNumber) {
       return NextResponse.json(
@@ -28,8 +28,14 @@ export async function POST(request: NextRequest) {
 
     const formattedPhone = cleaned.length === 10 ? `+1${cleaned}` : `+${cleaned}`;
     const senderName = businessName || "A business on WOMLeads";
-    const signupUrl = "https://www.womleads.com/auth/register?role=provider";
-    const messageBody = `WOMLeads: ${senderName} has invited you to become a lead provider! Sign up here to start earning: ${signupUrl}`;
+
+    // Build the signup URL — embed invite token if provided
+    const signupUrl = inviteToken
+      ? `https://www.womleads.com/auth/register?token=${inviteToken}`
+      : "https://www.womleads.com/auth/register?role=provider";
+
+    const earningLine = ratePerLead ? ` Earn $${ratePerLead}/lead.` : "";
+    const messageBody = `WOMLeads: ${senderName} invited you to join their provider network!${earningLine} Sign up here: ${signupUrl}`;
 
     if (!accountSid || !authToken || !twilioPhone) {
       console.error("Twilio not configured - missing credentials");

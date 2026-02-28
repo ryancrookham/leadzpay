@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getUsersByRole, getConnectionsByUserId } from "@/lib/db";
+import { getConnectionsByUserId, getUsersByIds } from "@/lib/db";
 
-// GET /api/users?role=buyer|provider - Discovery endpoint
+// GET /api/users?role=buyer|provider - Connection-scoped discovery
+// Providers only see buyers they are connected to; buyers only see their connected providers
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -20,16 +21,21 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
     const userRole = (session.user as any).role as "provider" | "buyer";
 
-    // Get users of the specified role (excluding self)
-    const users = await getUsersByRole(role, userId);
-
-    // Get existing connections to mark users as "already connected"
+    // Only return users this account is connected to
     const myConnections = await getConnectionsByUserId(userId, userRole);
-    const connectedUserIds = new Set(
-      myConnections.map((c) => (userRole === "provider" ? c.buyer_id : c.provider_id))
+    const connectedIds = myConnections.map((c) =>
+      userRole === "provider" ? c.buyer_id : c.provider_id
     );
 
-    // Filter to only return public info and connection status
+    if (connectedIds.length === 0) {
+      return NextResponse.json({ users: [] });
+    }
+
+    const users = await getUsersByIds(connectedIds);
+
+    const connectedUserIds = new Set(connectedIds);
+
+    // Return public info and connection status
     const sanitizedUsers = users.map((user) => ({
       id: user.id,
       username: user.username,

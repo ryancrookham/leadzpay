@@ -11,11 +11,31 @@ type PayoutMethod = "venmo" | "paypal" | "cashapp" | "bank";
 function RegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { registerProvider, isAuthenticated, currentUser, isLoading } = useAuth();
+  const { registerProvider, registerBuyer, isAuthenticated, currentUser, isLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Provider-only registration - redirect if trying to access as buyer
   const requestedRole = searchParams.get("role");
+  const tokenParam = searchParams.get("token");
+
+  // Invite token state
+  const [inviteData, setInviteData] = useState<{
+    businessName: string;
+    channelName: string | null;
+    ratePerLead: number;
+    paymentTiming: string;
+  } | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(!!tokenParam);
+
+  // Buyer registration state (used when role=buyer)
+  const [buyerBusinessName, setBuyerBusinessName] = useState("");
+  const [buyerBusinessType, setBuyerBusinessType] = useState("");
+  const [buyerEmail, setBuyerEmail] = useState("");
+  const [buyerPassword, setBuyerPassword] = useState("");
+  const [buyerUsername, setBuyerUsername] = useState("");
+  const [buyerPhone, setBuyerPhone] = useState("");
+  const [buyerSubmitting, setBuyerSubmitting] = useState(false);
+  const [buyerError, setBuyerError] = useState("");
 
   // Step management
   const [step, setStep] = useState(1);
@@ -49,12 +69,27 @@ function RegisterContent() {
     }
   }, [isAuthenticated, currentUser, isLoading]);
 
-  // Redirect buyer registration attempts to login
+  // Validate invite token from URL on mount
   useEffect(() => {
-    if (requestedRole === "buyer") {
-      router.replace("/auth/login");
-    }
-  }, [requestedRole, router]);
+    if (!tokenParam) return;
+    setTokenLoading(true);
+    fetch(`/api/invite-tokens/${tokenParam}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.valid) {
+          setInviteData({
+            businessName: data.businessName,
+            channelName: data.channelName,
+            ratePerLead: data.ratePerLead,
+            paymentTiming: data.paymentTiming,
+          });
+        } else {
+          setInviteError(data.error || "This invite link is invalid or has expired.");
+        }
+      })
+      .catch(() => setInviteError("Failed to validate invite link. Please try again."))
+      .finally(() => setTokenLoading(false));
+  }, [tokenParam]);
 
   const handleProfilePictureClick = () => {
     fileInputRef.current?.click();
@@ -235,6 +270,7 @@ function RegisterContent() {
         payoutCashapp: payoutMethod === "cashapp" ? cashappTag : undefined,
         payoutBankRouting: payoutMethod === "bank" ? bankRouting : undefined,
         payoutBankAccount: payoutMethod === "bank" ? bankAccount : undefined,
+        inviteToken: tokenParam || undefined,
       });
 
       if (result.success) {
@@ -255,10 +291,123 @@ function RegisterContent() {
     }
   };
 
-  if (isLoading) {
+  // Buyer registration submit
+  const handleBuyerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBuyerError("");
+    if (!buyerBusinessName.trim() || !buyerBusinessType || !buyerEmail.trim() || !buyerPassword || !buyerUsername.trim()) {
+      setBuyerError("All fields are required");
+      return;
+    }
+    setBuyerSubmitting(true);
+    try {
+      const result = await registerBuyer({
+        email: buyerEmail,
+        password: buyerPassword,
+        username: buyerUsername,
+        businessName: buyerBusinessName,
+        businessType: buyerBusinessType as any,
+        phone: buyerPhone,
+        licensedStates: [],
+        complianceAcknowledged: true,
+      });
+      if (result.success) {
+        window.location.href = "/business";
+      } else {
+        setBuyerError(result.error || "Registration failed");
+      }
+    } catch {
+      setBuyerError("Registration failed. Please try again.");
+    } finally {
+      setBuyerSubmitting(false);
+    }
+  };
+
+  if (isLoading || tokenLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
+      </div>
+    );
+  }
+
+  // Buyer registration flow
+  if (requestedRole === "buyer" && !tokenParam) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
+          <Image src="/woml-v3.png" alt="" width={500} height={500} className="opacity-[0.03] select-none" priority />
+        </div>
+        <div className="relative z-10 bg-white p-8 rounded-2xl border border-gray-200 max-w-lg w-full shadow-lg">
+          <div className="text-center mb-6">
+            <Link href="/">
+              <Image src="/woml-v3.png" alt="WOML" width={260} height={75} className="mx-auto mb-4 h-18 w-auto object-contain" />
+            </Link>
+            <h1 className="text-2xl font-bold text-[#E8822A] mb-2">Create Business Account</h1>
+            <p className="text-gray-500">Start receiving leads from your provider network</p>
+          </div>
+          {buyerError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerError}</div>
+          )}
+          <form onSubmit={handleBuyerSubmit} className="space-y-4">
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">Business Name</label>
+              <input type="text" value={buyerBusinessName} onChange={(e) => setBuyerBusinessName(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Acme Auto Insurance" required />
+            </div>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">Business Type</label>
+              <select value={buyerBusinessType} onChange={(e) => setBuyerBusinessType(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" required>
+                <option value="">Select type...</option>
+                <option value="insurance_agency">Insurance Agency</option>
+                <option value="dealership">Dealership</option>
+                <option value="broker">Broker</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Username</label>
+                <input type="text" value={buyerUsername} onChange={(e) => setBuyerUsername(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="acmeauto" required />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Phone</label>
+                <input type="tel" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="(555) 123-4567" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
+              <input type="email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="you@business.com" required />
+            </div>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">Password</label>
+              <input type="password" value={buyerPassword} onChange={(e) => setBuyerPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Min. 8 characters" required />
+            </div>
+            <button type="submit" disabled={buyerSubmitting} className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2 mt-6">
+              {buyerSubmitting ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Creating...</> : "Create Business Account"}
+            </button>
+          </form>
+          <div className="mt-6 text-center">
+            <p className="text-gray-500 text-sm">Already have an account? <Link href="/auth/login" className="text-[#E8822A] hover:underline font-medium">Sign in</Link></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If token was provided but is invalid, show error and block registration
+  if (tokenParam && inviteError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 max-w-md w-full shadow-lg text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Invalid Invite Link</h2>
+          <p className="text-gray-500 mb-6">{inviteError}</p>
+          <Link href="/auth/login" className="text-[#E8822A] hover:underline font-medium">Go to Login</Link>
+        </div>
       </div>
     );
   }
@@ -292,8 +441,18 @@ function RegisterContent() {
           <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
             {step === 1 ? "Create Your Profile" : "Set Up Your Payouts"}
           </h1>
+          {inviteData && (
+            <div className="mt-2 mb-1 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-800 font-semibold text-sm">
+                Join {inviteData.businessName}&apos;s Network — Earn ${inviteData.ratePerLead}/lead
+              </p>
+              {inviteData.channelName && (
+                <p className="text-green-700 text-xs mt-0.5">{inviteData.channelName}</p>
+              )}
+            </div>
+          )}
           <p className="text-gray-500">
-            Step {step} of 2 {step === 1 ? "- Partner with Options Insurance Agency" : "- How would you like to be paid?"}
+            Step {step} of 2 {step === 1 ? "- Your provider profile" : "- How would you like to be paid?"}
           </p>
         </div>
 

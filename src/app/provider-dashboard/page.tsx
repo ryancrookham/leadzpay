@@ -32,7 +32,7 @@ import { isProvider, LeadBuyer } from "@/lib/auth-types";
 import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
 import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
 import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
-import { MASTER_OPERATOR } from "@/lib/master-operator";
+// MASTER_OPERATOR import removed — platform now uses invite-only channel architecture
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 
 // Lead form data interface (basic info)
@@ -170,6 +170,7 @@ export default function ProviderDashboard() {
     getRequestsForProvider,
     getInvitationsForProvider,
     getActiveConnectionForProvider,
+    getActiveConnectionsForProvider,
     sendConnectionRequest,
     acceptTerms,
     declineTerms,
@@ -237,6 +238,7 @@ export default function ProviderDashboard() {
 
   // Get connection status
   const activeConnection = getActiveConnectionForProvider(currentUser.id);
+  const activeConnections = getActiveConnectionsForProvider(currentUser.id);
   const myRequests = getRequestsForProvider(currentUser.id);
   // Also get invitations from businesses (requests where provider email matches and terms are already set)
   const myInvitations = getInvitationsForProvider(currentUser.email);
@@ -425,6 +427,7 @@ export default function ProviderDashboard() {
               currentUser={currentUser}
               currentProvider={currentProvider}
               activeConnection={activeConnection}
+              activeConnections={activeConnections}
               pendingTermsRequest={pendingTermsRequest}
               pendingInvitation={pendingInvitation}
               pendingRequest={pendingRequest}
@@ -636,6 +639,7 @@ function ConnectionTab({
   currentUser,
   currentProvider,
   activeConnection,
+  activeConnections,
   pendingTermsRequest,
   pendingInvitation,
   pendingRequest,
@@ -652,6 +656,7 @@ function ConnectionTab({
   currentUser: import("@/lib/auth-types").User;
   currentProvider: import("@/lib/auth-types").LeadProvider | null;
   activeConnection: ApiConnection | null;
+  activeConnections: ApiConnection[];
   pendingTermsRequest: ApiConnection | undefined;
   pendingInvitation: ApiConnection | null;
   pendingRequest: ApiConnection | undefined;
@@ -677,6 +682,14 @@ function ConnectionTab({
     connectionStatus?: string;
   } | null>(null);
   const [, setShowBuyerList] = useState(false);
+  // Channel picker state — when provider has multiple active connections
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(
+    activeConnections.length === 1 ? activeConnections[0].id : null
+  );
+  // Effective active connection: selected or the single one
+  const effectiveConnection = selectedConnectionId
+    ? (activeConnections.find((c) => c.id === selectedConnectionId) || activeConnection)
+    : activeConnection;
 
   // Multi-step lead submission state
   const [showLeadForm, setShowLeadForm] = useState(false);
@@ -781,15 +794,12 @@ function ConnectionTab({
       setLoadingBuyers(true);
       try {
         const users = await fetchUsersByRole("buyer");
-        // Filter to only show Options Insurance Agency (master operator)
-        const filteredUsers = users.filter(
-          (u) => u.email.toLowerCase() === MASTER_OPERATOR.email.toLowerCase()
-        );
-        const buyerList = filteredUsers.map((u) => ({
+        // Only show connected buyers (API is already connection-scoped)
+        const buyerList = users.map((u) => ({
           id: u.id,
           email: u.email,
           displayName: u.displayName || u.email,
-          businessName: u.businessName || MASTER_OPERATOR.businessName,
+          businessName: u.businessName || u.displayName || u.email,
           location: u.location || "",
           licensedStates: u.licensedStates || [],
           isConnected: u.isConnected,
@@ -943,7 +953,7 @@ function ConnectionTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          connectionId: activeConnection.id,
+          connectionId: (effectiveConnection || activeConnection).id,
           customerData: {
             name: formData.customerName,
             email: formData.email,
@@ -1017,7 +1027,7 @@ function ConnectionTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          connectionId: activeConnection.id,
+          connectionId: (effectiveConnection || activeConnection).id,
           customerData: {
             name: formData.customerName,
             email: formData.email,
@@ -1077,7 +1087,7 @@ function ConnectionTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          connectionId: activeConnection.id,
+          connectionId: (effectiveConnection || activeConnection).id,
           customerData: {
             name: leadName,
             email: quoteEmail,
@@ -1309,6 +1319,29 @@ function ConnectionTab({
   if (activeConnection) {
     return (
       <div className="space-y-6">
+        {/* Channel Picker — only shown when provider has multiple active connections */}
+        {activeConnections.length > 1 && !selectedConnectionId && formStep === "channel" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-[#E8822A] mb-2">Which business is this lead for?</h3>
+            <p className="text-gray-500 text-sm mb-4">Select the channel you want to submit a lead to.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {activeConnections.map((conn) => (
+                <button
+                  key={conn.id}
+                  onClick={() => setSelectedConnectionId(conn.id)}
+                  className="border-2 border-gray-200 hover:border-[#E8822A] rounded-xl p-4 text-left transition group"
+                >
+                  <div className="h-10 w-10 rounded-full bg-[#E8822A] flex items-center justify-center mb-2">
+                    <span className="text-white font-bold">{(conn.buyer_name || conn.buyerBusinessName || "B").charAt(0)}</span>
+                  </div>
+                  <p className="font-semibold text-gray-800 group-hover:text-[#E8822A] transition">{conn.buyer_name || conn.buyerBusinessName || "Business"}</p>
+                  <p className="text-sm text-gray-500">${Number(conn.rate_per_lead).toFixed(2)}/lead</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Success Message */}
         {leadSubmitted && formStep === "success" && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
@@ -2509,81 +2542,16 @@ function ConnectionTab({
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Connect with a Business</h3>
-          <p className="text-gray-600 mb-6">Select a business to request a connection. They will set the payment terms for your partnership.</p>
-
-          {buyers.length > 0 ? (
-            <div className="space-y-4">
-              {buyers.map((buyer) => {
-                const existingRequest = myRequests.find(r => r.buyerId === buyer.id);
-                const isDisabled = !!existingRequest;
-
-                return (
-                  <div
-                    key={buyer.id}
-                    className={`border rounded-xl p-4 transition ${
-                      selectedBuyer?.id === buyer.id
-                        ? "border-[#E8822A] bg-[#E8822A]/5"
-                        : isDisabled
-                        ? "border-gray-200 bg-gray-50 opacity-60"
-                        : "border-gray-200 hover:border-[#E8822A]/50 cursor-pointer"
-                    }`}
-                    onClick={() => !isDisabled && setSelectedBuyer(buyer)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-[#E8822A] flex items-center justify-center">
-                          <span className="text-xl font-bold text-white">{(buyer.businessName || "?").charAt(0)}</span>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-800">{buyer.businessName}</p>
-                          <p className="text-gray-500 text-sm">{buyer.location || "Insurance Agency"}</p>
-                        </div>
-                      </div>
-                      {existingRequest && (
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          existingRequest.status === "rejected" || existingRequest.status === "declined"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-orange-100 text-orange-700"
-                        }`}>
-                          {existingRequest.status === "rejected" ? "Rejected" :
-                           existingRequest.status === "declined" ? "Declined" :
-                           existingRequest.status === "accepted" ? "Connected" : "Pending"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-400">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <p>No businesses available yet</p>
-            </div>
-          )}
-
-          {selectedBuyer && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h4 className="font-medium text-gray-800 mb-3">Send Request to {selectedBuyer.businessName}</h4>
-              <textarea
-                value={requestMessage}
-                onChange={(e) => setRequestMessage(e.target.value)}
-                placeholder="Add a message (optional)"
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#E8822A] transition resize-none"
-                rows={3}
-              />
-              <button
-                onClick={handleSendRequest}
-                className="mt-4 w-full bg-[#E8822A] hover:bg-[#D47526] text-white py-3 rounded-lg font-semibold transition"
-              >
-                Send Connection Request
-              </button>
-            </div>
-          )}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm text-center">
+          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">No Active Channels Yet</h3>
+          <p className="text-gray-500 max-w-sm mx-auto">
+            You connect with businesses via invite links. Ask a business to share their invite link with you to get started.
+          </p>
         </div>
       )}
 

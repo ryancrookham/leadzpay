@@ -69,6 +69,28 @@ export interface DbConnection {
   message: string | null;
   created_at: string;
   accepted_at: string | null;
+  invite_token_id: string | null;
+  required_fields: Record<string, string> | null;
+}
+
+export interface DbInviteToken {
+  id: string;
+  buyer_id: string;
+  token: string;
+  label: string | null;
+  channel_name: string | null;
+  channel_description: string | null;
+  is_active: boolean;
+  use_count: number;
+  max_uses: number | null;
+  expires_at: string | null;
+  rate_per_lead: number;
+  payment_timing: string;
+  weekly_lead_cap: number | null;
+  monthly_lead_cap: number | null;
+  termination_notice_days: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DbLead {
@@ -288,29 +310,36 @@ export async function createConnection(data: {
   initiator: 'provider' | 'buyer';
   message?: string;
   status?: ConnectionStatus;
+  accepted_at?: string;
   rate_per_lead?: number;
   payment_timing?: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
-  weekly_lead_cap?: number;
-  monthly_lead_cap?: number;
+  weekly_lead_cap?: number | null;
+  monthly_lead_cap?: number | null;
   termination_notice_days?: number;
+  invite_token_id?: string;
+  required_fields?: Record<string, string>;
 }): Promise<DbConnection> {
   const sql = getSql();
   const status = data.status || (data.initiator === 'provider' ? 'pending_buyer_review' : 'pending_provider_accept');
   const result = await sql`
     INSERT INTO connections (
-      provider_id, buyer_id, initiator, message, status,
-      rate_per_lead, payment_timing, weekly_lead_cap, monthly_lead_cap, termination_notice_days
+      provider_id, buyer_id, initiator, message, status, accepted_at,
+      rate_per_lead, payment_timing, weekly_lead_cap, monthly_lead_cap, termination_notice_days,
+      invite_token_id, required_fields
     ) VALUES (
       ${data.provider_id},
       ${data.buyer_id},
       ${data.initiator},
       ${data.message || null},
       ${status},
+      ${data.accepted_at || null},
       ${data.rate_per_lead || 50},
       ${data.payment_timing || 'per_lead'},
-      ${data.weekly_lead_cap || null},
-      ${data.monthly_lead_cap || null},
-      ${data.termination_notice_days || 7}
+      ${data.weekly_lead_cap ?? null},
+      ${data.monthly_lead_cap ?? null},
+      ${data.termination_notice_days || 7},
+      ${data.invite_token_id || null},
+      ${data.required_fields ? JSON.stringify(data.required_fields) : null}
     )
     RETURNING *
   `;
@@ -691,6 +720,148 @@ export async function getPlatformStats() {
     activeProviders: userStats.active_providers,
     activeBuyers: userStats.active_buyers,
   };
+}
+
+// ============================================
+// User discovery (connection-scoped)
+// ============================================
+
+export async function getUsersByIds(ids: string[]): Promise<DbUser[]> {
+  if (ids.length === 0) return [];
+  const sql = getSql();
+  const result = await sql`
+    SELECT id, email, username, role, display_name, phone, location, business_name, business_type,
+           licensed_states, profile_picture_url, payout_method, created_at
+    FROM users
+    WHERE id = ANY(${ids}::uuid[]) AND is_active = true
+    ORDER BY created_at DESC
+  `;
+  return result as unknown as DbUser[];
+}
+
+// ============================================
+// Multi-connection support for providers
+// ============================================
+
+export async function getActiveConnectionsForProvider(providerId: string): Promise<DbConnection[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connections
+    WHERE provider_id = ${providerId} AND status = 'active'
+    ORDER BY accepted_at DESC
+  `;
+  return result as unknown as DbConnection[];
+}
+
+// ============================================
+// Invite Token functions
+// ============================================
+
+export async function createInviteToken(data: {
+  buyer_id: string;
+  token: string;
+  label?: string;
+  channel_name?: string;
+  channel_description?: string;
+  max_uses?: number;
+  expires_at?: string;
+  rate_per_lead: number;
+  payment_timing?: string;
+  weekly_lead_cap?: number;
+  monthly_lead_cap?: number;
+  termination_notice_days?: number;
+}): Promise<DbInviteToken> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO invite_tokens (
+      buyer_id, token, label, channel_name, channel_description,
+      max_uses, expires_at, rate_per_lead, payment_timing,
+      weekly_lead_cap, monthly_lead_cap, termination_notice_days
+    ) VALUES (
+      ${data.buyer_id},
+      ${data.token},
+      ${data.label || null},
+      ${data.channel_name || null},
+      ${data.channel_description || null},
+      ${data.max_uses || null},
+      ${data.expires_at || null},
+      ${data.rate_per_lead},
+      ${data.payment_timing || 'per_lead'},
+      ${data.weekly_lead_cap || null},
+      ${data.monthly_lead_cap || null},
+      ${data.termination_notice_days || 7}
+    )
+    RETURNING *
+  `;
+  return first<DbInviteToken>(result)!;
+}
+
+export async function getInviteTokensByBuyer(buyerId: string): Promise<DbInviteToken[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM invite_tokens
+    WHERE buyer_id = ${buyerId}
+    ORDER BY created_at DESC
+  `;
+  return result as unknown as DbInviteToken[];
+}
+
+export async function getInviteTokenByToken(token: string): Promise<DbInviteToken | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM invite_tokens WHERE token = ${token} LIMIT 1
+  `;
+  return first<DbInviteToken>(result);
+}
+
+export async function deactivateInviteToken(id: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE invite_tokens SET is_active = false, updated_at = NOW() WHERE id = ${id}
+  `;
+}
+
+export async function incrementInviteTokenUseCount(id: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE invite_tokens SET use_count = use_count + 1, updated_at = NOW() WHERE id = ${id}
+  `;
+}
+
+export async function createInviteTokenUse(
+  inviteTokenId: string,
+  providerId: string,
+  connectionId: string
+): Promise<void> {
+  const sql = getSql();
+  await sql`
+    INSERT INTO invite_token_uses (invite_token_id, provider_id, connection_id)
+    VALUES (${inviteTokenId}, ${providerId}, ${connectionId})
+    ON CONFLICT (invite_token_id, provider_id) DO NOTHING
+  `;
+}
+
+export async function updateInviteToken(
+  id: string,
+  updates: {
+    label?: string;
+    channel_name?: string;
+    channel_description?: string;
+    is_active?: boolean;
+  }
+): Promise<DbInviteToken | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE invite_tokens SET
+      label = COALESCE(${updates.label ?? null}, label),
+      channel_name = COALESCE(${updates.channel_name ?? null}, channel_name),
+      channel_description = COALESCE(${updates.channel_description ?? null}, channel_description),
+      is_active = COALESCE(${updates.is_active ?? null}, is_active),
+      updated_at = NOW()
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbInviteToken>(result);
 }
 
 export async function getRevenueByDay(days: number = 30) {

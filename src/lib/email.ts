@@ -74,7 +74,7 @@ export async function sendPasswordResetEmail(
 
               <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
                 <p style="color: #999; font-size: 12px; margin: 0;">
-                  Powered by Options Insurance Agency
+                  Powered by WOMLeads
                 </p>
               </div>
             </div>

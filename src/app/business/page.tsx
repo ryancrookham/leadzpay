@@ -12,6 +12,7 @@ import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/l
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import { WOML_PLATFORM } from "@/lib/master-operator";
 import BusinessRevenueChart from "./components/BusinessRevenueChart";
+import InviteTab from "./components/InviteTab";
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -40,7 +41,7 @@ interface ApiLead {
   buyerBusinessName: string | null;
 }
 
-type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings";
+type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -504,7 +505,7 @@ function BusinessPortalContent() {
               />
             </Link>
             <span className="text-gray-300">|</span>
-            <span className="text-[#E8822A] font-medium">{currentBuyer?.businessName || "Options Insurance Agency"}</span>
+            <span className="text-[#E8822A] font-medium">{currentBuyer?.businessName || "Business Dashboard"}</span>
           </div>
           <button
             onClick={handleLogout}
@@ -521,7 +522,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings"] as Tab[]).map((tab) => (
+          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -531,7 +532,7 @@ function BusinessPortalContent() {
                   : "bg-white text-gray-600 hover:text-[#E8822A] hover:bg-gray-100 border border-gray-200"
               }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "providers" ? "My Providers" : tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === "requests" && pendingRequests.length > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
                   {pendingRequests.length}
@@ -1425,6 +1426,13 @@ function BusinessPortalContent() {
         {activeTab === "settings" && (
           <TabErrorBoundary tabName="Settings">
             <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} />
+          </TabErrorBoundary>
+        )}
+
+        {/* Invite Tab */}
+        {activeTab === "invite" && (
+          <TabErrorBoundary tabName="Invite">
+            <InviteTab businessName={currentBuyer?.businessName || "Your Business"} />
           </TabErrorBoundary>
         )}
       </div>

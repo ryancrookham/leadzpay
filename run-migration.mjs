@@ -13,60 +13,64 @@ const sql = neon(dbUrlMatch[1].trim());
 
 async function runMigration() {
   try {
-    console.log('Running connections enhancement migration...\n');
+    console.log('Running 004_invite_tokens migration...\n');
 
-    // Drop old constraint
-    await sql`ALTER TABLE connections DROP CONSTRAINT IF EXISTS connections_status_check`;
-    console.log('✓ Dropped old status constraint');
-
-    // Add new constraint with workflow statuses
+    // invite_tokens table
     await sql`
-      ALTER TABLE connections
-      ADD CONSTRAINT connections_status_check
-      CHECK (status IN (
-        'pending_buyer_review',
-        'pending_provider_accept',
-        'active',
-        'declined_by_provider',
-        'rejected_by_buyer',
-        'terminated'
-      ))
+      CREATE TABLE IF NOT EXISTS invite_tokens (
+        id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        buyer_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token                   VARCHAR(64) NOT NULL UNIQUE,
+        label                   VARCHAR(255),
+        channel_name            VARCHAR(255),
+        channel_description     TEXT,
+        is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+        use_count               INTEGER NOT NULL DEFAULT 0,
+        max_uses                INTEGER,
+        expires_at              TIMESTAMP WITH TIME ZONE,
+        rate_per_lead           DECIMAL(10,2) NOT NULL DEFAULT 50.00,
+        payment_timing          VARCHAR(20) NOT NULL DEFAULT 'per_lead',
+        weekly_lead_cap         INTEGER,
+        monthly_lead_cap        INTEGER,
+        termination_notice_days INTEGER NOT NULL DEFAULT 7,
+        created_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at              TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
     `;
-    console.log('✓ Added new status constraint');
+    console.log('✓ invite_tokens table created (or already exists)');
 
-    // Add termination_notice_days column
-    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS termination_notice_days INTEGER DEFAULT 7`;
-    console.log('✓ Added termination_notice_days column');
+    await sql`CREATE INDEX IF NOT EXISTS idx_invite_tokens_token ON invite_tokens(token)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_invite_tokens_buyer ON invite_tokens(buyer_id)`;
+    console.log('✓ invite_tokens indexes created');
 
-    // Add terms_updated_at column
-    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS terms_updated_at TIMESTAMPTZ`;
-    console.log('✓ Added terms_updated_at column');
-
-    // Add initiator column
-    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS initiator VARCHAR(20) DEFAULT 'provider'`;
-    console.log('✓ Added initiator column');
-
-    // Add message column
-    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS message TEXT`;
-    console.log('✓ Added message column');
-
-    // Update any existing rows with old status values
-    const updated1 = await sql`UPDATE connections SET status = 'pending_buyer_review' WHERE status = 'pending' RETURNING id`;
-    const updated2 = await sql`UPDATE connections SET status = 'active' WHERE status = 'accepted' RETURNING id`;
-    const updated3 = await sql`UPDATE connections SET status = 'rejected_by_buyer' WHERE status = 'declined' RETURNING id`;
-    console.log(`✓ Migrated ${updated1.length + updated2.length + updated3.length} existing connections`);
-
-    // Verify table structure
-    const columns = await sql`
-      SELECT column_name, data_type, column_default
-      FROM information_schema.columns
-      WHERE table_name = 'connections'
-      ORDER BY ordinal_position
+    // invite_token_uses table
+    await sql`
+      CREATE TABLE IF NOT EXISTS invite_token_uses (
+        id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        invite_token_id UUID NOT NULL REFERENCES invite_tokens(id) ON DELETE CASCADE,
+        provider_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        connection_id   UUID REFERENCES connections(id),
+        used_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(invite_token_id, provider_id)
+      )
     `;
-    console.log('\nConnections table columns:');
-    columns.forEach(c => console.log(`  - ${c.column_name}: ${c.data_type}`));
+    console.log('✓ invite_token_uses table created (or already exists)');
 
-    console.log('\n✓ Migration complete!');
+    // Extend connections table
+    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS invite_token_id UUID REFERENCES invite_tokens(id) ON DELETE SET NULL`;
+    console.log('✓ connections.invite_token_id column added (or already exists)');
+
+    await sql`ALTER TABLE connections ADD COLUMN IF NOT EXISTS required_fields JSONB`;
+    console.log('✓ connections.required_fields column added (or already exists)');
+
+    // Verify
+    const tables = await sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('invite_tokens', 'invite_token_uses')
+    `;
+    console.log('\nVerified tables:', tables.map(t => t.table_name).join(', '));
+
+    console.log('\n✓ Migration 004 complete!');
   } catch (error) {
     console.error('Migration error:', error.message);
     process.exit(1);

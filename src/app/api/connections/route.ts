@@ -76,34 +76,11 @@ export async function POST(request: NextRequest) {
     const role = (session.user as any).role as "provider" | "buyer";
 
     if (role === "provider") {
-      // Provider initiates connection request to a buyer
-      const { buyerId, message } = body;
-
-      if (!buyerId) {
-        return NextResponse.json({ error: "buyerId is required" }, { status: 400 });
-      }
-
-      // Check if connection already exists
-      const existing = await getConnectionByProviderAndBuyer(userId, buyerId);
-      if (existing) {
-        return NextResponse.json({ error: "Connection already exists with this business" }, { status: 400 });
-      }
-
-      // Verify buyer exists
-      const buyer = await getUserById(buyerId);
-      if (!buyer || buyer.role !== "buyer") {
-        return NextResponse.json({ error: "Business not found" }, { status: 404 });
-      }
-
-      const connection = await createConnection({
-        provider_id: userId,
-        buyer_id: buyerId,
-        initiator: "provider",
-        message,
-        status: "pending_buyer_review",
-      });
-
-      return NextResponse.json({ success: true, connection });
+      // Providers cannot cold-connect — connections are made via business invite links only
+      return NextResponse.json(
+        { error: "Connections are made via business invite links. Ask the business to share their invite link with you." },
+        { status: 403 }
+      );
     } else if (role === "buyer") {
       // Buyer sends invitation to provider with terms
       const { providerEmail, terms, message } = body;
