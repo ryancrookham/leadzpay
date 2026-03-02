@@ -757,6 +757,7 @@ function ConnectionTab({
   } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [licenseFlagged, setLicenseFlagged] = useState<{ isFlagged: boolean; flagReasons: string[] } | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [maritalStatus, setMaritalStatus] = useState<"" | "married" | "single">("");
   const [hasInsurance, setHasInsurance] = useState<"" | "yes" | "no">("");
@@ -1178,6 +1179,52 @@ function ConnectionTab({
   };
 
   // Handle license image upload
+  const validateExtractedLicense = (data: NonNullable<typeof extractedLicenseData>) => {
+    const reasons: string[] = [];
+
+    // Check 1: Single-word name (real IDs always have first + last)
+    if (data.name) {
+      const nameParts = data.name.trim().split(/\s+/);
+      if (nameParts.length < 2) {
+        reasons.push("Single-word name detected. Real IDs require first and last name.");
+      }
+    }
+
+    // Check 2: Known fake names blocklist
+    if (data.name) {
+      const lowerName = data.name.toLowerCase().trim();
+      const fakeNames = ["mclovin", "fogell", "john doe", "jane doe", "test test", "fake name", "sample sample"];
+      if (fakeNames.some(fake => lowerName === fake || lowerName.includes(fake))) {
+        reasons.push("Name matches a known fake/test ID.");
+      }
+    }
+
+    // Check 3: Invalid US state code
+    if (data.state) {
+      const validStates = new Set([
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+        "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC","PR","GU","VI","AS","MP"
+      ]);
+      if (!validStates.has(data.state.toUpperCase())) {
+        reasons.push(`"${data.state}" is not a valid US state code.`);
+      }
+    }
+
+    // Check 4: Future date of birth
+    if (data.dateOfBirth) {
+      const parts = data.dateOfBirth.split("/");
+      if (parts.length === 3) {
+        const dob = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
+        if (!isNaN(dob.getTime()) && dob > new Date()) {
+          reasons.push("Date of birth is in the future.");
+        }
+      }
+    }
+
+    return { isFlagged: reasons.length > 0, flagReasons: reasons };
+  };
+
   const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1197,6 +1244,7 @@ function ConnectionTab({
     // Reset state
     setExtractedLicenseData(null);
     setExtractionError(null);
+    setLicenseFlagged(null);
     setIsExtracting(true);
 
     try {
@@ -1217,6 +1265,11 @@ function ConnectionTab({
         setExtractedLicenseData(result.data);
         setExtractionError(null);
         if (result.data.name) setCustomerName(result.data.name);
+        // Run programmatic fake detection on extracted data
+        if (result.data.isValid) {
+          const flagResult = validateExtractedLicense(result.data);
+          setLicenseFlagged(flagResult);
+        }
       } else {
         setExtractionError(result.error || "Could not process the license photo. Please try again.");
       }
@@ -1634,7 +1687,7 @@ function ConnectionTab({
                   <label className="block text-gray-700 text-sm font-medium mb-2">
                     Driver&apos;s License Photo *
                   </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (licenseFlagged?.isFlagged ? "border-amber-400 bg-amber-50" : extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
                     {isExtracting ? (
                       <div className="space-y-3">
                         <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
@@ -1644,7 +1697,14 @@ function ConnectionTab({
                     ) : licenseImage ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2">
-                          {extractedLicenseData?.isValid ? (
+                          {licenseFlagged?.isFlagged ? (
+                            <span className="text-amber-600 flex items-center gap-1">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span className="font-medium">ID Flagged</span>
+                            </span>
+                          ) : extractedLicenseData?.isValid ? (
                             <span className="text-green-600 flex items-center gap-1">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -1669,7 +1729,7 @@ function ConnectionTab({
                         </div>
                         <img src={licenseImage} alt="License preview" className="max-h-48 mx-auto rounded-lg shadow-sm" />
                         <button
-                          onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
+                          onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); setLicenseFlagged(null); }}
                           className="text-sm text-red-600 hover:text-red-700 underline"
                         >
                           Remove and upload different image
@@ -1769,6 +1829,24 @@ function ConnectionTab({
                   </div>
                 )}
 
+                {/* Flagged ID Warning */}
+                {licenseFlagged?.isFlagged && (
+                  <div className="border rounded-xl p-4 bg-amber-50 border-amber-300">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      <p className="text-amber-800 font-medium text-sm">This ID has been flagged</p>
+                    </div>
+                    <ul className="ml-7 space-y-1">
+                      {licenseFlagged.flagReasons.map((reason, i) => (
+                        <li key={i} className="text-amber-700 text-sm">{reason}</li>
+                      ))}
+                    </ul>
+                    <p className="ml-7 mt-2 text-amber-600 text-xs">Please use a valid government-issued ID to submit this lead.</p>
+                  </div>
+                )}
+
                 {/* Optional Fields */}
                 <div className="space-y-4 border-t border-gray-100 pt-4">
                   {/* Marital Status */}
@@ -1837,7 +1915,7 @@ function ConnectionTab({
                 {/* Submit Button */}
                 <button
                   onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid}
+                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid || !!licenseFlagged?.isFlagged}
                   className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
                 >
                   {isSubmittingLead ? (

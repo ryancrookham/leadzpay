@@ -5,6 +5,8 @@ import {
   createConnection,
   incrementInviteTokenUseCount,
   createInviteTokenUse,
+  getInviteByCode,
+  markInviteAccepted,
 } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
       payoutBankRouting,
       payoutBankAccount,
       inviteToken,
+      inviteCode,
     } = body;
 
     // Validate required fields
@@ -151,6 +154,33 @@ export async function POST(request: NextRequest) {
 
       await incrementInviteTokenUseCount(tokenRow.id);
       await createInviteTokenUse(tokenRow.id, result.user.id, connection.id);
+    }
+
+    // Handle invite code — create connection with pre-negotiated terms
+    if (inviteCode && result.user) {
+      try {
+        const invite = await getInviteByCode(inviteCode);
+        if (invite && invite.status === "pending" && new Date(invite.expires_at) > new Date()) {
+          await createConnection({
+            provider_id: result.user.id,
+            buyer_id: invite.buyer_id,
+            initiator: "buyer",
+            status: "pending_provider_accept",
+            rate_per_lead: Number(invite.rate_per_lead),
+            payment_timing: invite.payment_timing as "per_lead" | "weekly" | "biweekly" | "monthly",
+            weekly_lead_cap: invite.weekly_lead_cap || undefined,
+            monthly_lead_cap: invite.monthly_lead_cap || undefined,
+            termination_notice_days: invite.termination_notice_days,
+            message: invite.message || undefined,
+          });
+
+          await markInviteAccepted(invite.id, result.user.id);
+          console.log(`[REGISTER] Invite ${inviteCode} accepted by user ${result.user.id}`);
+        }
+      } catch (inviteError) {
+        // Don't fail registration if invite processing fails
+        console.error("[REGISTER] Error processing invite code:", inviteError);
+      }
     }
 
     return NextResponse.json({ success: true });

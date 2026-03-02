@@ -1512,9 +1512,39 @@ function ProvidersTab({
   const [editMonthlyLeadCap, setEditMonthlyLeadCap] = useState<number | undefined>(undefined);
   const [editTerminationDays, setEditTerminationDays] = useState(7);
 
+  // Invite new provider state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
+  const [invitePersonalMessage, setInvitePersonalMessage] = useState("");
+  const [inviteRate, setInviteRate] = useState(50);
+  const [invitePaymentTiming, setInvitePaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [inviteEnableLeadCaps, setInviteEnableLeadCaps] = useState(false);
+  const [inviteWeeklyLeadCap, setInviteWeeklyLeadCap] = useState<number | undefined>(undefined);
+  const [inviteMonthlyLeadCap, setInviteMonthlyLeadCap] = useState<number | undefined>(undefined);
+  const [inviteTerminationDays, setInviteTerminationDays] = useState(7);
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+
+  // Pending invites tracking
+  const [pendingInvites, setPendingInvites] = useState<Array<{
+    id: string;
+    invite_code: string;
+    provider_name: string | null;
+    provider_email: string | null;
+    provider_phone: string | null;
+    rate_per_lead: number;
+    status: string;
+    created_at: string;
+    expires_at: string;
+  }>>([]);
+  const [isLoadingInvites, setIsLoadingInvites] = useState(true);
+
   // Fetch providers on mount
   useEffect(() => {
     loadProviders();
+    loadInvites();
   }, []);
 
   const loadProviders = async () => {
@@ -1526,6 +1556,118 @@ function ProvidersTab({
       console.error("Failed to fetch providers:", error);
     } finally {
       setIsLoadingProviders(false);
+    }
+  };
+
+  const loadInvites = async () => {
+    setIsLoadingInvites(true);
+    try {
+      const res = await fetch("/api/invites");
+      const data = await res.json();
+      if (data.success) {
+        setPendingInvites(data.invites || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch invites:", error);
+    } finally {
+      setIsLoadingInvites(false);
+    }
+  };
+
+  const handleCreateInvite = async () => {
+    if (!inviteName.trim()) {
+      setNotification({ type: "error", message: "Please enter the provider's name." });
+      setTimeout(() => setNotification(null), 5000);
+      return;
+    }
+    setIsCreatingInvite(true);
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerName: inviteName,
+          providerEmail: inviteEmail || undefined,
+          providerPhone: invitePhone || undefined,
+          ratePerLead: inviteRate,
+          paymentTiming: invitePaymentTiming,
+          weeklyLeadCap: inviteEnableLeadCaps ? inviteWeeklyLeadCap : undefined,
+          monthlyLeadCap: inviteEnableLeadCaps ? inviteMonthlyLeadCap : undefined,
+          terminationNoticeDays: inviteTerminationDays,
+          message: invitePersonalMessage || undefined,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.error === "provider_exists") {
+        // Provider already registered — use existing connections flow
+        setShowInviteModal(false);
+        setNotification({ type: "error", message: "This provider is already registered. Use the Providers tab to send them connection terms." });
+        setTimeout(() => setNotification(null), 5000);
+        return;
+      }
+
+      if (data.success) {
+        setShowInviteModal(false);
+        setNotification({
+          type: "success",
+          message: data.emailSent
+            ? `Invite created and email sent to ${inviteEmail}! Link: ${data.inviteUrl}`
+            : `Invite link created! Share it with ${inviteName}.`,
+        });
+        // Copy to clipboard
+        try { await navigator.clipboard.writeText(data.inviteUrl); } catch {}
+        // Reset form
+        setInviteEmail("");
+        setInviteName("");
+        setInvitePhone("");
+        setInvitePersonalMessage("");
+        setInviteRate(50);
+        setInvitePaymentTiming("per_lead");
+        setInviteEnableLeadCaps(false);
+        setInviteWeeklyLeadCap(undefined);
+        setInviteMonthlyLeadCap(undefined);
+        setInviteTerminationDays(7);
+        // Refresh invites list
+        await loadInvites();
+      } else {
+        setNotification({ type: "error", message: data.error || "Failed to create invite." });
+      }
+    } catch {
+      setNotification({ type: "error", message: "Failed to create invite. Please try again." });
+    } finally {
+      setIsCreatingInvite(false);
+      setTimeout(() => setNotification(null), 5000);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    if (!confirm("Cancel this invite? The link will stop working.")) return;
+    try {
+      const res = await fetch(`/api/invites?id=${inviteId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: "success", message: "Invite cancelled." });
+        await loadInvites();
+      } else {
+        setNotification({ type: "error", message: "Failed to cancel invite." });
+      }
+    } catch {
+      setNotification({ type: "error", message: "Failed to cancel invite." });
+    }
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const copyInviteLink = async (inviteCode: string) => {
+    const siteUrl = "https://www.womleads.com";
+    const url = `${siteUrl}/auth/register?invite=${inviteCode}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedInviteId(inviteCode);
+      setTimeout(() => setCopiedInviteId(null), 2000);
+    } catch {
+      setNotification({ type: "error", message: "Failed to copy link." });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -1735,22 +1877,87 @@ function ProvidersTab({
         </div>
       )}
 
-      {/* Header + Search */}
+      {/* Header + Search + Invite Button */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <h3 className="text-lg font-semibold text-[#E8822A]">Provider Network ({allProviders.length})</h3>
-        <div className="relative">
-          <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, email, location..."
-            className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] w-72"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, email, location..."
+              className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] w-72"
+            />
+          </div>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition text-sm flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Invite Provider
+          </button>
         </div>
       </div>
+
+      {/* Pending Invites Tracking */}
+      {pendingInvites.filter(i => i.status === "pending").length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+          <h4 className="text-sm font-semibold text-amber-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Pending Invites ({pendingInvites.filter(i => i.status === "pending").length})
+          </h4>
+          <div className="space-y-3">
+            {pendingInvites.filter(i => i.status === "pending").map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between p-3 bg-amber-50/50 rounded-lg border border-amber-100">
+                <div>
+                  <p className="font-medium text-gray-800">{invite.provider_name || "Unnamed"}</p>
+                  <p className="text-gray-500 text-sm">
+                    {invite.provider_email || invite.provider_phone || "No contact info"}
+                    {" · "}${Number(invite.rate_per_lead).toFixed(2)}/lead
+                    {" · "}Created {new Date(invite.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => copyInviteLink(invite.invite_code)}
+                    className="text-[#E8822A] hover:bg-[#E8822A]/10 px-3 py-1.5 rounded-lg font-medium transition text-sm flex items-center gap-1"
+                  >
+                    {copiedInviteId === invite.invite_code ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        Copy Link
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleCancelInvite(invite.id)}
+                    className="text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg font-medium transition text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isLoadingProviders ? (
         <div className="flex items-center justify-center py-16">
@@ -2105,6 +2312,136 @@ function ProvidersTab({
       )}
 
       {/* Edit Terms Modal */}
+      {/* Invite New Provider Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-[#E8822A]">Invite a New Provider</h3>
+              <p className="text-gray-500 text-sm mt-1">Create a shareable invite link with pre-set terms. The provider will sign up and automatically receive your connection offer.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Provider Info */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Provider Name *</label>
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
+                  placeholder="John Smith"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Email <span className="text-gray-400">(optional)</span></label>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Phone <span className="text-gray-400">(optional)</span></label>
+                  <input
+                    type="tel"
+                    value={invitePhone}
+                    onChange={(e) => setInvitePhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+              </div>
+              {/* Rate */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Rate Per Lead</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[#E8822A] text-xl">$</span>
+                  <input
+                    type="number"
+                    value={inviteRate}
+                    onChange={(e) => setInviteRate(Number(e.target.value))}
+                    className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A]"
+                    min={5}
+                    max={500}
+                  />
+                  <span className="text-gray-500 text-sm">per qualified lead</span>
+                </div>
+              </div>
+              {/* Payment Timing */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
+                <select
+                  value={invitePaymentTiming}
+                  onChange={(e) => setInvitePaymentTiming(e.target.value as typeof invitePaymentTiming)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
+                >
+                  <option value="per_lead">Per Lead (pay as leads come in)</option>
+                  <option value="weekly">Weekly Batch</option>
+                  <option value="biweekly">Bi-weekly Batch</option>
+                  <option value="monthly">Monthly Batch</option>
+                </select>
+              </div>
+              {/* Termination */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Termination Notice</label>
+                <select
+                  value={inviteTerminationDays}
+                  onChange={(e) => setInviteTerminationDays(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
+                >
+                  <option value={0}>Immediate (No notice)</option>
+                  <option value={7}>7 days notice</option>
+                  <option value={14}>14 days notice</option>
+                  <option value={30}>30 days notice</option>
+                </select>
+              </div>
+              {/* Personal Message */}
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Personal Message <span className="text-gray-400">(optional)</span></label>
+                <textarea
+                  value={invitePersonalMessage}
+                  onChange={(e) => setInvitePersonalMessage(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] resize-none"
+                  rows={2}
+                  placeholder="Hey, I'd love to work with you on WOML..."
+                />
+              </div>
+              {inviteEmail && (
+                <p className="text-xs text-gray-400">An invite email will be sent automatically if email is configured.</p>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateInvite}
+                disabled={isCreatingInvite}
+                className="flex-1 px-4 py-2.5 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCreatingInvite ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Creating...
+                  </>
+                ) : (
+                  "Create Invite Link"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingConnection && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditingConnection(null)}>
           <div

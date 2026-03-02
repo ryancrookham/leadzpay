@@ -279,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             payoutBankRouting: data.payoutBankRouting,
             payoutBankAccount: data.payoutBankAccount,
             inviteToken: data.inviteToken,
+            inviteCode: data.inviteCode,
           }),
         });
 

@@ -1262,3 +1262,112 @@ export async function updateLeadStripePayment(leadId: string, stripePaymentId: s
   `;
 }
 
+// ============================================
+// Invite queries
+// ============================================
+
+export interface DbInvite {
+  id: string;
+  buyer_id: string;
+  invite_code: string;
+  provider_email: string | null;
+  provider_phone: string | null;
+  provider_name: string | null;
+  rate_per_lead: number;
+  payment_timing: string;
+  weekly_lead_cap: number | null;
+  monthly_lead_cap: number | null;
+  termination_notice_days: number;
+  message: string | null;
+  status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by_user_id: string | null;
+  // Joined fields
+  buyer_business_name?: string | null;
+  buyer_display_name?: string | null;
+}
+
+export async function createInvite(data: {
+  buyer_id: string;
+  invite_code: string;
+  provider_email?: string;
+  provider_phone?: string;
+  provider_name?: string;
+  rate_per_lead?: number;
+  payment_timing?: string;
+  weekly_lead_cap?: number;
+  monthly_lead_cap?: number;
+  termination_notice_days?: number;
+  message?: string;
+}): Promise<DbInvite> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO invites (
+      buyer_id, invite_code, provider_email, provider_phone, provider_name,
+      rate_per_lead, payment_timing, weekly_lead_cap, monthly_lead_cap,
+      termination_notice_days, message
+    ) VALUES (
+      ${data.buyer_id},
+      ${data.invite_code},
+      ${data.provider_email || null},
+      ${data.provider_phone || null},
+      ${data.provider_name || null},
+      ${data.rate_per_lead || 50},
+      ${data.payment_timing || 'per_lead'},
+      ${data.weekly_lead_cap || null},
+      ${data.monthly_lead_cap || null},
+      ${data.termination_notice_days || 7},
+      ${data.message || null}
+    )
+    RETURNING *
+  `;
+  return first<DbInvite>(result)!;
+}
+
+export async function getInviteByCode(code: string): Promise<DbInvite | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT i.*, u.business_name as buyer_business_name, u.display_name as buyer_display_name
+    FROM invites i
+    JOIN users u ON i.buyer_id = u.id
+    WHERE i.invite_code = ${code}
+    LIMIT 1
+  `;
+  return first<DbInvite>(result);
+}
+
+export async function getInvitesByBuyerId(buyerId: string): Promise<DbInvite[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM invites
+    WHERE buyer_id = ${buyerId}
+    ORDER BY created_at DESC
+  `;
+  return result as unknown as DbInvite[];
+}
+
+export async function markInviteAccepted(inviteId: string, userId: string): Promise<DbInvite | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE invites SET
+      status = 'accepted',
+      accepted_at = NOW(),
+      accepted_by_user_id = ${userId}
+    WHERE id = ${inviteId}
+    RETURNING *
+  `;
+  return first<DbInvite>(result);
+}
+
+export async function cancelInvite(inviteId: string, buyerId: string): Promise<DbInvite | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE invites SET status = 'cancelled'
+    WHERE id = ${inviteId} AND buyer_id = ${buyerId} AND status = 'pending'
+    RETURNING *
+  `;
+  return first<DbInvite>(result);
+}
+

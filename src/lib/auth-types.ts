@@ -137,6 +137,7 @@ export interface ProviderRegistrationData {
   payoutBankRouting?: string;
   payoutBankAccount?: string;
   inviteToken?: string;
+  inviteCode?: string;
 }
 
 // Helper to check user type

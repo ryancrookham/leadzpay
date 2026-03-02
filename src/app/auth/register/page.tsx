@@ -16,8 +16,9 @@ function RegisterContent() {
 
   const requestedRole = searchParams.get("role");
   const tokenParam = searchParams.get("token");
+  const inviteCodeParam = searchParams.get("invite");
 
-  // Invite token state
+  // Invite token state (from invite_tokens system)
   const [inviteData, setInviteData] = useState<{
     businessName: string;
     channelName: string | null;
@@ -26,6 +27,15 @@ function RegisterContent() {
   } | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState(!!tokenParam);
+
+  // Invite code state (from invites system)
+  const [inviteCodeData, setInviteCodeData] = useState<{
+    valid: boolean;
+    businessName?: string;
+    ratePerLead?: number;
+    message?: string;
+  } | null>(null);
+  const [inviteCodeLoading, setInviteCodeLoading] = useState(!!inviteCodeParam);
 
   // Buyer registration state (used when role=buyer)
   const [buyerBusinessName, setBuyerBusinessName] = useState("");
@@ -90,6 +100,22 @@ function RegisterContent() {
       .catch(() => setInviteError("Failed to validate invite link. Please try again."))
       .finally(() => setTokenLoading(false));
   }, [tokenParam]);
+
+  // Verify invite code if present
+  useEffect(() => {
+    if (!inviteCodeParam) return;
+    setInviteCodeLoading(true);
+    fetch(`/api/invites/verify?code=${encodeURIComponent(inviteCodeParam)}`)
+      .then(res => res.json())
+      .then(data => {
+        setInviteCodeData(data);
+        setInviteCodeLoading(false);
+      })
+      .catch(() => {
+        setInviteCodeData({ valid: false });
+        setInviteCodeLoading(false);
+      });
+  }, [inviteCodeParam]);
 
   const handleProfilePictureClick = () => {
     fileInputRef.current?.click();
@@ -271,6 +297,7 @@ function RegisterContent() {
         payoutBankRouting: payoutMethod === "bank" ? bankRouting : undefined,
         payoutBankAccount: payoutMethod === "bank" ? bankAccount : undefined,
         inviteToken: tokenParam || undefined,
+        inviteCode: inviteCodeParam && inviteCodeData?.valid ? inviteCodeParam : undefined,
       });
 
       if (result.success) {
@@ -472,6 +499,30 @@ function RegisterContent() {
             </div>
           </div>
         </div>
+
+        {/* Invite Code Banner */}
+        {inviteCodeParam && !inviteCodeLoading && inviteCodeData?.valid && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="font-semibold text-emerald-800">You&apos;ve been invited!</p>
+            </div>
+            <p className="text-emerald-700 text-sm">
+              <strong>{inviteCodeData.businessName}</strong> has invited you to become a lead provider
+              {inviteCodeData.ratePerLead ? ` at $${Number(inviteCodeData.ratePerLead).toFixed(2)}/lead` : ""}.
+            </p>
+            {inviteCodeData.message && (
+              <p className="text-emerald-600 text-sm mt-1 italic">&quot;{inviteCodeData.message}&quot;</p>
+            )}
+          </div>
+        )}
+        {inviteCodeParam && !inviteCodeLoading && inviteCodeData && !inviteCodeData.valid && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-amber-700 text-sm">This invite link is no longer valid. You can still register below.</p>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">

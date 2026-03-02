@@ -96,3 +96,84 @@ export async function sendPasswordResetEmail(
     return { success: false, error: message };
   }
 }
+
+/**
+ * Send an invite email to a provider
+ */
+export async function sendInviteEmail(
+  email: string,
+  businessName: string,
+  inviteUrl: string,
+  personalMessage?: string
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: `${businessName} has invited you to WOML`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+            <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #1e3a5f; margin: 0; font-size: 28px;">WOML</h1>
+                <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">Word of Mouth Leads</p>
+              </div>
+
+              <h2 style="color: #1e3a5f; margin: 0 0 20px 0; font-size: 20px;">You've Been Invited!</h2>
+
+              <p style="color: #333; line-height: 1.6; margin: 0 0 20px 0;">
+                <strong>${businessName}</strong> has invited you to become a lead provider on WOML. Sign up to start earning for every qualified lead you submit.
+              </p>
+
+              ${personalMessage ? `
+              <div style="background: #f8f9fa; border-left: 3px solid #E8822A; padding: 12px 16px; margin: 0 0 20px 0; border-radius: 0 8px 8px 0;">
+                <p style="color: #555; margin: 0; font-style: italic;">"${personalMessage}"</p>
+              </div>
+              ` : ''}
+
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${inviteUrl}" style="display: inline-block; background: #E8822A; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                  Accept Invite & Sign Up
+                </a>
+              </div>
+
+              <p style="color: #666; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
+                This invite expires in 30 days. Click the button above to create your account and get started.
+              </p>
+
+              <p style="color: #999; font-size: 12px; line-height: 1.6; margin: 20px 0 0 0; padding-top: 20px; border-top: 1px solid #eee;">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <a href="${inviteUrl}" style="color: #E8822A; word-break: break-all;">${inviteUrl}</a>
+              </p>
+
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+                <p style="color: #999; font-size: 12px; margin: 0;">
+                  Powered by WOML - Word of Mouth Leads
+                </p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      console.error('[EMAIL] Failed to send invite email:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[EMAIL] Invite email sent to:', email);
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[EMAIL] Exception sending invite email:', message);
+    return { success: false, error: message };
+  }
+}
