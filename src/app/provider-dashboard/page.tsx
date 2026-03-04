@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 import { useAuth, useCurrentProvider } from "@/lib/auth-context";
 
 // Type for leads returned by GET /api/leads
@@ -96,6 +97,7 @@ function checkLeadCaps(connection: ApiConnection): {
 
 export default function ProviderDashboard() {
   const router = useRouter();
+  const { data: session } = useSession();
   const { currentUser, isAuthenticated, isLoading, logout, updateUser } = useAuth();
   const currentProvider = useCurrentProvider();
   // Fetch leads from database API (not localStorage)
@@ -124,8 +126,10 @@ export default function ProviderDashboard() {
       router.push("/auth/login?role=provider");
     } else if (!isLoading && currentUser && !isProvider(currentUser)) {
       router.push("/business");
+    } else if (!isLoading && currentUser && session?.user?.onboardingComplete === false) {
+      router.push("/provider-onboarding");
     }
-  }, [isLoading, isAuthenticated, currentUser, router]);
+  }, [isLoading, isAuthenticated, currentUser, router, session]);
 
   // Fetch leads from database API
   useEffect(() => {
@@ -643,6 +647,19 @@ function ConnectionTab({
     notes: "",
   });
 
+  // Criteria fields state
+  const [criteriaFields, setCriteriaFields] = useState<{
+    id: string;
+    field_type: "PHOTO" | "TEXT" | "BINARY";
+    label: string;
+    option_a: string | null;
+    option_b: string | null;
+    is_mandatory: boolean;
+    sort_order: number;
+  }[]>([]);
+  const [criteriaFieldValues, setCriteriaFieldValues] = useState<Record<string, string>>({});
+  const [criteriaLoaded, setCriteriaLoaded] = useState(false);
+
   // Fetch buyers from API
   type DiscoveryBuyer = {
     id: string;
@@ -656,6 +673,26 @@ function ConnectionTab({
   };
   const [buyers, setBuyers] = useState<DiscoveryBuyer[]>([]);
   const [loadingBuyers, setLoadingBuyers] = useState(true);
+
+  // Fetch criteria fields when connection exists
+  useEffect(() => {
+    if (!activeConnection) return;
+    const fetchCriteria = async () => {
+      try {
+        const buyerId = activeConnection.buyer_id || (activeConnection as any).buyerId;
+        const res = await fetch(`/api/business-criteria/by-business/${buyerId}`);
+        const data = await res.json();
+        if (data.fields && data.fields.length > 0) {
+          setCriteriaFields(data.fields);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setCriteriaLoaded(true);
+      }
+    };
+    fetchCriteria();
+  }, [activeConnection]);
 
   useEffect(() => {
     const loadBuyers = async () => {
@@ -693,6 +730,7 @@ function ConnectionTab({
       phone: "",
       notes: "",
     });
+    setCriteriaFieldValues({});
     setLeadSubmitted(false);
   };
 
@@ -714,6 +752,16 @@ function ConnectionTab({
 
     const payout = activeConnection.rate_per_lead;
 
+    // Build criteria fields data for submission
+    const criteriaFieldsData = criteriaFields.length > 0
+      ? criteriaFields.map(f => ({
+          fieldId: f.id,
+          fieldType: f.field_type,
+          label: f.label,
+          value: criteriaFieldValues[f.id] || "",
+        }))
+      : undefined;
+
     // Submit lead to API (database)
     try {
       const apiRes = await fetch("/api/leads", {
@@ -727,6 +775,7 @@ function ConnectionTab({
             phone: formData.phone,
             notes: formData.notes || undefined,
           },
+          criteriaFieldsData,
         }),
       });
       const apiData = await apiRes.json();
@@ -1010,6 +1059,90 @@ function ConnectionTab({
                   placeholder="Any additional details about this lead..."
                 />
               </div>
+
+              {/* Dynamic Criteria Fields */}
+              {criteriaLoaded && criteriaFields.length > 0 && (
+                <div className="border-t border-gray-200 pt-4 mt-4">
+                  <p className="text-sm font-semibold text-gray-700 mb-3">Additional Required Information</p>
+                  <div className="space-y-4">
+                    {criteriaFields.map(field => (
+                      <div key={field.id}>
+                        <label className="block text-gray-700 text-sm font-medium mb-2">
+                          {field.label} {field.is_mandatory && <span className="text-red-500">*</span>}
+                        </label>
+                        {field.field_type === "TEXT" && (
+                          <input
+                            type="text"
+                            value={criteriaFieldValues[field.id] || ""}
+                            onChange={e => setCriteriaFieldValues(prev => ({ ...prev, [field.id]: e.target.value }))}
+                            className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
+                          />
+                        )}
+                        {field.field_type === "PHOTO" && (
+                          <div>
+                            {criteriaFieldValues[field.id] ? (
+                              <div className="relative inline-block">
+                                <img src={criteriaFieldValues[field.id]} alt={field.label} className="max-h-32 rounded-lg border" />
+                                <button
+                                  onClick={() => setCriteriaFieldValues(prev => ({ ...prev, [field.id]: "" }))}
+                                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center"
+                                >&#10005;</button>
+                              </div>
+                            ) : (
+                              <label className="flex items-center gap-2 px-4 py-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#E8822A] transition">
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="text-gray-500 text-sm">Upload Photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    if (file.size > 10 * 1024 * 1024) { alert("Image must be less than 10MB"); return; }
+                                    const reader = new FileReader();
+                                    reader.onload = () => setCriteriaFieldValues(prev => ({ ...prev, [field.id]: reader.result as string }));
+                                    reader.readAsDataURL(file);
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        )}
+                        {field.field_type === "BINARY" && (
+                          <div className="flex gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setCriteriaFieldValues(prev => ({ ...prev, [field.id]: field.option_a || "Yes" }))}
+                              className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition ${
+                                criteriaFieldValues[field.id] === (field.option_a || "Yes")
+                                  ? "bg-[#E8822A] text-white border-[#E8822A]"
+                                  : "bg-gray-50 text-gray-700 border-gray-200 hover:border-[#E8822A]"
+                              }`}
+                            >
+                              {field.option_a || "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCriteriaFieldValues(prev => ({ ...prev, [field.id]: field.option_b || "No" }))}
+                              className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition ${
+                                criteriaFieldValues[field.id] === (field.option_b || "No")
+                                  ? "bg-[#E8822A] text-white border-[#E8822A]"
+                                  : "bg-gray-50 text-gray-700 border-gray-200 hover:border-[#E8822A]"
+                              }`}
+                            >
+                              {field.option_b || "No"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button

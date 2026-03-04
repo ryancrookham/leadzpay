@@ -37,6 +37,12 @@ interface ApiLead {
   providerName: string | null;
   buyerName: string | null;
   buyerBusinessName: string | null;
+  criteriaFieldsData?: {
+    fieldId: string;
+    fieldType: "PHOTO" | "TEXT" | "BINARY";
+    label: string;
+    value: string;
+  }[] | null;
 }
 
 type Tab = "dashboard" | "leads" | "requests" | "rolodex" | "ledger" | "settings" | "invite";
@@ -1332,7 +1338,33 @@ function BusinessPortalContent() {
                                         )}
                                       </div>
                                     </div>
-                                    {!lead.customerEmail && !lead.customerPhone && !lead.customerLicenseImage && !lead.customerMaritalStatus && !lead.customerHasInsurance && (
+                                    {/* Criteria Fields Data */}
+                                    {lead.criteriaFieldsData && lead.criteriaFieldsData.length > 0 && (
+                                      <div className="mt-4 pt-4 border-t border-gray-200">
+                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-3">Custom Lead Fields</p>
+                                        <div className="flex gap-6 flex-wrap">
+                                          {lead.criteriaFieldsData.map((field, idx) => (
+                                            <div key={idx} className="min-w-[150px]">
+                                              <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">{field.label}</p>
+                                              {field.fieldType === "PHOTO" && field.value ? (
+                                                <img
+                                                  src={field.value}
+                                                  alt={field.label}
+                                                  className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
+                                                />
+                                              ) : field.fieldType === "BINARY" ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                                  {field.value || "—"}
+                                                </span>
+                                              ) : (
+                                                <p className="text-gray-800 text-sm">{field.value || "—"}</p>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {!lead.customerEmail && !lead.customerPhone && !lead.customerLicenseImage && !lead.customerMaritalStatus && !lead.customerHasInsurance && (!lead.criteriaFieldsData || lead.criteriaFieldsData.length === 0) && (
                                       <p className="text-gray-400 text-sm italic">No additional details available for this lead.</p>
                                     )}
                                   </td>

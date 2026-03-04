@@ -18,6 +18,8 @@ declare module "next-auth" {
     licensedStates?: string[];
     stripeAccountId?: string;
     stripeOnboardingComplete?: boolean;
+    onboardingStep?: number;
+    onboardingComplete?: boolean;
   }
 
   interface Session {
@@ -39,6 +41,8 @@ declare module "@auth/core/jwt" {
     licensedStates?: string[];
     stripeAccountId?: string;
     stripeOnboardingComplete?: boolean;
+    onboardingStep?: number;
+    onboardingComplete?: boolean;
   }
 }
 
@@ -57,6 +61,8 @@ function dbUserToAuthUser(dbUser: DbUser) {
     licensedStates: dbUser.licensed_states || undefined,
     stripeAccountId: dbUser.stripe_account_id || undefined,
     stripeOnboardingComplete: dbUser.stripe_onboarding_complete,
+    onboardingStep: dbUser.onboarding_step,
+    onboardingComplete: dbUser.onboarding_complete,
   };
 }
 
@@ -129,6 +135,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.licensedStates = user.licensedStates;
         token.stripeAccountId = user.stripeAccountId;
         token.stripeOnboardingComplete = user.stripeOnboardingComplete;
+        token.onboardingStep = user.onboardingStep;
+        token.onboardingComplete = user.onboardingComplete;
       }
       return token;
     },
@@ -147,6 +155,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         licensedStates: token.licensedStates,
         stripeAccountId: token.stripeAccountId,
         stripeOnboardingComplete: token.stripeOnboardingComplete,
+        onboardingStep: token.onboardingStep,
+        onboardingComplete: token.onboardingComplete,
       };
       return session;
     },

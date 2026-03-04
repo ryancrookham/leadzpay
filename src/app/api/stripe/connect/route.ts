@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
-import { getUserById, updateUserStripeAccount } from "@/lib/db";
+import { getUserById, updateUserStripeAccount, getProviderOnboardingState } from "@/lib/db";
 
 /**
  * POST /api/stripe/connect
@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
 
+    // Determine redirect base based on onboarding state
+    const onboardingState = await getProviderOnboardingState(user.id);
+    const isOnboarding = onboardingState && !onboardingState.complete;
+    const refreshUrl = isOnboarding
+      ? `${appUrl}/provider-onboarding?stripe=refresh`
+      : `${appUrl}/provider-dashboard?tab=settings&stripe=refresh`;
+
     // If provider already has a Stripe account, check its status
     if (user.stripe_account_id) {
       const account = await stripe.accounts.retrieve(user.stripe_account_id);
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest) {
       // Otherwise, create a new onboarding link for the existing account
       const accountLink = await stripe.accountLinks.create({
         account: user.stripe_account_id,
-        refresh_url: `${appUrl}/provider-dashboard?tab=settings&stripe=refresh`,
+        refresh_url: refreshUrl,
         return_url: `${appUrl}/api/stripe/connect?account_id=${user.stripe_account_id}`,
         type: "account_onboarding",
       });
@@ -120,6 +127,13 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
     const status = onboardingComplete ? "success" : "pending";
+
+    // If provider hasn't completed app onboarding, redirect back to onboarding flow
+    const onboardingState = await getProviderOnboardingState(session.user.id);
+    if (onboardingState && !onboardingState.complete) {
+      return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=${status}`);
+    }
+
     return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=${status}`);
   } catch (error) {
     console.error("Stripe Connect callback error:", error);

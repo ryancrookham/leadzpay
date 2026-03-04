@@ -9,6 +9,8 @@ import {
   createTransaction,
   updateConnection,
   getPlatformSettings,
+  getActiveBusinessCriteria,
+  getCriteriaFields,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { connectionId, customerData, vehicleData } = body;
+    const { connectionId, customerData, vehicleData, criteriaFieldsData } = body;
 
     if (!connectionId || !customerData) {
       return NextResponse.json(
@@ -72,8 +74,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Buyer account not found" }, { status: 404 });
     }
 
+    // 2b. Check for active criteria — use criteria payout rate if available
+    const activeCriteria = await getActiveBusinessCriteria(connection.buyer_id);
+    let ratePerLead = Number(connection.rate_per_lead) || 0;
+
+    if (activeCriteria) {
+      ratePerLead = Number(activeCriteria.payout_per_lead) || ratePerLead;
+
+      // Validate mandatory criteria fields
+      if (criteriaFieldsData && Array.isArray(criteriaFieldsData)) {
+        const criteriaFields = await getCriteriaFields(activeCriteria.id);
+        const mandatoryFields = criteriaFields.filter(f => f.is_mandatory);
+        for (const mf of mandatoryFields) {
+          const submitted = criteriaFieldsData.find((d: { fieldId?: string }) => d.fieldId === mf.id);
+          if (!submitted || !submitted.value) {
+            return NextResponse.json(
+              { error: `Missing required field: ${mf.label}` },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
+
     // 3. Calculate fees (from DB settings)
-    const ratePerLead = Number(connection.rate_per_lead) || 0;
     const platformFees = await getPlatformSettings();
     const fees = calculateFeeBreakdown(ratePerLead, platformFees);
 
@@ -92,6 +116,7 @@ export async function POST(request: NextRequest) {
       vehicle_make: vehicleData?.make || null,
       vehicle_model: vehicleData?.model || null,
       payout_amount: ratePerLead,
+      criteria_fields_data: criteriaFieldsData || undefined,
     });
 
     // 6. Record transactions (all pending until business marks as paid)
@@ -211,6 +236,7 @@ export async function GET() {
         providerName: lead.provider_name || null,
         buyerName: lead.buyer_name || null,
         buyerBusinessName: lead.buyer_business_name || null,
+        criteriaFieldsData: role === "buyer" ? lead.criteria_fields_data : undefined,
       };
     }));
 

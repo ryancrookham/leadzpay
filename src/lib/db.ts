@@ -42,6 +42,9 @@ export interface DbUser {
   payout_cashapp: string | null;
   payout_bank_routing: string | null;
   payout_bank_account: string | null;
+  // Onboarding fields
+  onboarding_step: number;
+  onboarding_complete: boolean;
 }
 
 export type ConnectionStatus =
@@ -71,6 +74,7 @@ export interface DbConnection {
   accepted_at: string | null;
   invite_token_id: string | null;
   required_fields: Record<string, string> | null;
+  criteria_id: string | null;
 }
 
 export interface DbInviteToken {
@@ -112,6 +116,7 @@ export interface DbLead {
   submitted_at: string;
   claimed_at: string | null;
   payout_completed_at: string | null;
+  criteria_fields_data: Record<string, unknown>[] | null;
   // Joined fields (from user table JOINs)
   provider_name?: string | null;
   provider_venmo?: string | null;
@@ -135,6 +140,48 @@ export interface DbTransaction {
   description: string | null;
   created_at: string;
   completed_at: string | null;
+}
+
+// ============================================
+// Lead Criteria types
+// ============================================
+
+export interface DbBusinessLeadCriteria {
+  id: string;
+  business_id: string;
+  payout_per_lead: number;
+  weekly_cap: number | null;
+  monthly_cap: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbLeadCriteriaField {
+  id: string;
+  criteria_id: string;
+  field_type: 'PHOTO' | 'TEXT' | 'BINARY';
+  label: string;
+  option_a: string | null;
+  option_b: string | null;
+  is_mandatory: boolean;
+  sort_order: number;
+}
+
+export interface DbProviderTermsAcceptance {
+  id: string;
+  provider_id: string;
+  business_id: string;
+  criteria_id: string;
+  accepted_at: string;
+}
+
+export interface DbProviderCriteriaAcknowledgment {
+  id: string;
+  provider_id: string;
+  business_id: string;
+  criteria_id: string;
+  acknowledged_at: string;
 }
 
 // Helper to check if database is configured
@@ -319,6 +366,7 @@ export async function createConnection(data: {
   termination_notice_days?: number;
   invite_token_id?: string;
   required_fields?: Record<string, string>;
+  criteria_id?: string;
 }): Promise<DbConnection> {
   const sql = getSql();
   const status = data.status || (data.initiator === 'provider' ? 'pending_buyer_review' : 'pending_provider_accept');
@@ -326,7 +374,7 @@ export async function createConnection(data: {
     INSERT INTO connections (
       provider_id, buyer_id, initiator, message, status, accepted_at,
       rate_per_lead, payment_timing, weekly_lead_cap, monthly_lead_cap, termination_notice_days,
-      invite_token_id, required_fields
+      invite_token_id, required_fields, criteria_id
     ) VALUES (
       ${data.provider_id},
       ${data.buyer_id},
@@ -340,7 +388,8 @@ export async function createConnection(data: {
       ${data.monthly_lead_cap ?? null},
       ${data.termination_notice_days || 7},
       ${data.invite_token_id || null},
-      ${data.required_fields ? JSON.stringify(data.required_fields) : null}
+      ${data.required_fields ? JSON.stringify(data.required_fields) : null},
+      ${data.criteria_id || null}
     )
     RETURNING *
   `;
@@ -575,6 +624,7 @@ export async function createLead(data: {
   vehicle_model?: string;
   payout_amount: number;
   stripe_payment_id?: string;
+  criteria_fields_data?: Record<string, unknown>[];
 }): Promise<DbLead> {
   const sql = getSql();
   const result = await sql`
@@ -582,13 +632,14 @@ export async function createLead(data: {
       provider_id, buyer_id, connection_id,
       customer_data_encrypted, customer_data_iv,
       customer_state, vehicle_year, vehicle_make, vehicle_model,
-      payout_amount, stripe_payment_id
+      payout_amount, stripe_payment_id, criteria_fields_data
     ) VALUES (
       ${data.provider_id}, ${data.buyer_id}, ${data.connection_id},
       ${data.customer_data_encrypted}, ${data.customer_data_iv},
       ${data.customer_state || null}, ${data.vehicle_year || null},
       ${data.vehicle_make || null}, ${data.vehicle_model || null},
-      ${data.payout_amount}, ${data.stripe_payment_id || null}
+      ${data.payout_amount}, ${data.stripe_payment_id || null},
+      ${data.criteria_fields_data ? JSON.stringify(data.criteria_fields_data) : null}
     )
     RETURNING *
   `;
@@ -1427,5 +1478,236 @@ export async function getProcessingLeadsByProviderId(providerId: string): Promis
     ORDER BY created_at ASC
   `;
   return result as unknown as DbLead[];
+}
+
+// ============================================
+// Business Lead Criteria functions
+// ============================================
+
+export async function getActiveBusinessCriteria(businessId: string): Promise<DbBusinessLeadCriteria | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM business_lead_criteria
+    WHERE business_id = ${businessId} AND is_active = TRUE
+    LIMIT 1
+  `;
+  return first<DbBusinessLeadCriteria>(result);
+}
+
+export async function createBusinessCriteria(data: {
+  business_id: string;
+  payout_per_lead: number;
+  weekly_cap?: number | null;
+  monthly_cap?: number | null;
+}): Promise<DbBusinessLeadCriteria> {
+  const sql = getSql();
+  // Deactivate any existing active criteria first
+  await sql`
+    UPDATE business_lead_criteria SET is_active = FALSE, updated_at = NOW()
+    WHERE business_id = ${data.business_id} AND is_active = TRUE
+  `;
+  const result = await sql`
+    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap)
+    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null})
+    RETURNING *
+  `;
+  return first<DbBusinessLeadCriteria>(result)!;
+}
+
+export async function updateBusinessCriteria(id: string, updates: {
+  payout_per_lead?: number;
+  weekly_cap?: number | null;
+  monthly_cap?: number | null;
+}): Promise<DbBusinessLeadCriteria | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE business_lead_criteria SET
+      payout_per_lead = CASE WHEN ${updates.payout_per_lead !== undefined} THEN ${updates.payout_per_lead} ELSE payout_per_lead END,
+      weekly_cap = CASE WHEN ${updates.weekly_cap !== undefined} THEN ${updates.weekly_cap ?? null} ELSE weekly_cap END,
+      monthly_cap = CASE WHEN ${updates.monthly_cap !== undefined} THEN ${updates.monthly_cap ?? null} ELSE monthly_cap END,
+      updated_at = NOW()
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbBusinessLeadCriteria>(result);
+}
+
+export async function deactivateBusinessCriteria(id: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE business_lead_criteria SET is_active = FALSE, updated_at = NOW()
+    WHERE id = ${id}
+  `;
+}
+
+// ============================================
+// Lead Criteria Fields functions
+// ============================================
+
+export async function getCriteriaFields(criteriaId: string): Promise<DbLeadCriteriaField[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM lead_criteria_fields
+    WHERE criteria_id = ${criteriaId}
+    ORDER BY sort_order ASC
+  `;
+  return result as unknown as DbLeadCriteriaField[];
+}
+
+export async function setCriteriaFields(criteriaId: string, fields: {
+  field_type: 'PHOTO' | 'TEXT' | 'BINARY';
+  label: string;
+  option_a?: string | null;
+  option_b?: string | null;
+  is_mandatory: boolean;
+  sort_order: number;
+}[]): Promise<DbLeadCriteriaField[]> {
+  const sql = getSql();
+  // Delete existing fields
+  await sql`DELETE FROM lead_criteria_fields WHERE criteria_id = ${criteriaId}`;
+  // Insert new fields
+  const results: DbLeadCriteriaField[] = [];
+  for (const field of fields) {
+    const result = await sql`
+      INSERT INTO lead_criteria_fields (criteria_id, field_type, label, option_a, option_b, is_mandatory, sort_order)
+      VALUES (${criteriaId}, ${field.field_type}, ${field.label}, ${field.option_a ?? null}, ${field.option_b ?? null}, ${field.is_mandatory}, ${field.sort_order})
+      RETURNING *
+    `;
+    results.push(first<DbLeadCriteriaField>(result)!);
+  }
+  return results;
+}
+
+export async function getBusinessCriteriaWithFields(businessId: string): Promise<{
+  criteria: DbBusinessLeadCriteria;
+  fields: DbLeadCriteriaField[];
+} | null> {
+  const criteria = await getActiveBusinessCriteria(businessId);
+  if (!criteria) return null;
+  const fields = await getCriteriaFields(criteria.id);
+  return { criteria, fields };
+}
+
+// ============================================
+// Terminate Deal
+// ============================================
+
+export async function terminateDeal(businessId: string): Promise<{
+  connectionsTerminated: number;
+  payoutsFlagged: number;
+}> {
+  const sql = getSql();
+  // Deactivate criteria
+  await sql`
+    UPDATE business_lead_criteria SET is_active = FALSE, updated_at = NOW()
+    WHERE business_id = ${businessId} AND is_active = TRUE
+  `;
+  // Terminate all active connections
+  const terminated = await sql`
+    UPDATE connections SET status = 'terminated'
+    WHERE buyer_id = ${businessId} AND status = 'active'
+    RETURNING id
+  `;
+  // Flag pending payouts
+  const flagged = await sql`
+    UPDATE leads SET payout_status = 'failed'
+    WHERE buyer_id = ${businessId} AND payout_status = 'pending'
+    RETURNING id
+  `;
+  return {
+    connectionsTerminated: terminated.length,
+    payoutsFlagged: flagged.length,
+  };
+}
+
+// ============================================
+// Provider Onboarding functions
+// ============================================
+
+export async function getProviderOnboardingState(userId: string): Promise<{ step: number; complete: boolean } | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT onboarding_step, onboarding_complete FROM users
+    WHERE id = ${userId} AND role = 'provider'
+    LIMIT 1
+  `;
+  if (result.length === 0) return null;
+  return {
+    step: result[0].onboarding_step as number,
+    complete: result[0].onboarding_complete as boolean,
+  };
+}
+
+export async function updateProviderOnboardingStep(userId: string, step: number): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE users SET onboarding_step = ${step}, updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+}
+
+export async function completeProviderOnboarding(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE users SET onboarding_complete = TRUE, updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+}
+
+// ============================================
+// Provider Terms & Criteria Acknowledgment
+// ============================================
+
+export async function createTermsAcceptance(data: {
+  provider_id: string;
+  business_id: string;
+  criteria_id: string;
+}): Promise<DbProviderTermsAcceptance> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO provider_terms_acceptance (provider_id, business_id, criteria_id)
+    VALUES (${data.provider_id}, ${data.business_id}, ${data.criteria_id})
+    ON CONFLICT (provider_id, business_id) DO UPDATE SET
+      criteria_id = ${data.criteria_id},
+      accepted_at = NOW()
+    RETURNING *
+  `;
+  return first<DbProviderTermsAcceptance>(result)!;
+}
+
+export async function getTermsAcceptance(providerId: string, businessId: string): Promise<DbProviderTermsAcceptance | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM provider_terms_acceptance
+    WHERE provider_id = ${providerId} AND business_id = ${businessId}
+    LIMIT 1
+  `;
+  return first<DbProviderTermsAcceptance>(result);
+}
+
+export async function createCriteriaAcknowledgment(data: {
+  provider_id: string;
+  business_id: string;
+  criteria_id: string;
+}): Promise<DbProviderCriteriaAcknowledgment> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO provider_criteria_acknowledgment (provider_id, business_id, criteria_id)
+    VALUES (${data.provider_id}, ${data.business_id}, ${data.criteria_id})
+    ON CONFLICT (provider_id, criteria_id) DO UPDATE SET
+      acknowledged_at = NOW()
+    RETURNING *
+  `;
+  return first<DbProviderCriteriaAcknowledgment>(result)!;
+}
+
+export async function getCriteriaAcknowledgment(providerId: string, criteriaId: string): Promise<DbProviderCriteriaAcknowledgment | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM provider_criteria_acknowledgment
+    WHERE provider_id = ${providerId} AND criteria_id = ${criteriaId}
+    LIMIT 1
+  `;
+  return first<DbProviderCriteriaAcknowledgment>(result);
 }
 

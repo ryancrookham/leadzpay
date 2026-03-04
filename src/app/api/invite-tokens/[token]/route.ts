@@ -6,6 +6,7 @@ import {
   deactivateInviteToken,
   deleteInviteTokenPermanently,
   updateInviteToken,
+  getBusinessCriteriaWithFields,
 } from "@/lib/db";
 
 // GET /api/invite-tokens/[token] — public validation, no auth required
@@ -39,16 +40,21 @@ export async function GET(
       return NextResponse.json({ valid: false, error: "Business not found" });
     }
 
+    // Also fetch business criteria if available
+    const criteriaResult = await getBusinessCriteriaWithFields(tokenRow.buyer_id);
+
     return NextResponse.json({
       valid: true,
       businessName: buyer.business_name || buyer.username,
       channelName: tokenRow.channel_name,
       channelDescription: tokenRow.channel_description,
-      ratePerLead: Number(tokenRow.rate_per_lead),
+      ratePerLead: criteriaResult ? Number(criteriaResult.criteria.payout_per_lead) : Number(tokenRow.rate_per_lead),
       paymentTiming: tokenRow.payment_timing,
-      weeklyLeadCap: tokenRow.weekly_lead_cap,
-      monthlyLeadCap: tokenRow.monthly_lead_cap,
+      weeklyLeadCap: criteriaResult ? criteriaResult.criteria.weekly_cap : tokenRow.weekly_lead_cap,
+      monthlyLeadCap: criteriaResult ? criteriaResult.criteria.monthly_cap : tokenRow.monthly_lead_cap,
       terminationNoticeDays: tokenRow.termination_notice_days,
+      criteria: criteriaResult?.criteria || null,
+      criteriaFields: criteriaResult?.fields || [],
     });
   } catch (error) {
     console.error("[INVITE-TOKENS] GET [token] error:", error);

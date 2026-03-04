@@ -7,6 +7,7 @@ import {
   createInviteTokenUse,
   getInviteByCode,
   markInviteAccepted,
+  getActiveBusinessCriteria,
 } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
@@ -132,18 +133,22 @@ export async function POST(request: NextRequest) {
 
     // If provider registered via invite token, auto-create the connection
     if (role === "provider" && tokenRow && result.user) {
+      // Look up business criteria to stamp on connection
+      const criteria = await getActiveBusinessCriteria(tokenRow.buyer_id);
+
       const connection = await createConnection({
         provider_id: result.user.id,
         buyer_id: tokenRow.buyer_id,
         initiator: "buyer",
         status: "active",
         accepted_at: new Date().toISOString(),
-        rate_per_lead: Number(tokenRow.rate_per_lead),
+        rate_per_lead: criteria ? Number(criteria.payout_per_lead) : Number(tokenRow.rate_per_lead),
         payment_timing: tokenRow.payment_timing as 'per_lead' | 'weekly' | 'biweekly' | 'monthly',
-        weekly_lead_cap: tokenRow.weekly_lead_cap,
-        monthly_lead_cap: tokenRow.monthly_lead_cap,
+        weekly_lead_cap: criteria ? criteria.weekly_cap : tokenRow.weekly_lead_cap,
+        monthly_lead_cap: criteria ? criteria.monthly_cap : tokenRow.monthly_lead_cap,
         termination_notice_days: tokenRow.termination_notice_days,
         invite_token_id: tokenRow.id,
+        criteria_id: criteria?.id,
       });
 
       await incrementInviteTokenUseCount(tokenRow.id);
