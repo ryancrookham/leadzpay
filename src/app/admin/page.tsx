@@ -312,7 +312,7 @@ export default function AdminPanel() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <MetricCard label="Total Leads" value={stats.totalLeads} />
                   <MetricCard label="This Month" value={leadsThisMonth} />
-                  <MetricCard label="Revenue" value={`$${stats.completedRevenue.toFixed(2)}`} accent />
+                  <MetricCard label="Revenue" value={`$${Number(stats.completedRevenue).toFixed(2)}`} accent />
                   <MetricCard label="Active Providers" value={stats.activeProviders} />
                   <MetricCard label="Active Businesses" value={stats.activeBuyers} />
                 </div>
@@ -344,10 +344,10 @@ export default function AdminPanel() {
                             <td className="px-6 py-3 text-white text-sm">{lead.providerName}</td>
                             <td className="px-6 py-3 text-white text-sm">{lead.buyerName}</td>
                             <td className="px-6 py-3 text-white text-sm text-right">
-                              ${lead.payoutAmount.toFixed(2)}
+                              ${Number(lead.payoutAmount).toFixed(2)}
                             </td>
                             <td className="px-6 py-3 text-[#E8822A] text-sm text-right">
-                              ${lead.platformFee.toFixed(2)}
+                              ${Number(lead.platformFee).toFixed(2)}
                             </td>
                             <td className="px-6 py-3 text-right">
                               <StatusBadge status={lead.payoutStatus} />
@@ -410,7 +410,7 @@ export default function AdminPanel() {
                             </td>
                             <td className="px-6 py-3 text-white text-sm text-right">{user.totalLeads}</td>
                             <td className="px-6 py-3 text-white text-sm text-right">
-                              ${user.totalVolume.toFixed(2)}
+                              ${Number(user.totalVolume).toFixed(2)}
                             </td>
                             <td className="px-6 py-3 text-gray-400 text-sm">
                               {user.lastLeadAt
@@ -511,12 +511,12 @@ export default function AdminPanel() {
                         <>
                           <div>
                             <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Total Fee</div>
-                            <div className="text-white font-medium">${platformFees.fee_total.toFixed(2)}/lead</div>
+                            <div className="text-white font-medium">${Number(platformFees.fee_total).toFixed(2)}/lead</div>
                           </div>
                           <div>
                             <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Split</div>
                             <div className="text-white font-medium">
-                              Buyer: ${platformFees.fee_buyer.toFixed(2)} / Provider: ${platformFees.fee_provider.toFixed(2)}
+                              Buyer: ${Number(platformFees.fee_buyer).toFixed(2)} / Provider: ${Number(platformFees.fee_provider).toFixed(2)}
                             </div>
                           </div>
                         </>
@@ -538,7 +538,7 @@ export default function AdminPanel() {
                           <div>
                             <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Flat + %</div>
                             <div className="text-white font-medium">
-                              ${platformFees.fee_mixed_flat.toFixed(2)} + {platformFees.fee_mixed_percent}%
+                              ${Number(platformFees.fee_mixed_flat).toFixed(2)} + {platformFees.fee_mixed_percent}%
                             </div>
                           </div>
                           <div>
@@ -587,7 +587,7 @@ export default function AdminPanel() {
                               <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
                               <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
                               <td className="px-6 py-3 text-white text-sm text-right">
-                                ${u.yearlyEarnings.toFixed(2)}
+                                ${Number(u.yearlyEarnings).toFixed(2)}
                               </td>
                               <td className="px-6 py-3 text-right">
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded ${
