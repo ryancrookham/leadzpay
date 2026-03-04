@@ -34,6 +34,8 @@ interface SavedCriteria {
   payout_per_lead: number;
   weekly_cap: number | null;
   monthly_cap: number | null;
+  payment_timing: string | null;
+  termination_notice_days: number | null;
   is_active: boolean;
 }
 
@@ -69,18 +71,18 @@ export default function InviteTab({ businessName }: InviteTabProps) {
   const [criteriaWeeklyCap, setCriteriaWeeklyCap] = useState(20);
   const [criteriaEnableMonthlyCap, setCriteriaEnableMonthlyCap] = useState(false);
   const [criteriaMonthlyCap, setCriteriaMonthlyCap] = useState(80);
+  const [criteriaPaymentTiming, setCriteriaPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [criteriaTerminationDays, setCriteriaTerminationDays] = useState(7);
   const [criteriaFields, setCriteriaFields] = useState<CriteriaField[]>([]);
   const [terminateConfirm, setTerminateConfirm] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
 
   // Generate form state
   const [label, setLabel] = useState("");
-  const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
   const [enableExpiry, setEnableExpiry] = useState(false);
   const [expiryDate, setExpiryDate] = useState("");
   const [enableMaxUses, setEnableMaxUses] = useState(false);
   const [maxUses, setMaxUses] = useState(10);
-  const [terminationDays, setTerminationDays] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -143,6 +145,8 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       setCriteriaWeeklyCap(savedCriteria.weekly_cap || 20);
       setCriteriaEnableMonthlyCap(!!savedCriteria.monthly_cap);
       setCriteriaMonthlyCap(savedCriteria.monthly_cap || 80);
+      setCriteriaPaymentTiming((savedCriteria.payment_timing as typeof criteriaPaymentTiming) || "per_lead");
+      setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 7);
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,
@@ -155,6 +159,8 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       setCriteriaPayoutPerLead(50);
       setCriteriaEnableWeeklyCap(false);
       setCriteriaEnableMonthlyCap(false);
+      setCriteriaPaymentTiming("per_lead");
+      setCriteriaTerminationDays(7);
       setCriteriaFields([]);
     }
     setCriteriaEditing(true);
@@ -204,6 +210,8 @@ export default function InviteTab({ businessName }: InviteTabProps) {
         payoutPerLead: criteriaPayoutPerLead,
         weeklyCap: criteriaEnableWeeklyCap ? criteriaWeeklyCap : null,
         monthlyCap: criteriaEnableMonthlyCap ? criteriaMonthlyCap : null,
+        paymentTiming: criteriaPaymentTiming,
+        terminationNoticeDays: criteriaTerminationDays,
         fields: criteriaFields,
       };
 
@@ -261,19 +269,18 @@ export default function InviteTab({ businessName }: InviteTabProps) {
         body: JSON.stringify({
           label: label || null,
           ratePerLead: Number(savedCriteria.payout_per_lead),
-          paymentTiming,
+          paymentTiming: savedCriteria.payment_timing || "per_lead",
           weeklyCap: savedCriteria.weekly_cap,
           monthlyCap: savedCriteria.monthly_cap,
           expiresAt: enableExpiry ? new Date(expiryDate).toISOString() : null,
           maxUses: enableMaxUses ? maxUses : null,
-          terminationNoticeDays: terminationDays,
+          terminationNoticeDays: savedCriteria.termination_notice_days ?? 7,
         }),
       });
       const data = await res.json();
       if (data.inviteUrl) {
         setNewInviteUrl(data.inviteUrl);
         setLabel("");
-        setPaymentTiming("per_lead");
         setEnableExpiry(false);
         setEnableMaxUses(false);
         await fetchTokens();
@@ -412,6 +419,31 @@ export default function InviteTab({ businessName }: InviteTabProps) {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Timing</label>
+                <select
+                  value={criteriaPaymentTiming}
+                  onChange={e => setCriteriaPaymentTiming(e.target.value as typeof criteriaPaymentTiming)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                >
+                  <option value="per_lead">Per Lead</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Termination Notice (days)</label>
+                <input
+                  type="number"
+                  value={criteriaTerminationDays}
+                  onChange={e => setCriteriaTerminationDays(Number(e.target.value))}
+                  min={0} max={90}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
                   <input type="checkbox" checked={criteriaEnableWeeklyCap} onChange={e => setCriteriaEnableWeeklyCap(e.target.checked)} className="rounded" />
@@ -507,10 +539,18 @@ export default function InviteTab({ businessName }: InviteTabProps) {
         ) : savedCriteria ? (
           <div className="space-y-4">
             {/* Read-only summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">Payout Per Lead</p>
                 <p className="text-lg font-bold text-[#E8822A]">${Number(savedCriteria.payout_per_lead).toFixed(2)}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 mb-1">Payment Timing</p>
+                <p className="text-lg font-bold text-gray-800">{formatTiming(savedCriteria.payment_timing || "per_lead")}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 mb-1">Termination Notice</p>
+                <p className="text-lg font-bold text-gray-800">{savedCriteria.termination_notice_days ?? 0} days</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">Weekly Cap</p>
@@ -589,41 +629,15 @@ export default function InviteTab({ businessName }: InviteTabProps) {
           </div>
         ) : savedCriteria ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link Label (internal)</label>
-                <input
-                  type="text"
-                  value={label}
-                  onChange={e => setLabel(e.target.value)}
-                  placeholder="e.g. Facebook Ads Campaign"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Timing</label>
-                <select
-                  value={paymentTiming}
-                  onChange={e => setPaymentTiming(e.target.value as typeof paymentTiming)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-                >
-                  <option value="per_lead">Per Lead</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Termination Notice (days)</label>
-                <input
-                  type="number"
-                  value={terminationDays}
-                  onChange={e => setTerminationDays(Number(e.target.value))}
-                  min={0}
-                  max={90}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-                />
-              </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Link Label (internal)</label>
+              <input
+                type="text"
+                value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="e.g. Facebook Ads Campaign"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+              />
             </div>
 
             {/* Optional constraints */}

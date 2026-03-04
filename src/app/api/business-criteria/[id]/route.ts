@@ -19,12 +19,14 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { payoutPerLead, weeklyCap, monthlyCap, fields } = body;
+  const { payoutPerLead, weeklyCap, monthlyCap, paymentTiming, terminationNoticeDays, fields } = body;
 
-  const updates: { payout_per_lead?: number; weekly_cap?: number | null; monthly_cap?: number | null } = {};
+  const updates: { payout_per_lead?: number; weekly_cap?: number | null; monthly_cap?: number | null; payment_timing?: string | null; termination_notice_days?: number | null } = {};
   if (payoutPerLead !== undefined) updates.payout_per_lead = payoutPerLead;
   if (weeklyCap !== undefined) updates.weekly_cap = weeklyCap || null;
   if (monthlyCap !== undefined) updates.monthly_cap = monthlyCap || null;
+  if (paymentTiming !== undefined) updates.payment_timing = paymentTiming || null;
+  if (terminationNoticeDays !== undefined) updates.termination_notice_days = terminationNoticeDays ?? null;
 
   const criteria = await updateBusinessCriteria(id, updates);
   if (!criteria) {

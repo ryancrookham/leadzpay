@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { payoutPerLead, weeklyCap, monthlyCap, fields } = body;
+  const { payoutPerLead, weeklyCap, monthlyCap, paymentTiming, terminationNoticeDays, fields } = body;
 
   if (!payoutPerLead || payoutPerLead <= 0) {
     return NextResponse.json({ error: 'Payout per lead is required and must be positive' }, { status: 400 });
@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
     payout_per_lead: payoutPerLead,
     weekly_cap: weeklyCap || null,
     monthly_cap: monthlyCap || null,
+    payment_timing: paymentTiming || null,
+    termination_notice_days: terminationNoticeDays ?? null,
   });
 
   let savedFields: Awaited<ReturnType<typeof setCriteriaFields>> = [];
