@@ -53,7 +53,6 @@ export interface DiscoveryUser {
   email: string;
   phone?: string | null;
   profilePictureUrl?: string | null;
-  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank' | null;
   isConnected: boolean;
   connectionStatus?: string;
 }

@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth, useCurrentProvider } from "@/lib/auth-context";
-import { type CustomerProfile } from "@/lib/leads-context";
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -28,81 +27,20 @@ interface ApiLead {
   buyerBusinessName: string | null;
 }
 import { useConnections, type ApiConnection } from "@/lib/connection-context";
-import { isProvider, LeadBuyer } from "@/lib/auth-types";
+import { isProvider } from "@/lib/auth-types";
 import { formatPaymentTiming, type PaymentTiming } from "@/lib/connection-types";
-import { calculateMultiCarrierQuotes, type QuoteResult, type MultiCarrierQuoteInput } from "@/lib/insurance-calculator";
-import { PAYMENT_METHODS, calculateFee, type PaymentMethodType, DISCLAIMERS } from "@/lib/payment-types";
-// MASTER_OPERATOR import removed — platform now uses invite-only channel architecture
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 
-// Lead form data interface (basic info)
+// Lead form data interface (basic info for simple lead submission)
 interface LeadFormData {
   customerName: string;
   email: string;
   phone: string;
-  carYear: string;
-  carMake: string;
-  carModel: string;
-  state: string;
+  notes: string;
 }
 
-// Extended form data for quote channel
-interface ExtendedFormData extends LeadFormData {
-  age: string;
-  gender: "male" | "female" | "other";
-  maritalStatus: "single" | "married" | "divorced" | "widowed";
-  zipCode: string;
-  creditScore: "excellent" | "good" | "fair" | "poor";
-  homeOwner: boolean;
-  yearsLicensed: string;
-  drivingHistory: "clean" | "minor_violations" | "major_violations" | "accidents" | "dui";
-  priorInsurance: boolean;
-  annualMileage: string;
-  vehicleOwnership: "owned" | "financed" | "leased";
-  primaryUse: "commute" | "pleasure" | "business";
-  garageType: "garage" | "carport" | "street" | "parking_lot";
-  antiTheft: boolean;
-  safetyFeatures: boolean;
-  occupation: "standard" | "professional" | "military" | "student";
-  coverageType: "liability" | "collision" | "comprehensive" | "full";
-  deductible: 250 | 500 | 1000 | 2000;
-}
-
-// Chat message interface
-interface ChatMessage {
-  role: "user" | "ai";
-  text: string;
-  action?: { type: string; data?: QuoteResult };
-}
-
-// Lead submission channel
-type LeadChannel = "asap" | "quote";
-
-// Form step type
-// ASAP flow: channel -> basic_info -> success (agent calls)
-// Quote flow: channel -> license_upload -> success (single screen: phone, email, license)
-type FormStep = "channel" | "basic_info" | "license_upload" | "state_confirm" | "extended_info" | "chatbot" | "quotes" | "payment" | "success";
-
-// US States list
-const US_STATES = [
-  { value: "AL", label: "Alabama" }, { value: "AK", label: "Alaska" }, { value: "AZ", label: "Arizona" },
-  { value: "AR", label: "Arkansas" }, { value: "CA", label: "California" }, { value: "CO", label: "Colorado" },
-  { value: "CT", label: "Connecticut" }, { value: "DE", label: "Delaware" }, { value: "FL", label: "Florida" },
-  { value: "GA", label: "Georgia" }, { value: "HI", label: "Hawaii" }, { value: "ID", label: "Idaho" },
-  { value: "IL", label: "Illinois" }, { value: "IN", label: "Indiana" }, { value: "IA", label: "Iowa" },
-  { value: "KS", label: "Kansas" }, { value: "KY", label: "Kentucky" }, { value: "LA", label: "Louisiana" },
-  { value: "ME", label: "Maine" }, { value: "MD", label: "Maryland" }, { value: "MA", label: "Massachusetts" },
-  { value: "MI", label: "Michigan" }, { value: "MN", label: "Minnesota" }, { value: "MS", label: "Mississippi" },
-  { value: "MO", label: "Missouri" }, { value: "MT", label: "Montana" }, { value: "NE", label: "Nebraska" },
-  { value: "NV", label: "Nevada" }, { value: "NH", label: "New Hampshire" }, { value: "NJ", label: "New Jersey" },
-  { value: "NM", label: "New Mexico" }, { value: "NY", label: "New York" }, { value: "NC", label: "North Carolina" },
-  { value: "ND", label: "North Dakota" }, { value: "OH", label: "Ohio" }, { value: "OK", label: "Oklahoma" },
-  { value: "OR", label: "Oregon" }, { value: "PA", label: "Pennsylvania" }, { value: "RI", label: "Rhode Island" },
-  { value: "SC", label: "South Carolina" }, { value: "SD", label: "South Dakota" }, { value: "TN", label: "Tennessee" },
-  { value: "TX", label: "Texas" }, { value: "UT", label: "Utah" }, { value: "VT", label: "Vermont" },
-  { value: "VA", label: "Virginia" }, { value: "WA", label: "Washington" }, { value: "WV", label: "West Virginia" },
-  { value: "WI", label: "Wisconsin" }, { value: "WY", label: "Wyoming" }, { value: "DC", label: "Washington DC" },
-];
+// Form step type for lead submission
+type FormStep = "form" | "success";
 
 type Tab = "dashboard" | "connection" | "leads" | "earnings" | "profile";
 
@@ -194,7 +132,7 @@ export default function ProviderDashboard() {
     if (!currentUser) return;
     const fetchLeads = async () => {
       try {
-        const res = await fetch("/api/leads");
+        const res = await fetch("/api/leads", { cache: "no-store" });
         const data = await res.json();
         if (data.success) {
           setDbLeads(data.leads);
@@ -229,7 +167,7 @@ export default function ProviderDashboard() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+          <Image src="/woml-orange.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
         </div>
       </div>
@@ -270,7 +208,7 @@ export default function ProviderDashboard() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-logo.png"
+          src="/woml-orange.png"
           alt=""
           width={600}
           height={600}
@@ -285,7 +223,7 @@ export default function ProviderDashboard() {
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
               <Image
-                src="/woml-logo.png"
+                src="/woml-orange.png"
                 alt="WOML - Word of Mouth Leads"
                 width={240}
                 height={70}
@@ -438,7 +376,7 @@ export default function ProviderDashboard() {
               declineTerms={declineTerms}
               onLeadSubmitted={async () => {
                 try {
-                  const res = await fetch("/api/leads");
+                  const res = await fetch("/api/leads", { cache: "no-store" });
                   const data = await res.json();
                   if (data.success) setDbLeads(data.leads);
                 } catch {}
@@ -691,90 +629,19 @@ function ConnectionTab({
     ? (activeConnections.find((c) => c.id === selectedConnectionId) || activeConnection)
     : activeConnection;
 
-  // Multi-step lead submission state
+  // Lead submission state
   const [showLeadForm, setShowLeadForm] = useState(false);
-  const [channel, setChannel] = useState<LeadChannel | null>(null);
-  const [formStep, setFormStep] = useState<FormStep>("channel");
+  const [formStep, setFormStep] = useState<FormStep>("form");
   const [leadSubmitted, setLeadSubmitted] = useState(false);
-  const [callStatus, setCallStatus] = useState<"idle" | "calling" | "completed" | "failed">("idle");
   const [isSubmittingLead, setIsSubmittingLead] = useState(false);
 
   // Form data
-  const [formData, setFormData] = useState<ExtendedFormData>({
+  const [formData, setFormData] = useState<LeadFormData>({
     customerName: "",
     email: "",
     phone: "",
-    carYear: "",
-    carMake: "",
-    carModel: "",
-    state: "PA",
-    age: "35",
-    gender: "other",
-    maritalStatus: "single",
-    zipCode: "",
-    creditScore: "good",
-    homeOwner: false,
-    yearsLicensed: "10",
-    drivingHistory: "clean",
-    priorInsurance: true,
-    annualMileage: "12000",
-    vehicleOwnership: "owned",
-    primaryUse: "commute",
-    garageType: "garage",
-    antiTheft: false,
-    safetyFeatures: true,
-    occupation: "standard",
-    coverageType: "full",
-    deductible: 500,
+    notes: "",
   });
-
-  // Quote and chatbot state
-  const [allQuotes, setAllQuotes] = useState<QuoteResult[]>([]);
-  const [selectedQuote, setSelectedQuote] = useState<QuoteResult | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Payment state
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>("ach_bank");
-  const [stateConfirmed, setStateConfirmed] = useState(false);
-
-  // Simple quote form state (license upload flow)
-  const [licenseImage, setLicenseImage] = useState<string | null>(null);
-  const [quoteEmail, setQuoteEmail] = useState("");
-  const [quotePhone, setQuotePhone] = useState("");
-  const [extractedLicenseData, setExtractedLicenseData] = useState<{
-    isValid: boolean;
-    name: string | null;
-    dateOfBirth: string | null;
-    address: string | null;
-    idNumber: string | null;
-    expirationDate: string | null;
-    state: string | null;
-    errorType: string | null;
-    errorMessage: string | null;
-  } | null>(null);
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [extractionError, setExtractionError] = useState<string | null>(null);
-  const [licenseFlagged, setLicenseFlagged] = useState<{ isFlagged: boolean; flagReasons: string[] } | null>(null);
-  const [customerName, setCustomerName] = useState("");
-  const [maritalStatus, setMaritalStatus] = useState<"" | "married" | "single">("");
-  const [hasInsurance, setHasInsurance] = useState<"" | "yes" | "no">("");
-
-  // License plate verification state
-  const [plateImage, setPlateImage] = useState<string | null>(null);
-  const [plateNumber, setPlateNumber] = useState("");
-  const [plateState, setPlateState] = useState("");
-  const [isVerifyingPlate, setIsVerifyingPlate] = useState(false);
-  const [plateVerificationResult, setPlateVerificationResult] = useState<{
-    success: boolean;
-    extractedPlate?: { plateNumber: string; state?: string; confidence: number };
-    matchesManualEntry: boolean;
-    mismatchDetails?: string;
-    vehicle?: { verified: boolean; make?: string; model?: string; year?: number; color?: string };
-  } | null>(null);
-  const [plateError, setPlateError] = useState<string | null>(null);
 
   // Fetch buyers from API
   type DiscoveryBuyer = {
@@ -819,268 +686,33 @@ function ConnectionTab({
   // Reset form when closing
   const resetForm = () => {
     setShowLeadForm(false);
-    setChannel(null);
-    setFormStep("channel");
+    setFormStep("form");
     setFormData({
-      customerName: "", email: "", phone: "", carYear: "", carMake: "", carModel: "", state: "PA",
-      age: "35", gender: "other", maritalStatus: "single", zipCode: "", creditScore: "good",
-      homeOwner: false, yearsLicensed: "10", drivingHistory: "clean", priorInsurance: true,
-      annualMileage: "12000", vehicleOwnership: "owned", primaryUse: "commute", garageType: "garage",
-      antiTheft: false, safetyFeatures: true, occupation: "standard", coverageType: "full", deductible: 500,
+      customerName: "",
+      email: "",
+      phone: "",
+      notes: "",
     });
-    setAllQuotes([]);
-    setSelectedQuote(null);
-    setChatMessages([]);
-    setCallStatus("idle");
-    setSelectedPaymentMethod("ach_bank");
-    setStateConfirmed(false);
-    // Reset simple quote form
-    setLicenseImage(null);
-    setQuoteEmail("");
-    setQuotePhone("");
-    setCustomerName("");
-    setMaritalStatus("");
-    setHasInsurance("");
-    setExtractedLicenseData(null);
-    setIsExtracting(false);
-    setExtractionError(null);
-    // Reset plate verification
-    setPlateImage(null);
-    setPlateNumber("");
-    setPlateState("");
-    setIsVerifyingPlate(false);
-    setPlateVerificationResult(null);
-    setPlateError(null);
+    setLeadSubmitted(false);
   };
 
-  // Generate quotes using the insurance calculator
-  const generateQuotes = () => {
-    const input: MultiCarrierQuoteInput = {
-      carModel: `${formData.carYear} ${formData.carMake} ${formData.carModel}`,
-      state: formData.state,
-      age: parseInt(formData.age) || 35,
-      gender: formData.gender,
-      maritalStatus: formData.maritalStatus,
-      creditScore: formData.creditScore,
-      homeOwner: formData.homeOwner,
-      yearsLicensed: parseInt(formData.yearsLicensed) || 10,
-      drivingHistory: formData.drivingHistory,
-      priorInsurance: formData.priorInsurance,
-      annualMileage: parseInt(formData.annualMileage) || 12000,
-      vehicleOwnership: formData.vehicleOwnership,
-      primaryUse: formData.primaryUse,
-      garageType: formData.garageType,
-      antiTheft: formData.antiTheft,
-      safetyFeatures: formData.safetyFeatures,
-      occupation: formData.occupation,
-      coverageType: formData.coverageType,
-      deductible: formData.deductible,
-    };
-    const quotes = calculateMultiCarrierQuotes(input);
-    setAllQuotes(quotes);
-    setSelectedQuote(quotes[0] || null);
-    return quotes;
-  };
-
-  // Initialize chatbot with greeting
-  const initializeChatbot = (quotes: QuoteResult[]) => {
-    const bestQuote = quotes[0];
-    if (!bestQuote) return;
-
-    const firstName = formData.customerName.split(" ")[0] || "there";
-    setChatMessages([{
-      role: "ai",
-      text: `Great news, ${firstName}! I've found some excellent rates for your ${formData.carYear} ${formData.carMake} ${formData.carModel}.\n\nBased on your profile, you qualify for multiple discounts!\n\n**Your BEST rate: $${bestQuote.monthlyPremium.toFixed(2)}/month with ${bestQuote.companyName}**\n\nThis rate includes ${bestQuote.totalDiscount}% in savings. Would you like me to lock this in for you today, or do you have any questions about the coverage?`
-    }]);
-  };
-
-  // Handle chat messages
-  const handleChatSend = async (message: string) => {
-    if (!message.trim() || isAiLoading) return;
-
-    setChatMessages(prev => [...prev, { role: "user", text: message }]);
-    setChatInput("");
-    setIsAiLoading(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...chatMessages, { role: "user" as const, text: message }].map(m => ({
-            role: m.role === "ai" ? "assistant" : m.role,
-            content: m.text,
-          })),
-          customerProfile: {
-            name: formData.customerName,
-            vehicleInfo: `${formData.carYear} ${formData.carMake} ${formData.carModel}`,
-            state: formData.state,
-          },
-          quotes: allQuotes,
-          selectedQuote,
-        }),
-      });
-
-      const data = await response.json();
-      setChatMessages(prev => [...prev, { role: "ai", text: data.message, action: data.action }]);
-    } catch {
-      setChatMessages(prev => [...prev, {
-        role: "ai",
-        text: "I apologize, I'm having trouble connecting. Please try again or click 'View All Quotes' to see your options directly.",
-      }]);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  // Handle ASAP submission - trigger call
-  const handleAsapSubmit = async () => {
-    if (!activeConnection || !currentProvider) return;
-
-    // Check lead caps before submission
-    const capStatus = checkLeadCaps(activeConnection);
-    if (!capStatus.canSubmitLead) {
-      alert(capStatus.message || "Lead cap reached. Unable to submit.");
-      return;
-    }
-
-    setCallStatus("calling");
-    const payout = activeConnection.rate_per_lead;
-
-    // Submit lead to API (database)
-    let leadId = "";
-    try {
-      const apiRes = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionId: (effectiveConnection || activeConnection).id,
-          customerData: {
-            name: formData.customerName,
-            email: formData.email,
-            phone: formData.phone,
-          },
-          vehicleData: formData.carMake ? {
-            make: formData.carMake,
-            model: formData.carModel,
-            year: parseInt(formData.carYear) || undefined,
-          } : undefined,
-        }),
-      });
-      const apiData = await apiRes.json();
-      if (apiData.success) {
-        leadId = apiData.leadId;
-        onLeadSubmitted();
-      }
-    } catch (err) {
-      console.error("Lead API call failed:", err);
-    }
-
-    // Update connection stats
-    updateConnectionStats(activeConnection.id, payout);
-
-    // Trigger Twilio call
-    try {
-      const response = await fetch("/api/call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName: formData.customerName,
-          customerPhone: formData.phone,
-          carModel: `${formData.carMake} ${formData.carModel}`,
-          quoteType: "asap",
-          leadId,
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success || data.simulated) {
-        setCallStatus("completed");
-        setFormStep("success");
-        setLeadSubmitted(true);
-      } else {
-        setCallStatus("failed");
-      }
-    } catch {
-      // Even if call fails, lead is still created
-      setCallStatus("completed");
-      setFormStep("success");
-      setLeadSubmitted(true);
-    }
-  };
-
-  // Handle Quote purchase
-  const handlePurchase = async () => {
-    if (!activeConnection || !currentProvider || !selectedQuote) return;
-
-    // Check lead caps before submission
-    const capStatus = checkLeadCaps(activeConnection);
-    if (!capStatus.canSubmitLead) {
-      alert(capStatus.message || "Lead cap reached. Unable to submit.");
-      return;
-    }
-
-    const payout = activeConnection.rate_per_lead;
-
-    // Submit lead to API (database)
-    try {
-      const apiRes = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          connectionId: (effectiveConnection || activeConnection).id,
-          customerData: {
-            name: formData.customerName,
-            email: formData.email,
-            phone: formData.phone,
-          },
-          vehicleData: formData.carMake ? {
-            make: formData.carMake,
-            model: formData.carModel,
-            year: parseInt(formData.carYear) || undefined,
-          } : undefined,
-        }),
-      });
-      const apiData = await apiRes.json();
-      if (apiData.success) {
-        onLeadSubmitted();
-      }
-    } catch (err) {
-      console.error("Lead API call failed:", err);
-    }
-
-    updateConnectionStats(activeConnection.id, payout);
-    setFormStep("success");
-    setLeadSubmitted(true);
-  };
-
-  // Handle simple quote submission (license upload flow)
-  const handleSimpleQuoteSubmit = async () => {
+  // Handle lead submission
+  const handleSubmitLead = async () => {
     if (isSubmittingLead) return;
     if (!activeConnection || !currentProvider) return;
-    if (!quoteEmail || !quotePhone) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail)) return;
-    if (!licenseImage) return;
+    if (!formData.customerName || !formData.email || !formData.phone) return;
+
     setIsSubmittingLead(true);
 
     // Check lead caps before submission
     const capStatus = checkLeadCaps(activeConnection);
     if (!capStatus.canSubmitLead) {
       alert(capStatus.message || "Lead cap reached. Unable to submit.");
+      setIsSubmittingLead(false);
       return;
     }
 
     const payout = activeConnection.rate_per_lead;
-
-    // Use the editable name field (auto-filled from license, or manually entered)
-    const leadName = customerName || extractedLicenseData?.name || "Customer";
-
-    // Build car info from license if available
-    let carModel = "See License";
-    let carYear = new Date().getFullYear();
-    if (extractedLicenseData?.state) {
-      carModel = `Vehicle from ${extractedLicenseData.state}`;
-    }
 
     // Submit lead to API (database)
     try {
@@ -1090,49 +722,22 @@ function ConnectionTab({
         body: JSON.stringify({
           connectionId: (effectiveConnection || activeConnection).id,
           customerData: {
-            name: leadName,
-            email: quoteEmail,
-            phone: quotePhone,
-            licenseData: extractedLicenseData || undefined,
-            licenseImage: licenseImage || undefined,
-            maritalStatus: maritalStatus || undefined,
-            hasInsurance: hasInsurance || undefined,
+            name: formData.customerName,
+            email: formData.email,
+            phone: formData.phone,
+            notes: formData.notes || undefined,
           },
-          vehicleData: extractedLicenseData?.state ? {
-            state: extractedLicenseData.state,
-          } : undefined,
         }),
       });
       const apiData = await apiRes.json();
       if (!apiData.success) {
         alert("Lead submission failed: " + (apiData.error || "Unknown error. Please try again."));
+        setIsSubmittingLead(false);
         return;
       }
 
-      // Lead created successfully — update UI and push to CRM
+      // Lead created successfully
       onLeadSubmitted();
-
-      // Push to CRM (non-blocking, don't fail the lead if CRM fails)
-      try {
-        await fetch("/api/crm/push-lead", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            licenseData: extractedLicenseData,
-            email: quoteEmail,
-            phone: quotePhone,
-            customerName: leadName,
-            maritalStatus: maritalStatus || undefined,
-            hasInsurance: hasInsurance || undefined,
-            providerId: currentUser.id,
-            providerName: currentProvider.displayName,
-            leadType: "quote",
-          }),
-        });
-      } catch (err) {
-        console.error("CRM push failed:", err);
-      }
-
       updateConnectionStats(activeConnection.id, payout);
       setFormStep("success");
       setLeadSubmitted(true);
@@ -1143,210 +748,6 @@ function ConnectionTab({
       setIsSubmittingLead(false);
     }
   };
-
-  // Compress image before upload — resize to max 1600px, convert to JPEG
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new window.Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const canvas = document.createElement("canvas");
-        let { width, height } = img;
-        const MAX_DIM = 1600;
-        if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) {
-            height = Math.round((height * MAX_DIM) / width);
-            width = MAX_DIM;
-          } else {
-            width = Math.round((width * MAX_DIM) / height);
-            height = MAX_DIM;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.8));
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Failed to load image"));
-      };
-      img.src = url;
-    });
-  };
-
-  // Handle license image upload
-  const validateExtractedLicense = (data: NonNullable<typeof extractedLicenseData>) => {
-    const reasons: string[] = [];
-
-    // Check 1: Single-word name (real IDs always have first + last)
-    if (data.name) {
-      const nameParts = data.name.trim().split(/\s+/);
-      if (nameParts.length < 2) {
-        reasons.push("Single-word name detected. Real IDs require first and last name.");
-      }
-    }
-
-    // Check 2: Known fake names blocklist
-    if (data.name) {
-      const lowerName = data.name.toLowerCase().trim();
-      const fakeNames = ["mclovin", "fogell", "john doe", "jane doe", "test test", "fake name", "sample sample"];
-      if (fakeNames.some(fake => lowerName === fake || lowerName.includes(fake))) {
-        reasons.push("Name matches a known fake/test ID.");
-      }
-    }
-
-    // Check 3: Invalid US state code
-    if (data.state) {
-      const validStates = new Set([
-        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-        "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC","PR","GU","VI","AS","MP"
-      ]);
-      if (!validStates.has(data.state.toUpperCase())) {
-        reasons.push(`"${data.state}" is not a valid US state code.`);
-      }
-    }
-
-    // Check 4: Future date of birth
-    if (data.dateOfBirth) {
-      const parts = data.dateOfBirth.split("/");
-      if (parts.length === 3) {
-        const dob = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
-        if (!isNaN(dob.getTime()) && dob > new Date()) {
-          reasons.push("Date of birth is in the future.");
-        }
-      }
-    }
-
-    return { isFlagged: reasons.length > 0, flagReasons: reasons };
-  };
-
-  const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      setExtractionError("Please upload an image file (JPG, PNG, etc.)");
-      return;
-    }
-
-    // Validate file size (max 15MB before compression)
-    if (file.size > 15 * 1024 * 1024) {
-      setExtractionError("Image is too large. Please use a photo under 15MB.");
-      return;
-    }
-
-    // Reset state
-    setExtractedLicenseData(null);
-    setExtractionError(null);
-    setLicenseFlagged(null);
-    setIsExtracting(true);
-
-    try {
-      // Compress image before upload (resizes + converts to JPEG)
-      const compressedImage = await compressImage(file);
-      setLicenseImage(compressedImage);
-
-      // Send to API for extraction
-      const response = await fetch("/api/extract-license", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseImage: compressedImage }),
-      });
-
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        setExtractedLicenseData(result.data);
-        setExtractionError(null);
-        if (result.data.name) setCustomerName(result.data.name);
-        // Run programmatic fake detection on extracted data
-        if (result.data.isValid) {
-          const flagResult = validateExtractedLicense(result.data);
-          setLicenseFlagged(flagResult);
-        }
-      } else {
-        setExtractionError(result.error || "Could not process the license photo. Please try again.");
-      }
-    } catch {
-      setExtractionError("Connection error. Please check your internet and try again.");
-    } finally {
-      setIsExtracting(false);
-    }
-
-    // Reset file input so the same file can be re-selected
-    e.target.value = "";
-  };
-
-  // Handle plate image upload
-  const handlePlateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      alert("Please upload an image file");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
-      return;
-    }
-
-    setPlateError(null);
-    setPlateVerificationResult(null);
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPlateImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Verify plate (OCR + vehicle lookup)
-  const handleVerifyPlate = async () => {
-    if (!plateImage || !plateNumber || !plateState) {
-      setPlateError("Please upload a plate photo and enter the plate number and state");
-      return;
-    }
-
-    setIsVerifyingPlate(true);
-    setPlateError(null);
-
-    try {
-      const response = await fetch("/api/verify-plate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plateImage,
-          plateNumber,
-          plateState,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setPlateVerificationResult(result);
-      } else {
-        setPlateError(result.error || "Failed to verify plate");
-      }
-    } catch {
-      setPlateError("Failed to verify plate. Please try again.");
-    } finally {
-      setIsVerifyingPlate(false);
-    }
-  };
-
-  // Scroll chat to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
 
   const handleSendRequest = async () => {
     if (!selectedBuyer || !currentProvider) return;
@@ -1373,7 +774,7 @@ function ConnectionTab({
     return (
       <div className="space-y-6">
         {/* Channel Picker — only shown when provider has multiple active connections */}
-        {activeConnections.length > 1 && !selectedConnectionId && formStep === "channel" && (
+        {activeConnections.length > 1 && !selectedConnectionId && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-[#E8822A] mb-2">Which business is this lead for?</h3>
             <p className="text-gray-500 text-sm mb-4">Select the channel you want to submit a lead to.</p>
@@ -1405,16 +806,11 @@ function ConnectionTab({
                 </svg>
               </div>
               <div>
-                <p className="text-xl font-bold text-emerald-800">
-                  {channel === "asap" ? "Agent Notified!" : "Lead Submitted Successfully!"}
-                </p>
+                <p className="text-xl font-bold text-emerald-800">Lead Submitted Successfully!</p>
                 <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)} for this lead.</p>
                 <p className="text-emerald-500 text-sm">(${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${providerFeeDisplay.toFixed(2)} platform fee)</p>
               </div>
             </div>
-            {channel === "asap" && (
-              <p className="text-emerald-700 text-sm">An agent will call {formData.customerName} within 60 seconds.</p>
-            )}
             <button
               onClick={resetForm}
               className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium transition"
@@ -1538,41 +934,12 @@ function ConnectionTab({
           </div>
         )}
 
-        {/* Lead Submission Flow */}
+        {/* Lead Submission Form */}
         {showLeadForm && formStep !== "success" && (
           <div className="bg-white rounded-xl border-2 border-[#E8822A] p-6 shadow-lg">
             {/* Header with close button */}
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                {formStep !== "channel" && (
-                  <button
-                    onClick={() => {
-                      if (formStep === "basic_info") setFormStep("channel");
-                      else if (formStep === "license_upload") setFormStep("channel");
-                      else if (formStep === "state_confirm") setFormStep("basic_info");
-                      else if (formStep === "extended_info") setFormStep("state_confirm");
-                      else if (formStep === "chatbot") setFormStep("extended_info");
-                      else if (formStep === "quotes") setFormStep("chatbot");
-                      else if (formStep === "payment") setFormStep("chatbot");
-                    }}
-                    className="text-gray-500 hover:text-[#E8822A] transition"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                )}
-                <h3 className="text-lg font-semibold text-[#E8822A]">
-                  {formStep === "channel" && "How can we help your customer?"}
-                  {formStep === "basic_info" && (channel === "asap" ? "Quick Customer Info" : "Customer Information")}
-                  {formStep === "license_upload" && "Submit a Lead"}
-                  {formStep === "state_confirm" && "Confirm State of Residence"}
-                  {formStep === "extended_info" && "Driver Profile Details"}
-                  {formStep === "chatbot" && "Insurance Quote Assistant"}
-                  {formStep === "quotes" && "Compare All Quotes"}
-                  {formStep === "payment" && "Select Payment Method"}
-                </h3>
-              </div>
+              <h3 className="text-lg font-semibold text-[#E8822A]">Submit a Lead</h3>
               <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 transition">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1580,856 +947,95 @@ function ConnectionTab({
               </button>
             </div>
 
-            {/* Step 1: Channel Selection */}
-            {formStep === "channel" && (
-              <div className="grid md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => { setChannel("asap"); setFormStep("basic_info"); }}
-                  className="bg-white border-2 border-gray-200 hover:border-red-500 rounded-xl p-6 text-left transition group"
-                >
-                  <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mb-4 group-hover:bg-red-200 transition">
-                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-gray-800 mb-2">ASAP - Need Insurance Now</h4>
-                  <p className="text-gray-600 text-sm mb-4">Customer needs coverage immediately. Agent calls within 60 seconds.</p>
-                  <ul className="text-sm text-gray-500 space-y-1">
-                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Quick info collection</li>
-                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Immediate agent callback</li>
-                    <li className="flex items-center gap-2"><span className="text-red-500">•</span> Best for urgent needs</li>
-                  </ul>
-                </button>
-
-                <button
-                  onClick={() => { setChannel("quote"); setFormStep("license_upload"); }}
-                  className="bg-white border-2 border-gray-200 hover:border-orange-500 rounded-xl p-6 text-left transition group"
-                >
-                  <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center mb-4 group-hover:bg-orange-200 transition">
-                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                    </svg>
-                  </div>
-                  <h4 className="text-lg font-bold text-gray-800 mb-2">Get Quote - Quick & Easy</h4>
-                  <p className="text-gray-600 text-sm mb-4">Customer might need insurance. High-value passive lead.</p>
-                  <ul className="text-sm text-gray-500 space-y-1">
-                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> Email, phone &amp; driver&apos;s license</li>
-                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> AI extracts all customer info</li>
-                    <li className="flex items-center gap-2"><span className="text-orange-500">•</span> High retention potential</li>
-                  </ul>
-                </button>
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+                <p className="text-orange-700 text-sm font-medium">
+                  You&apos;ll earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)} for this lead
+                </p>
               </div>
-            )}
 
-            {/* Submit a Lead - Single Screen */}
-            {formStep === "license_upload" && (
-              <div className="space-y-6">
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                  <p className="text-orange-700 text-sm font-medium">
-                    You&apos;ll earn ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} for this lead
-                  </p>
-                </div>
-
-                {/* Phone */}
+              <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Phone Number *
-                  </label>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Customer Name *</label>
+                  <input
+                    type="text"
+                    value={formData.customerName}
+                    onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                    required
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Phone *</label>
                   <input
                     type="tel"
-                    value={quotePhone}
-                    onChange={(e) => setQuotePhone(e.target.value)}
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
+                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
                     placeholder="(555) 123-4567"
                   />
                 </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    value={quoteEmail}
-                    onChange={(e) => setQuoteEmail(e.target.value)}
-                    required
-                    className={`w-full px-4 py-3 rounded-lg bg-gray-50 border text-gray-900 focus:outline-none transition text-lg ${
-                      quoteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail)
-                        ? "border-red-400 focus:border-red-500"
-                        : "border-gray-200 focus:border-orange-500"
-                    }`}
-                    placeholder="customer@email.com"
-                  />
-                  {quoteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) && (
-                    <p className="text-red-500 text-xs mt-1">Enter a valid email (e.g. name@gmail.com)</p>
-                  )}
-                </div>
-
-                {/* Customer Name */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Customer Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-orange-500 focus:outline-none transition text-lg"
-                    placeholder="Full name (auto-fills from license)"
-                  />
-                </div>
-
-                {/* Driver's License Upload */}
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">
-                    Driver&apos;s License Photo *
-                  </label>
-                  <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${licenseImage ? (licenseFlagged?.isFlagged ? "border-amber-400 bg-amber-50" : extractedLicenseData?.isValid ? "border-green-400 bg-green-50" : extractedLicenseData && !extractedLicenseData.isValid ? "border-red-400 bg-red-50" : "border-yellow-400 bg-yellow-50") : "border-gray-300 hover:border-orange-400 bg-gray-50"}`}>
-                    {isExtracting ? (
-                      <div className="space-y-3">
-                        <div className="animate-spin h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full mx-auto"></div>
-                        <p className="text-orange-600 font-medium">Scanning ID...</p>
-                        <p className="text-gray-500 text-sm">Extracting information from your license</p>
-                      </div>
-                    ) : licenseImage ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-center gap-2">
-                          {licenseFlagged?.isFlagged ? (
-                            <span className="text-amber-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              <span className="font-medium">ID Flagged</span>
-                            </span>
-                          ) : extractedLicenseData?.isValid ? (
-                            <span className="text-green-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                              </svg>
-                              <span className="font-medium">ID Verified</span>
-                            </span>
-                          ) : extractedLicenseData && !extractedLicenseData.isValid ? (
-                            <span className="text-red-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              <span className="font-medium">Retake Photo</span>
-                            </span>
-                          ) : (
-                            <span className="text-yellow-600 flex items-center gap-1">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="font-medium">Processing...</span>
-                            </span>
-                          )}
-                        </div>
-                        <img src={licenseImage} alt="License preview" className="max-h-48 mx-auto rounded-lg shadow-sm" />
-                        <button
-                          onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); setLicenseFlagged(null); }}
-                          className="text-sm text-red-600 hover:text-red-700 underline"
-                        >
-                          Remove and upload different image
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer block">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLicenseUpload}
-                          className="hidden"
-                        />
-                        <div className="space-y-2">
-                          <div className="h-14 w-14 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
-                            <svg className="w-7 h-7 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </div>
-                          <p className="text-gray-700 font-medium">Tap to take photo or upload</p>
-                          <p className="text-gray-500 text-sm">Take a clear photo of the full license</p>
-                        </div>
-                      </label>
-                    )}
-                  </div>
-                </div>
-
-                {/* Verification Error */}
-                {extractionError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-                    <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div>
-                      <p className="text-red-700 text-sm">{extractionError}</p>
-                      <button
-                        onClick={() => { setLicenseImage(null); setExtractedLicenseData(null); setExtractionError(null); }}
-                        className="text-red-600 text-sm font-medium underline mt-1"
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* License Verification Result */}
-                {extractedLicenseData && (
-                  <div className={`border rounded-xl p-4 ${
-                    extractedLicenseData.isValid ? "bg-emerald-50 border-emerald-200" :
-                    "bg-red-50 border-red-200"
-                  }`}>
-                    {extractedLicenseData.isValid ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <p className="text-emerald-800 font-medium text-sm">ID Verified — Confirm Details</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm ml-7">
-                          {extractedLicenseData.name && (
-                            <div><span className="text-gray-500">Name:</span> <span className="font-medium text-gray-900">{extractedLicenseData.name}</span></div>
-                          )}
-                          {extractedLicenseData.state && (
-                            <div><span className="text-gray-500">State:</span> <span className="font-medium text-gray-900">{extractedLicenseData.state}</span></div>
-                          )}
-                          {extractedLicenseData.dateOfBirth && (
-                            <div><span className="text-gray-500">DOB:</span> <span className="font-medium text-gray-900">{extractedLicenseData.dateOfBirth}</span></div>
-                          )}
-                          {extractedLicenseData.expirationDate && (
-                            <div><span className="text-gray-500">Expires:</span> <span className="font-medium text-gray-900">{extractedLicenseData.expirationDate}</span></div>
-                          )}
-                          {extractedLicenseData.idNumber && (
-                            <div className="col-span-2"><span className="text-gray-500">ID #:</span> <span className="font-medium text-gray-900">{extractedLicenseData.idNumber}</span></div>
-                          )}
-                          {extractedLicenseData.address && (
-                            <div className="col-span-2"><span className="text-gray-500">Address:</span> <span className="font-medium text-gray-900">{extractedLicenseData.address}</span></div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          <p className="text-red-800 font-medium text-sm">
-                            We could not read your ID. Please take a clearer photo and try again.
-                          </p>
-                        </div>
-                        {extractedLicenseData.errorMessage && (
-                          <p className="text-red-600 text-xs ml-7">{extractedLicenseData.errorMessage}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Flagged ID Warning */}
-                {licenseFlagged?.isFlagged && (
-                  <div className="border rounded-xl p-4 bg-amber-50 border-amber-300">
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                      </svg>
-                      <p className="text-amber-800 font-medium text-sm">This ID has been flagged</p>
-                    </div>
-                    <ul className="ml-7 space-y-1">
-                      {licenseFlagged.flagReasons.map((reason, i) => (
-                        <li key={i} className="text-amber-700 text-sm">{reason}</li>
-                      ))}
-                    </ul>
-                    <p className="ml-7 mt-2 text-amber-600 text-xs">Please use a valid government-issued ID to submit this lead.</p>
-                  </div>
-                )}
-
-                {/* Optional Fields */}
-                <div className="space-y-4 border-t border-gray-100 pt-4">
-                  {/* Marital Status */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
-                        Marital Status <span className="text-gray-400 font-normal">(Optional)</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMaritalStatus(maritalStatus === "married" ? "" : "married")}
-                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
-                            maritalStatus === "married"
-                              ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300"
-                          }`}
-                        >
-                          Married
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMaritalStatus(maritalStatus === "single" ? "" : "single")}
-                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
-                            maritalStatus === "single"
-                              ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300"
-                          }`}
-                        >
-                          Single
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Current Insurance */}
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
-                        Do you currently have insurance? <span className="text-gray-400 font-normal">(Optional)</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHasInsurance(hasInsurance === "yes" ? "" : "yes")}
-                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
-                            hasInsurance === "yes"
-                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300"
-                          }`}
-                        >
-                          Yes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHasInsurance(hasInsurance === "no" ? "" : "no")}
-                          className={`flex-1 py-2.5 rounded-lg border-2 font-medium text-sm transition ${
-                            hasInsurance === "no"
-                              ? "border-red-400 bg-red-50 text-red-600"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300"
-                          }`}
-                        >
-                          No
-                        </button>
-                      </div>
-                    </div>
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  onClick={handleSimpleQuoteSubmit}
-                  disabled={isSubmittingLead || !quoteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(quoteEmail) || !quotePhone || !customerName || !licenseImage || isExtracting || !extractedLicenseData || !extractedLicenseData.isValid || !!licenseFlagged?.isFlagged}
-                  className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
-                >
-                  {isSubmittingLead ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                      Submit Lead
-                    </>
-                  )}
-                </button>
-
-                {/* Photo quality warnings */}
-                {extractedLicenseData && !extractedLicenseData.isValid && (
-                  <p className="text-center text-red-600 text-sm font-medium">
-                    Please retake the photo and try again.
-                  </p>
-                )}
-                {licenseImage && !extractedLicenseData && !isExtracting && (
-                  <p className="text-center text-red-600 text-sm font-medium">
-                    Could not verify license. Please try uploading again.
-                  </p>
-                )}
-
-                <p className="text-center text-gray-500 text-xs">
-                  Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} once they process it.
-                </p>
               </div>
-            )}
 
-            {/* Basic Info Form (ASAP flow) */}
-            {formStep === "basic_info" && (
-              <div className="space-y-4">
-                <div className={`${channel === "asap" ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"} border rounded-lg p-3 mb-4`}>
-                  <p className={`${channel === "asap" ? "text-red-700" : "text-orange-700"} text-sm font-medium`}>
-                    {channel === "asap"
-                      ? "Get the essentials - agent will call within 60 seconds"
-                      : `You'll earn $${Number(activeConnection?.rate_per_lead || 0).toFixed(2)} when this lead converts`}
-                  </p>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Customer Name *</label>
-                    <input type="text" value={formData.customerName} onChange={(e) => setFormData({ ...formData, customerName: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="John Doe" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Email *</label>
-                    <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="john@example.com" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">Phone *</label>
-                  <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="(555) 123-4567" />
-                </div>
-
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Vehicle Year *</label>
-                    <input type="text" value={formData.carYear} onChange={(e) => setFormData({ ...formData, carYear: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="2022" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Make *</label>
-                    <input type="text" value={formData.carMake} onChange={(e) => setFormData({ ...formData, carMake: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="Toyota" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Model *</label>
-                    <input type="text" value={formData.carModel} onChange={(e) => setFormData({ ...formData, carModel: e.target.value })} required
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" placeholder="Camry" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">State *</label>
-                  <select value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                    {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                </div>
-
-                <div className="flex gap-4 pt-4">
-                  {channel === "asap" ? (
-                    <button onClick={handleAsapSubmit} disabled={callStatus === "calling" || !formData.customerName || !formData.phone}
-                      className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2">
-                      {callStatus === "calling" ? (
-                        <><span className="animate-spin">⏳</span> Connecting Agent...</>
-                      ) : (
-                        <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg> Call Agent Now</>
-                      )}
-                    </button>
-                  ) : (
-                    <button onClick={() => setFormStep("state_confirm")} disabled={!formData.customerName || !formData.phone || !formData.carYear}
-                      className="flex-1 bg-[#E8822A] hover:bg-[#D47526] disabled:bg-gray-300 text-white py-3 rounded-lg font-semibold transition">
-                      Continue to Get Best Rates
-                    </button>
-                  )}
-                </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Email *</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                  className={`w-full px-4 py-3 rounded-lg bg-gray-50 border text-gray-900 focus:outline-none transition ${
+                    formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email)
+                      ? "border-red-400 focus:border-red-500"
+                      : "border-gray-200 focus:border-[#E8822A]"
+                  }`}
+                  placeholder="customer@email.com"
+                />
+                {formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email) && (
+                  <p className="text-red-500 text-xs mt-1">Enter a valid email (e.g. name@gmail.com)</p>
+                )}
               </div>
-            )}
 
-            {/* State Confirmation Step (Quote only) */}
-            {formStep === "state_confirm" && channel === "quote" && (
-              <div className="space-y-6">
-                {/* State Verification Notice */}
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <svg className="w-6 h-6 text-orange-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="font-semibold text-orange-800">Insurance Licensing Verification</p>
-                      <p className="text-orange-700 text-sm mt-1">Insurance rates and regulations vary by state. Please confirm the customer&apos;s state of residence to ensure we provide accurate quotes from licensed carriers.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* State Selection */}
-                <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <label className="block text-gray-700 text-sm font-medium mb-2">State of Residence *</label>
-                  <select
-                    value={formData.state}
-                    onChange={(e) => { setFormData({ ...formData, state: e.target.value }); setStateConfirmed(false); }}
-                    className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-lg"
-                  >
-                    {US_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-
-                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-600 text-sm">
-                      Selected: <span className="font-semibold text-gray-800">{US_STATES.find(s => s.value === formData.state)?.label || formData.state}</span>
-                    </p>
-                    <p className="text-gray-500 text-xs mt-1">
-                      Quotes will be based on {formData.state} insurance requirements and rates.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Confirmation Checkbox */}
-                <label className="flex items-start gap-3 cursor-pointer p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition">
-                  <input
-                    type="checkbox"
-                    checked={stateConfirmed}
-                    onChange={(e) => setStateConfirmed(e.target.checked)}
-                    className="w-5 h-5 mt-0.5 rounded border-gray-300 text-[#E8822A] focus:ring-[#E8822A]"
-                  />
-                  <span className="text-gray-700 text-sm">
-                    I confirm that the customer is seeking insurance coverage for a vehicle registered in <strong>{US_STATES.find(s => s.value === formData.state)?.label || formData.state}</strong>, and I understand that a licensed agent will finalize their policy.
-                  </span>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">
+                  Notes <span className="text-gray-400 font-normal">(Optional)</span>
                 </label>
-
-                {/* Compliance Disclaimer */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <p className="text-amber-800 text-xs leading-relaxed">
-                    <strong>Important:</strong> {DISCLAIMERS.leadGenDisclaimer}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setFormStep("extended_info")}
-                  disabled={!stateConfirmed}
-                  className="w-full bg-[#E8822A] hover:bg-[#D47526] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition"
-                >
-                  Continue to Profile Details
-                </button>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition resize-none"
+                  placeholder="Any additional details about this lead..."
+                />
               </div>
-            )}
 
-            {/* Step 3: Extended Info Form (Quote only) */}
-            {formStep === "extended_info" && channel === "quote" && (
-              <div className="space-y-4">
-                <p className="text-gray-600 text-sm mb-4">More details = better rates. These help us find the best discounts.</p>
-
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Age</label>
-                    <input type="number" value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Gender</label>
-                    <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value as ExtendedFormData["gender"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Marital Status</label>
-                    <select value={formData.maritalStatus} onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value as ExtendedFormData["maritalStatus"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value="single">Single</option><option value="married">Married</option><option value="divorced">Divorced</option><option value="widowed">Widowed</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Years Licensed</label>
-                    <input type="number" value={formData.yearsLicensed} onChange={(e) => setFormData({ ...formData, yearsLicensed: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Driving History</label>
-                    <select value={formData.drivingHistory} onChange={(e) => setFormData({ ...formData, drivingHistory: e.target.value as ExtendedFormData["drivingHistory"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value="clean">Clean Record</option><option value="minor_violations">Minor Violations</option><option value="major_violations">Major Violations</option><option value="accidents">At-Fault Accidents</option><option value="dui">DUI/DWI</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Credit Score</label>
-                    <select value={formData.creditScore} onChange={(e) => setFormData({ ...formData, creditScore: e.target.value as ExtendedFormData["creditScore"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value="excellent">Excellent (750+)</option><option value="good">Good (700-749)</option><option value="fair">Fair (650-699)</option><option value="poor">Poor (Below 650)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Annual Mileage</label>
-                    <input type="number" value={formData.annualMileage} onChange={(e) => setFormData({ ...formData, annualMileage: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition" />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Coverage Type</label>
-                    <select value={formData.coverageType} onChange={(e) => setFormData({ ...formData, coverageType: e.target.value as ExtendedFormData["coverageType"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value="liability">Liability Only</option><option value="collision">Liability + Collision</option><option value="comprehensive">Liability + Comprehensive</option><option value="full">Full Coverage</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Deductible</label>
-                    <select value={formData.deductible} onChange={(e) => setFormData({ ...formData, deductible: parseInt(e.target.value) as ExtendedFormData["deductible"] })}
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition">
-                      <option value={250}>$250</option><option value={500}>$500</option><option value={1000}>$1,000</option><option value={2000}>$2,000</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-4 pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={formData.homeOwner} onChange={(e) => setFormData({ ...formData, homeOwner: e.target.checked })} className="w-4 h-4" />
-                    <span className="text-sm text-gray-700">Homeowner</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={formData.priorInsurance} onChange={(e) => setFormData({ ...formData, priorInsurance: e.target.checked })} className="w-4 h-4" />
-                    <span className="text-sm text-gray-700">Currently Insured</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={formData.antiTheft} onChange={(e) => setFormData({ ...formData, antiTheft: e.target.checked })} className="w-4 h-4" />
-                    <span className="text-sm text-gray-700">Anti-Theft Device</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={formData.safetyFeatures} onChange={(e) => setFormData({ ...formData, safetyFeatures: e.target.checked })} className="w-4 h-4" />
-                    <span className="text-sm text-gray-700">Safety Features (ABS, Airbags)</span>
-                  </label>
-                </div>
-
-                <button onClick={() => { const quotes = generateQuotes(); initializeChatbot(quotes); setFormStep("chatbot"); }}
-                  className="w-full bg-[#E8822A] hover:bg-[#D47526] text-white py-3 rounded-lg font-semibold transition mt-4">
-                  Get My Quotes
-                </button>
-              </div>
-            )}
-
-            {/* Step 4: Chatbot */}
-            {formStep === "chatbot" && (
-              <div className="flex flex-col h-[500px]">
-                {/* Quote Header */}
-                {selectedQuote && (
-                  <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-t-xl p-4 text-white -mx-6 -mt-6 mb-4">
-                    <div className="flex items-center justify-between px-2">
-                      <div>
-                        <p className="text-sm opacity-80">Best Rate for {formData.customerName.split(" ")[0]}</p>
-                        <p className="text-3xl font-bold">${selectedQuote.monthlyPremium.toFixed(2)}/mo</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm opacity-80">{selectedQuote.companyName}</p>
-                        <p className="text-sm text-emerald-300">Saving {selectedQuote.totalDiscount}%</p>
-                      </div>
-                    </div>
-                  </div>
+              {/* Submit Button */}
+              <button
+                onClick={handleSubmitLead}
+                disabled={isSubmittingLead || !formData.customerName || !formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email) || !formData.phone}
+                className="w-full py-4 rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2 bg-[#E8822A] hover:bg-[#D47526] disabled:bg-gray-300 disabled:cursor-not-allowed text-white"
+              >
+                {isSubmittingLead ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    Submit Lead
+                  </>
                 )}
+              </button>
 
-                {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                  {chatMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[80%] rounded-xl px-4 py-3 ${msg.role === "user" ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-800"}`}>
-                        <p className="whitespace-pre-wrap text-sm">{msg.text}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {isAiLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-100 rounded-xl px-4 py-3">
-                        <div className="flex gap-1"><span className="animate-bounce">.</span><span className="animate-bounce delay-100">.</span><span className="animate-bounce delay-200">.</span></div>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-
-                {/* Quick Actions */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <button onClick={() => handleChatSend("Yes, lock in this rate!")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">Lock In This Rate</button>
-                  <button onClick={() => setFormStep("quotes")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">View All Quotes</button>
-                  <button onClick={() => handleChatSend("What's included in my coverage?")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">What&apos;s Covered?</button>
-                  <button onClick={() => handleChatSend("Can I get a lower price?")} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition">Lower Price Options</button>
-                </div>
-
-                {/* Chat Input */}
-                <div className="flex gap-2">
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleChatSend(chatInput)}
-                    placeholder="Ask about coverage, discounts, or anything else..." className="flex-1 px-4 py-3 rounded-lg border border-gray-200 focus:border-[#E8822A] focus:outline-none" />
-                  <button onClick={() => handleChatSend(chatInput)} className="bg-[#E8822A] text-white px-4 py-3 rounded-lg">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                  </button>
-                </div>
-
-                {/* Purchase CTA */}
-                {selectedQuote && (
-                  <button onClick={() => setFormStep("payment")} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    Purchase {selectedQuote.companyName} - ${selectedQuote.monthlyPremium.toFixed(2)}/mo
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Payment Method Selection Step */}
-            {formStep === "payment" && selectedQuote && (
-              <div className="space-y-6">
-                {/* Selected Quote Summary */}
-                <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-xl p-4 text-white -mx-6 -mt-6 mb-2">
-                  <div className="flex items-center justify-between px-2">
-                    <div>
-                      <p className="text-sm opacity-80">Selected Policy</p>
-                      <p className="text-2xl font-bold">${selectedQuote.monthlyPremium.toFixed(2)}/mo</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{selectedQuote.companyName}</p>
-                      <p className="text-sm text-emerald-300">{selectedQuote.coverageType} coverage</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payment Methods */}
-                <div>
-                  <h4 className="font-semibold text-gray-800 mb-3">Choose Payment Method</h4>
-                  <div className="space-y-3">
-                    {PAYMENT_METHODS.map((method) => {
-                      const fee = calculateFee(method, selectedQuote.monthlyPremium);
-                      const total = selectedQuote.monthlyPremium + fee;
-                      return (
-                        <label
-                          key={method.id}
-                          className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition ${
-                            selectedPaymentMethod === method.id
-                              ? "border-[#E8822A] bg-[#E8822A]/5"
-                              : "border-gray-200 hover:border-[#E8822A]/30"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="radio"
-                              name="paymentMethod"
-                              value={method.id}
-                              checked={selectedPaymentMethod === method.id}
-                              onChange={(e) => setSelectedPaymentMethod(e.target.value as PaymentMethodType)}
-                              className="w-4 h-4 text-[#E8822A]"
-                            />
-                            <div className="text-2xl">{method.icon}</div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-800">{method.name}</span>
-                                {method.recommended && (
-                                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">Recommended</span>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-500">{method.processingTime}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            {fee > 0 ? (
-                              <>
-                                <p className="font-semibold text-gray-800">${total.toFixed(2)}</p>
-                                <p className="text-xs text-gray-500">+${fee.toFixed(2)} fee</p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="font-semibold text-gray-800">${selectedQuote.monthlyPremium.toFixed(2)}</p>
-                                <p className="text-xs text-emerald-600">No fee</p>
-                              </>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Fee Breakdown */}
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <h5 className="font-medium text-gray-700 mb-3">Payment Summary</h5>
-                  {(() => {
-                    const method = PAYMENT_METHODS.find(m => m.id === selectedPaymentMethod);
-                    const fee = method ? calculateFee(method, selectedQuote.monthlyPremium) : 0;
-                    const total = selectedQuote.monthlyPremium + fee;
-                    return (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Monthly Premium</span>
-                          <span className="text-gray-800">${selectedQuote.monthlyPremium.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Processing Fee</span>
-                          <span className={fee > 0 ? "text-gray-800" : "text-emerald-600"}>
-                            {fee > 0 ? `$${fee.toFixed(2)}` : "Free"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold">
-                          <span className="text-gray-800">Total Due Today</span>
-                          <span className="text-[#E8822A]">${total.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Fee Information */}
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
-                  <p className="text-orange-700 text-xs">
-                    <strong>Lower fees with ACH:</strong> Bank transfers (ACH) have the lowest processing fees, capped at $5 max. Credit cards and digital wallets have higher fees but process instantly.
-                  </p>
-                </div>
-
-                {/* Compliance Disclaimers */}
-                <div className="space-y-3">
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    <p className="text-amber-800 text-xs leading-relaxed">
-                      <strong>Quote Disclaimer:</strong> {DISCLAIMERS.quoteDisclaimer}
-                    </p>
-                  </div>
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                    <p className="text-gray-600 text-xs leading-relaxed">
-                      {DISCLAIMERS.licenseVerification}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Purchase Button */}
-                <button
-                  onClick={handlePurchase}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold transition flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Complete Purchase
-                </button>
-
-                <p className="text-center text-gray-500 text-xs">
-                  A licensed insurance agent will contact you to finalize your policy.
-                </p>
-              </div>
-            )}
-
-            {/* Step 5: All Quotes Comparison */}
-            {formStep === "quotes" && (
-              <div className="space-y-4">
-                <p className="text-gray-600 text-sm">Compare rates from all carriers. Click to select and purchase.</p>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {allQuotes.map((quote) => (
-                    <button key={quote.companyId} onClick={() => { setSelectedQuote(quote); setFormStep("chatbot"); }}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition ${selectedQuote?.companyId === quote.companyId ? "border-[#E8822A] bg-[#E8822A]/5" : "border-gray-200 hover:border-[#E8822A]/50"}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-gray-800">{quote.companyName}</p>
-                          <p className="text-sm text-gray-500">{quote.coverageType} coverage • ${quote.deductible.toFixed(2)} deductible</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-[#E8822A]">${quote.monthlyPremium.toFixed(2)}/mo</p>
-                          <p className="text-sm text-emerald-600">{quote.totalDiscount}% savings</p>
-                        </div>
-                      </div>
-                      {quote.discountsApplied.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {quote.discountsApplied.slice(0, 3).map((d, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">{d}</span>
-                          ))}
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={() => setFormStep("chatbot")} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-medium transition">
-                  Back to Chat
-                </button>
-              </div>
-            )}
+              <p className="text-center text-gray-500 text-xs">
+                Lead will be sent to {activeConnection?.buyerBusinessName}. You&apos;ll be paid ${Number(activeConnection?.rate_per_lead || 50).toFixed(2)} once they process it.
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -2810,12 +1416,6 @@ function ProfileTab({
   const [location, setLocation] = useState(provider?.location || "");
   const [bio, setBio] = useState(provider?.bio || "");
   const [profilePicture, setProfilePicture] = useState("");
-  const [payoutMethod, setPayoutMethod] = useState("venmo");
-  const [payoutVenmo, setPayoutVenmo] = useState("");
-  const [payoutPaypal, setPayoutPaypal] = useState("");
-  const [payoutCashapp, setPayoutCashapp] = useState("");
-  const [payoutBankRouting, setPayoutBankRouting] = useState("");
-  const [payoutBankAccount, setPayoutBankAccount] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -2830,12 +1430,6 @@ function ProfileTab({
         if (res.ok) {
           const data = await res.json();
           const p = data.profile;
-          if (p.payoutMethod) setPayoutMethod(p.payoutMethod);
-          if (p.payoutVenmo) setPayoutVenmo(p.payoutVenmo);
-          if (p.payoutPaypal) setPayoutPaypal(p.payoutPaypal);
-          if (p.payoutCashapp) setPayoutCashapp(p.payoutCashapp);
-          if (p.payoutBankRouting) setPayoutBankRouting(p.payoutBankRouting);
-          if (p.payoutBankAccount) setPayoutBankAccount(p.payoutBankAccount);
           if (p.profilePictureUrl) setProfilePicture(p.profilePictureUrl);
           // Stripe Connect status
           if (p.stripeOnboardingComplete) {
@@ -2903,24 +1497,12 @@ function ProfileTab({
       location,
       bio,
       profilePictureUrl: profilePicture || undefined,
-      payoutMethod: payoutMethod as "venmo" | "paypal" | "cashapp" | "bank",
-      payoutVenmo,
-      payoutPaypal,
-      payoutCashapp,
-      payoutBankRouting,
-      payoutBankAccount,
     } as any);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const payoutOptions = [
-    { value: "venmo", label: "Venmo", icon: "V" },
-    { value: "paypal", label: "PayPal", icon: "P" },
-    { value: "cashapp", label: "CashApp", icon: "$" },
-    { value: "bank", label: "Bank Account", icon: "B" },
-  ];
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
@@ -3054,95 +1636,6 @@ function ProfileTab({
             </button>
           </div>
 
-          {/* Payout Method */}
-          <div>
-            <label className="block text-gray-700 text-sm font-medium mb-3">Payout Method</label>
-            <div className="grid grid-cols-2 gap-2">
-              {payoutOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setPayoutMethod(opt.value)}
-                  className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
-                    payoutMethod === opt.value
-                      ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
-                      : "border-gray-200 hover:border-gray-300 text-gray-600"
-                  }`}
-                >
-                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                    payoutMethod === opt.value ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-500"
-                  }`}>{opt.icon}</span>
-                  <span className="font-medium text-sm">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Conditional payout detail inputs */}
-          {profileLoaded && (
-            <div>
-              {payoutMethod === "venmo" && (
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">Venmo Username</label>
-                  <input
-                    type="text"
-                    value={payoutVenmo}
-                    onChange={(e) => setPayoutVenmo(e.target.value)}
-                    placeholder="@username"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
-              )}
-              {payoutMethod === "paypal" && (
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">PayPal Email</label>
-                  <input
-                    type="email"
-                    value={payoutPaypal}
-                    onChange={(e) => setPayoutPaypal(e.target.value)}
-                    placeholder="email@example.com"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
-              )}
-              {payoutMethod === "cashapp" && (
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">CashApp Tag</label>
-                  <input
-                    type="text"
-                    value={payoutCashapp}
-                    onChange={(e) => setPayoutCashapp(e.target.value)}
-                    placeholder="$cashtag"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
-              )}
-              {payoutMethod === "bank" && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Routing Number</label>
-                    <input
-                      type="text"
-                      value={payoutBankRouting}
-                      onChange={(e) => setPayoutBankRouting(e.target.value)}
-                      placeholder="9-digit routing number"
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">Account Number</label>
-                    <input
-                      type="text"
-                      value={payoutBankAccount}
-                      onChange={(e) => setPayoutBankAccount(e.target.value)}
-                      placeholder="Account number"
-                      className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           <button
             onClick={handleSave}
@@ -3193,7 +1686,7 @@ function ProfileTab({
             </div>
 
             <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
-              <span className="text-gray-500">Payment: {payoutMethod}</span>
+              <span className="text-gray-500">Payment: Stripe</span>
               <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
                 Active
               </span>
@@ -3218,20 +1711,5 @@ function StatCard({ title, value, color }: { title: string; value: string; color
       <p className="text-gray-500 text-sm mb-1">{title}</p>
       <p className={`text-3xl font-bold ${colors[color]}`}>{value}</p>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: "bg-amber-100 text-amber-700",
-    claimed: "bg-emerald-100 text-emerald-700",
-    expired: "bg-red-100 text-red-700",
-    converted: "bg-orange-100 text-orange-700",
-  };
-
-  return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.pending}`}>
-      {status}
-    </span>
   );
 }

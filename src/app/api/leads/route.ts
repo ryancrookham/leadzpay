@@ -209,7 +209,6 @@ export async function GET() {
         payoutCompletedAt: lead.payout_completed_at,
         submittedAt: lead.submitted_at,
         providerName: lead.provider_name || null,
-        providerVenmo: role === "buyer" ? (lead.provider_venmo || null) : undefined,
         buyerName: lead.buyer_name || null,
         buyerBusinessName: lead.buyer_business_name || null,
       };

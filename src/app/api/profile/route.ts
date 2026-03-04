@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getUserById, updateUser } from "@/lib/db";
-import { decryptField, encryptField, isEncryptionConfigured } from "@/lib/encryption";
 
 // GET /api/profile - Fetch current user's full profile
 export async function GET() {
@@ -16,14 +15,6 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Decrypt bank fields if encryption is configured
-    let bankRouting = user.payout_bank_routing;
-    let bankAccount = user.payout_bank_account;
-    if (isEncryptionConfigured()) {
-      bankRouting = await decryptField(user.payout_bank_routing);
-      bankAccount = await decryptField(user.payout_bank_account);
-    }
-
     return NextResponse.json({
       success: true,
       profile: {
@@ -35,14 +26,9 @@ export async function GET() {
         location: user.location,
         businessName: user.business_name,
         profilePictureUrl: user.profile_picture_url,
-        payoutMethod: user.payout_method,
-        payoutVenmo: user.payout_venmo,
-        payoutPaypal: user.payout_paypal,
-        payoutCashapp: user.payout_cashapp,
-        payoutBankRouting: bankRouting,
-        payoutBankAccount: bankAccount,
         stripeAccountId: user.stripe_account_id || null,
         stripeOnboardingComplete: user.stripe_onboarding_complete || false,
+        stripeCustomerId: user.stripe_customer_id || null,
       },
     });
   } catch (error) {
@@ -66,12 +52,7 @@ export async function PATCH(request: NextRequest) {
       location,
       businessName,
       profilePictureUrl,
-      payoutMethod,
-      payoutVenmo,
-      payoutPaypal,
-      payoutCashapp,
-      payoutBankRouting,
-      payoutBankAccount,
+      email,
     } = body;
 
     const updates: Record<string, unknown> = {};
@@ -80,20 +61,7 @@ export async function PATCH(request: NextRequest) {
     if (location !== undefined) updates.location = location;
     if (businessName !== undefined) updates.business_name = businessName;
     if (profilePictureUrl !== undefined) updates.profile_picture_url = profilePictureUrl;
-    if (payoutMethod !== undefined) updates.payout_method = payoutMethod;
-    if (payoutVenmo !== undefined) updates.payout_venmo = payoutVenmo;
-    if (payoutPaypal !== undefined) updates.payout_paypal = payoutPaypal;
-    if (payoutCashapp !== undefined) updates.payout_cashapp = payoutCashapp;
-    if (payoutBankRouting !== undefined) {
-      updates.payout_bank_routing = isEncryptionConfigured()
-        ? await encryptField(payoutBankRouting)
-        : payoutBankRouting;
-    }
-    if (payoutBankAccount !== undefined) {
-      updates.payout_bank_account = isEncryptionConfigured()
-        ? await encryptField(payoutBankAccount)
-        : payoutBankAccount;
-    }
+    if (email !== undefined) updates.email = email;
 
     const updated = await updateUser(session.user.id, updates as any);
     if (!updated) {

@@ -21,9 +21,12 @@ function RegisterContent() {
   // Invite token state (from invite_tokens system)
   const [inviteData, setInviteData] = useState<{
     businessName: string;
-    channelName: string | null;
     ratePerLead: number;
     paymentTiming: string;
+    channelName?: string;
+    weeklyLeadCap?: number;
+    monthlyLeadCap?: number;
+    terminationNoticeDays?: number;
   } | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = useState(!!tokenParam);
@@ -46,9 +49,15 @@ function RegisterContent() {
   const [buyerPhone, setBuyerPhone] = useState("");
   const [buyerSubmitting, setBuyerSubmitting] = useState(false);
   const [buyerError, setBuyerError] = useState("");
+  const [buyerFormStep, setBuyerFormStep] = useState<"account" | "stripe">("account");
+  const [buyerStripeLoading, setBuyerStripeLoading] = useState(false);
+  const [buyerStripeError, setBuyerStripeError] = useState<string | null>(null);
 
   // Step management
   const [step, setStep] = useState(1);
+  // Provider form step: terms → account → stripe (terms only shown when invite token present)
+  const [formStep, setFormStep] = useState<"terms" | "account" | "stripe">(tokenParam ? "terms" : "account");
+  const [termsDeclined, setTermsDeclined] = useState(false);
 
   // Step 1: Profile fields
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -70,14 +79,16 @@ function RegisterContent() {
 
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Prevents auth redirect from firing while we're transitioning to the Stripe step
+  const [pendingStripeConnect, setPendingStripeConnect] = useState(false);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (suppressed while awaiting Stripe Connect step)
   useEffect(() => {
-    if (!isLoading && isAuthenticated && currentUser) {
+    if (!isLoading && isAuthenticated && currentUser && !pendingStripeConnect) {
       const targetUrl = currentUser.role === "buyer" ? "/business" : "/provider-dashboard";
       window.location.href = targetUrl;
     }
-  }, [isAuthenticated, currentUser, isLoading]);
+  }, [isAuthenticated, currentUser, isLoading, pendingStripeConnect]);
 
   // Validate invite token from URL on mount
   useEffect(() => {
@@ -89,9 +100,12 @@ function RegisterContent() {
         if (data.valid) {
           setInviteData({
             businessName: data.businessName,
-            channelName: data.channelName,
             ratePerLead: data.ratePerLead,
             paymentTiming: data.paymentTiming,
+            channelName: data.channelName,
+            weeklyLeadCap: data.weeklyLeadCap,
+            monthlyLeadCap: data.monthlyLeadCap,
+            terminationNoticeDays: data.terminationNoticeDays,
           });
         } else {
           setInviteError(data.error || "This invite link is invalid or has expired.");
@@ -271,6 +285,16 @@ function RegisterContent() {
     setStep(1);
   };
 
+  const formatTiming = (timing: string) => {
+    switch (timing) {
+      case "immediate": return "Immediate";
+      case "weekly": return "Weekly";
+      case "biweekly": return "Bi-Weekly";
+      case "monthly": return "Monthly";
+      default: return timing;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -280,7 +304,7 @@ function RegisterContent() {
 
     setIsSubmitting(true);
     setError("");
-
+    setPendingStripeConnect(true);
     try {
       const result = await registerProvider({
         email,
@@ -307,10 +331,12 @@ function RegisterContent() {
           window.location.href = "/provider-dashboard";
         }
       } else {
+        setPendingStripeConnect(false);
         setError(result.error || "Registration failed. Please try again.");
         setIsSubmitting(false);
       }
     } catch (err) {
+      setPendingStripeConnect(false);
       const message = err instanceof Error ? err.message : "Unknown error";
       setError("Registration failed. Please try again.");
       console.error("Registration error:", message);
@@ -339,7 +365,8 @@ function RegisterContent() {
         complianceAcknowledged: true,
       });
       if (result.success) {
-        window.location.href = "/business";
+        setPendingStripeConnect(true);
+        setBuyerFormStep("stripe");
       } else {
         setBuyerError(result.error || "Registration failed");
       }
@@ -347,6 +374,24 @@ function RegisterContent() {
       setBuyerError("Registration failed. Please try again.");
     } finally {
       setBuyerSubmitting(false);
+    }
+  };
+
+  const handleConnectBuyerStripe = async () => {
+    setBuyerStripeLoading(true);
+    setBuyerStripeError(null);
+    try {
+      const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
+      const data = await res.json();
+      if (data.setupUrl) {
+        window.location.href = data.setupUrl;
+      } else {
+        setBuyerStripeError(data.error || "Failed to connect. Please try again.");
+        setBuyerStripeLoading(false);
+      }
+    } catch {
+      setBuyerStripeError("Failed to connect Stripe. Please try again.");
+      setBuyerStripeLoading(false);
     }
   };
 
@@ -370,49 +415,132 @@ function RegisterContent() {
             <Link href="/">
               <Image src="/woml-v3.png" alt="WOML" width={260} height={75} className="mx-auto mb-4 h-18 w-auto object-contain" />
             </Link>
-            <h1 className="text-2xl font-bold text-[#E8822A] mb-2">Create Business Account</h1>
-            <p className="text-gray-500">Start receiving leads from your provider network</p>
+            <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
+              {buyerFormStep === "account" ? "Create Business Account" : "Connect Your Bank"}
+            </h1>
+            <p className="text-gray-500">
+              {buyerFormStep === "account" ? "Start receiving leads from your provider network" : "Link your business bank account to pay lead rewards"}
+            </p>
+            {/* Step indicator */}
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <div className={`w-2 h-2 rounded-full ${buyerFormStep === "account" ? "bg-[#E8822A]" : "bg-gray-300"}`} />
+              <div className="w-6 h-0.5 bg-gray-200" />
+              <div className={`w-2 h-2 rounded-full ${buyerFormStep === "stripe" ? "bg-[#E8822A]" : "bg-gray-300"}`} />
+            </div>
           </div>
-          {buyerError && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerError}</div>
+
+          {buyerFormStep === "account" && (
+            <>
+              {buyerError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerError}</div>
+              )}
+              <form onSubmit={handleBuyerSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Business Name</label>
+                  <input type="text" value={buyerBusinessName} onChange={(e) => setBuyerBusinessName(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Acme Services LLC" required />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Business Type</label>
+                  <select value={buyerBusinessType} onChange={(e) => setBuyerBusinessType(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" required>
+                    <option value="">Select type...</option>
+                    <option value="agency">Agency</option>
+                    <option value="dealership">Dealership</option>
+                    <option value="broker">Broker</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Username</label>
+                    <input type="text" value={buyerUsername} onChange={(e) => setBuyerUsername(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="acmeauto" required />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Phone</label>
+                    <input type="tel" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="(555) 123-4567" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
+                  <input type="email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="you@business.com" required />
+                </div>
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-2">Password</label>
+                  <input type="password" value={buyerPassword} onChange={(e) => setBuyerPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Min. 8 characters" required />
+                </div>
+                <button type="submit" disabled={buyerSubmitting} className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2 mt-6">
+                  {buyerSubmitting ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Creating...</> : "Create Business Account"}
+                </button>
+              </form>
+            </>
           )}
-          <form onSubmit={handleBuyerSubmit} className="space-y-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">Business Name</label>
-              <input type="text" value={buyerBusinessName} onChange={(e) => setBuyerBusinessName(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Acme Auto Insurance" required />
-            </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">Business Type</label>
-              <select value={buyerBusinessType} onChange={(e) => setBuyerBusinessType(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" required>
-                <option value="">Select type...</option>
-                <option value="insurance_agency">Insurance Agency</option>
-                <option value="dealership">Dealership</option>
-                <option value="broker">Broker</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Username</label>
-                <input type="text" value={buyerUsername} onChange={(e) => setBuyerUsername(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="acmeauto" required />
+
+          {buyerFormStep === "stripe" && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  Link your business bank account to pay lead providers securely through Stripe.
+                </p>
               </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Phone</label>
-                <input type="tel" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="(555) 123-4567" />
+
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Secure bank-level encryption via Stripe
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  All transactions tracked for tax documentation
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Takes about 2 minutes to set up
+                </div>
               </div>
+
+              {buyerStripeError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerStripeError}</div>
+              )}
+
+              <button
+                onClick={handleConnectBuyerStripe}
+                disabled={buyerStripeLoading}
+                className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {buyerStripeLoading ? (
+                  <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Connecting...</>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    Connect Business Bank Account
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-gray-400 text-center">
+                You can also complete this from your dashboard settings later.{" "}
+                <button
+                  onClick={() => { window.location.href = "/business"; }}
+                  className="text-[#E8822A] hover:underline"
+                >
+                  Skip for now
+                </button>
+              </p>
             </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
-              <input type="email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="you@business.com" required />
-            </div>
-            <div>
-              <label className="block text-gray-700 text-sm font-medium mb-2">Password</label>
-              <input type="password" value={buyerPassword} onChange={(e) => setBuyerPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition" placeholder="Min. 8 characters" required />
-            </div>
-            <button type="submit" disabled={buyerSubmitting} className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2 mt-6">
-              {buyerSubmitting ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Creating...</> : "Create Business Account"}
-            </button>
-          </form>
+          )}
+
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">Already have an account? <Link href="/auth/login" className="text-[#E8822A] hover:underline font-medium">Sign in</Link></p>
           </div>
@@ -530,8 +658,87 @@ function RegisterContent() {
           </div>
         )}
 
+        {/* Terms Declined */}
+        {termsDeclined && (
+          <div className="text-center space-y-4">
+            <p className="text-gray-600">You declined the terms. You can close this page or go back to review.</p>
+            <button
+              onClick={() => { setTermsDeclined(false); setFormStep("terms"); }}
+              className="text-[#E8822A] hover:underline font-medium"
+            >
+              Review Terms Again
+            </button>
+          </div>
+        )}
+
+        {/* ── Step 0: Terms Review ── */}
+        {!termsDeclined && formStep === "terms" && inviteData && (
+          <div className="space-y-4">
+            <p className="text-gray-500 text-sm text-center">Review the terms of this deal before creating your account.</p>
+
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-[#E8822A]/5 border-b border-gray-200 px-5 py-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Deal Terms</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Business</span>
+                  <span className="text-sm font-semibold text-gray-800">{inviteData.businessName}</span>
+                </div>
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Rate per Lead</span>
+                  <span className="text-lg font-bold text-[#E8822A]">${inviteData.ratePerLead}</span>
+                </div>
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Payment Timing</span>
+                  <span className="text-sm font-semibold text-gray-800">{formatTiming(inviteData.paymentTiming)}</span>
+                </div>
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Weekly Lead Cap</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {inviteData.weeklyLeadCap ? `${inviteData.weeklyLeadCap} leads/week` : "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Monthly Lead Cap</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {inviteData.monthlyLeadCap ? `${inviteData.monthlyLeadCap} leads/month` : "Unlimited"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center px-5 py-3">
+                  <span className="text-sm text-gray-600">Termination Notice</span>
+                  <span className="text-sm font-semibold text-gray-800">{inviteData.terminationNoticeDays === 0 ? "Anytime" : `${inviteData.terminationNoticeDays} days`}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 text-center px-2">
+              By accepting, you agree to submit leads exclusively to this business under the terms above.
+              Payouts are made via bank transfer through Stripe.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setTermsDeclined(true)}
+                className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium transition hover:bg-gray-50"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => setFormStep("account")}
+                className="flex-1 py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+              >
+                Accept Terms & Continue
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Profile Information */}
-        {step === 1 && (
+        {formStep === "account" && step === 1 && (
           <form onSubmit={(e) => { e.preventDefault(); handleContinue(); }} className="space-y-4">
             {/* Profile Picture */}
             <div className="flex flex-col items-center mb-4">
@@ -687,7 +894,7 @@ function RegisterContent() {
         )}
 
         {/* Step 2: Payout Setup */}
-        {step === 2 && (
+        {formStep === "account" && step === 2 && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <p className="text-gray-600 text-sm mb-4">
               Choose how you&apos;d like to receive payments for your leads.

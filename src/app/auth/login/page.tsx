@@ -68,7 +68,7 @@ function LoginContent() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-v3.png"
+          src="/woml-orange.png"
           alt=""
           width={500}
           height={500}
@@ -81,7 +81,7 @@ function LoginContent() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
             <Image
-              src="/woml-v3.png"
+              src="/woml-orange.png"
               alt="WOML - Word of Mouth Leads"
               width={260}
               height={75}
@@ -185,6 +185,12 @@ function LoginContent() {
             className="block w-full py-3 px-4 border border-[#E8822A] bg-[#E8822A]/5 rounded-lg text-center font-medium transition hover:bg-[#E8822A]/10 text-[#E8822A]"
           >
             Sign up as Lead Provider
+          </Link>
+          <Link
+            href="/auth/register?role=buyer"
+            className="block w-full py-3 px-4 border border-gray-200 rounded-lg text-center font-medium transition hover:bg-gray-50 text-gray-700 mt-3"
+          >
+            Sign up as Business
           </Link>
         </div>
 

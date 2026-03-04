@@ -33,7 +33,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
 
   // Generate form state
   const [label, setLabel] = useState("");
-  const [channelName, setChannelName] = useState("");
   const [ratePerLead, setRatePerLead] = useState(50);
   const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
   const [enableWeeklyCap, setEnableWeeklyCap] = useState(false);
@@ -44,7 +43,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
   const [expiryDate, setExpiryDate] = useState("");
   const [enableMaxUses, setEnableMaxUses] = useState(false);
   const [maxUses, setMaxUses] = useState(10);
-  const [terminationDays, setTerminationDays] = useState(7);
+  const [terminationDays, setTerminationDays] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -93,7 +92,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: label || null,
-          channelName: channelName || null,
           ratePerLead,
           paymentTiming,
           weeklyCap: enableWeeklyCap ? weeklyCap : null,
@@ -107,7 +105,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       if (data.inviteUrl) {
         setNewInviteUrl(data.inviteUrl);
         setLabel("");
-        setChannelName("");
         setRatePerLead(50);
         setPaymentTiming("per_lead");
         setEnableWeeklyCap(false);
@@ -144,6 +141,31 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       await fetchTokens();
     } catch {
       alert("Failed to deactivate link");
+    }
+  };
+
+  const handleReactivate = async (tokenId: string) => {
+    try {
+      await fetch(`/api/invite-tokens/${tokens.find(t => t.id === tokenId)?.token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      });
+      await fetchTokens();
+    } catch {
+      alert("Failed to reactivate link");
+    }
+  };
+
+  const handleDeletePermanently = async (tokenId: string) => {
+    if (!confirm("Permanently delete this invite link? This cannot be undone.")) return;
+    try {
+      await fetch(`/api/invite-tokens/${tokens.find(t => t.id === tokenId)?.token}?permanent=true`, {
+        method: "DELETE",
+      });
+      await fetchTokens();
+    } catch {
+      alert("Failed to delete link");
     }
   };
 
@@ -205,16 +227,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Channel Name (shown to provider)</label>
-            <input
-              type="text"
-              value={channelName}
-              onChange={e => setChannelName(e.target.value)}
-              placeholder="e.g. Auto Leads Channel"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-            />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Rate Per Lead ($)</label>
             <input
               type="number"
@@ -244,7 +256,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
               type="number"
               value={terminationDays}
               onChange={e => setTerminationDays(Number(e.target.value))}
-              min={1}
+              min={0}
               max={90}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
             />
@@ -359,7 +371,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
               <thead>
                 <tr className="border-b border-gray-100 text-left text-gray-500">
                   <th className="pb-3 font-medium">Label</th>
-                  <th className="pb-3 font-medium">Channel</th>
                   <th className="pb-3 font-medium">Rate</th>
                   <th className="pb-3 font-medium">Timing</th>
                   <th className="pb-3 font-medium">Uses</th>
@@ -380,7 +391,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
                   return (
                     <tr key={token.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
                       <td className="py-3 pr-4 text-gray-800">{token.label || <span className="text-gray-400 italic">No label</span>}</td>
-                      <td className="py-3 pr-4 text-gray-700">{token.channel_name || <span className="text-gray-400">—</span>}</td>
                       <td className="py-3 pr-4 font-semibold text-[#E8822A]">${Number(token.rate_per_lead).toFixed(0)}/lead</td>
                       <td className="py-3 pr-4 text-gray-600">{formatTiming(token.payment_timing)}</td>
                       <td className="py-3 pr-4 text-gray-600">{usesDisplay}</td>
@@ -398,13 +408,28 @@ export default function InviteTab({ businessName }: InviteTabProps) {
                           >
                             {copied === token.id ? "Copied!" : "Copy URL"}
                           </button>
-                          {token.is_active && (
+                          {token.is_active ? (
                             <button
                               onClick={() => handleDeactivate(token.id)}
                               className="text-xs px-3 py-1 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
                             >
                               Deactivate
                             </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleReactivate(token.id)}
+                                className="text-xs px-3 py-1 border border-green-200 text-green-600 rounded-lg hover:bg-green-50 transition"
+                              >
+                                Reactivate
+                              </button>
+                              <button
+                                onClick={() => handleDeletePermanently(token.id)}
+                                className="text-xs px-3 py-1 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                              >
+                                Delete
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -448,7 +473,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
                 >
                   {activeTokens.map(t => (
                     <option key={t.id} value={t.id}>
-                      {t.label || t.channel_name || `$${t.rate_per_lead}/lead`} — ${t.rate_per_lead}/lead
+                      {t.label || `$${t.rate_per_lead}/lead`} — ${t.rate_per_lead}/lead
                     </option>
                   ))}
                 </select>

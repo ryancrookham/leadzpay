@@ -219,6 +219,7 @@ export async function updateUser(id: string, updates: Partial<DbUser>): Promise<
 
   const result = await sql`
     UPDATE users SET
+      email = COALESCE(${updates.email}, email),
       display_name = COALESCE(${updates.display_name}, display_name),
       phone = COALESCE(${updates.phone}, phone),
       location = COALESCE(${updates.location}, location),
@@ -787,9 +788,9 @@ export async function createInviteToken(data: {
       ${data.expires_at || null},
       ${data.rate_per_lead},
       ${data.payment_timing || 'per_lead'},
-      ${data.weekly_lead_cap || null},
-      ${data.monthly_lead_cap || null},
-      ${data.termination_notice_days || 7}
+      ${data.weekly_lead_cap ?? null},
+      ${data.monthly_lead_cap ?? null},
+      ${data.termination_notice_days ?? 7}
     )
     RETURNING *
   `;
@@ -819,6 +820,11 @@ export async function deactivateInviteToken(id: string): Promise<void> {
   await sql`
     UPDATE invite_tokens SET is_active = false, updated_at = NOW() WHERE id = ${id}
   `;
+}
+
+export async function deleteInviteTokenPermanently(id: string): Promise<void> {
+  const sql = getSql();
+  await sql`DELETE FROM invite_tokens WHERE id = ${id}`;
 }
 
 export async function incrementInviteTokenUseCount(id: string): Promise<void> {
@@ -1369,5 +1375,57 @@ export async function cancelInvite(inviteId: string, buyerId: string): Promise<D
     RETURNING *
   `;
   return first<DbInvite>(result);
+}
+
+// Webhook idempotency
+export async function hasWebhookBeenProcessed(eventId: string): Promise<boolean> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT 1 FROM processed_webhooks WHERE event_id = ${eventId} LIMIT 1
+  `;
+  return result.length > 0;
+}
+
+export async function markWebhookProcessed(eventId: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    INSERT INTO processed_webhooks (event_id) VALUES (${eventId})
+    ON CONFLICT (event_id) DO NOTHING
+  `;
+}
+
+// Update transaction status by lead_id and type (for reversals)
+export async function updateTransactionStatusByLeadId(
+  leadId: string,
+  type: string,
+  status: string
+): Promise<number> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE transactions SET status = ${status}, updated_at = NOW()
+    WHERE lead_id = ${leadId} AND type = ${type}
+    RETURNING id
+  `;
+  return result.length;
+}
+
+// Get provider by their Stripe Connect account ID
+export async function getProviderByStripeAccountId(stripeAccountId: string): Promise<DbUser | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM users WHERE stripe_account_id = ${stripeAccountId} LIMIT 1
+  `;
+  return first<DbUser>(result);
+}
+
+// Get leads in "processing" status for a provider (awaiting Stripe Connect onboarding)
+export async function getProcessingLeadsByProviderId(providerId: string): Promise<DbLead[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM leads
+    WHERE provider_id = ${providerId} AND payout_status = 'processing'
+    ORDER BY created_at ASC
+  `;
+  return result as unknown as DbLead[];
 }
 

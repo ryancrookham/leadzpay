@@ -64,6 +64,17 @@ export async function POST(request: NextRequest) {
     }
 
     let customerId = buyer.stripe_customer_id;
+
+    // If a customer ID exists but was created in test mode, it won't exist in live mode.
+    // Verify it's valid; if not, fall through to create a new one.
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        customerId = null;
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: buyer.email,
@@ -77,10 +88,10 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
 
     // Create Checkout Session
+    // Dynamic payment methods enabled in Stripe Dashboard - no hardcoded types
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "payment",
-      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
@@ -105,7 +116,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error: any) {
-    console.error("Create payment error:", error);
+    console.error("[create-payment] error type:", error?.type);
+    console.error("[create-payment] error code:", error?.code);
+    console.error("[create-payment] error detail:", error?.detail);
+    console.error("[create-payment] error message:", error?.message);
     const message = error?.message || "Failed to create payment session";
     return NextResponse.json({ error: message }, { status: 500 });
   }

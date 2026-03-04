@@ -88,7 +88,13 @@ export default function Home() {
                 href="/auth/register?role=provider"
                 className="bg-white hover:bg-white/90 text-[#E77500] px-4 py-2 rounded-lg font-medium transition"
               >
-                Sign Up
+                Provider Sign Up
+              </Link>
+              <Link
+                href="/auth/register?role=buyer"
+                className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-medium transition border border-white/30"
+              >
+                Business Sign Up
               </Link>
             </>
           )}

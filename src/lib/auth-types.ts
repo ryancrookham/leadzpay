@@ -52,7 +52,7 @@ export interface ProviderStats {
 export interface LeadBuyer extends BaseUser {
   role: "buyer";
   businessName: string;
-  businessType: "insurance_agency" | "dealership" | "broker" | "other";
+  businessType: string;
   phone: string;
   address?: {
     street: string;
@@ -61,8 +61,7 @@ export interface LeadBuyer extends BaseUser {
     zip: string;
   };
   // Licensing compliance
-  licensedStates: string[];           // States where licensed to sell insurance
-  nationalProducerNumber?: string;    // NPN for insurance agents
+  licensedStates: string[];           // States where licensed to operate
   licenseVerified: boolean;           // Has license been verified
   complianceAcknowledgedAt?: string;  // When they acknowledged per-lead payment terms
   stats: BuyerStats;
@@ -76,13 +75,6 @@ export interface LeadProvider extends BaseUser {
   phone?: string;
   location?: string;
   bio?: string;
-  paymentMethod?: "venmo" | "paypal" | "bank";
-  paymentDetails?: {
-    venmoUsername?: string;
-    paypalEmail?: string;
-    bankAccountLast4?: string;
-    bankRoutingLast4?: string;
-  };
   // Stripe Connect
   stripeAccountId?: string;
   stripeOnboardingComplete?: boolean;
@@ -116,9 +108,8 @@ export interface BuyerRegistrationData {
   businessName: string;
   businessType: LeadBuyer["businessType"];
   phone: string;
-  // Licensing compliance - required for insurance businesses
+  // Licensing compliance
   licensedStates: string[];
-  nationalProducerNumber?: string;
   complianceAcknowledged: boolean; // Must acknowledge per-lead payment structure
 }
 

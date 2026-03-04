@@ -21,7 +21,6 @@ export interface Transaction {
   // Reference data
   leadId?: string;
   connectionId?: string;
-  policyNumber?: string;
 
   // Payment details
   stripePaymentId?: string;
@@ -335,26 +334,6 @@ export async function recordLeadPayout(
     stripePaymentId,
     stripeTransferId,
     description: `Lead payout for ${leadId}`,
-  });
-}
-
-export async function recordPolicyCommission(
-  providerId: string,
-  leadId: string,
-  policyNumber: string,
-  amount: number
-): Promise<Transaction | null> {
-  return serverLedger.record({
-    type: "policy_commission",
-    amount,
-    feeAmount: 0,
-    netAmount: amount,
-    currency: "USD",
-    fromAccount: null,
-    toAccount: providerId,
-    leadId,
-    description: `Commission for policy ${policyNumber}`,
-    policyNumber,
   });
 }
 

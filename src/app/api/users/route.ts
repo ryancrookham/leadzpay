@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
       email: user.email,
       phone: user.phone,
       profilePictureUrl: user.profile_picture_url,
-      payoutMethod: user.payout_method,
       isConnected: connectedUserIds.has(user.id),
       connectionStatus: myConnections.find(
         (c) => (userRole === "provider" ? c.buyer_id : c.provider_id) === user.id

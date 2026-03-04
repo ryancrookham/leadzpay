@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "WOML - Word of Mouth Leads",
-  description: "Connect car salespeople with insurance agents. Send qualified leads, get paid instantly.",
+  description: "Connect lead providers with businesses. Send qualified leads, get paid instantly.",
 };
 
 export default function RootLayout({

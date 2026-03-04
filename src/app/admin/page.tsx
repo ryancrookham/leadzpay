@@ -4,9 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import ProfitabilityTab from "./components/ProfitabilityTab";
-import PaymentsTab from "./components/PaymentsTab";
-import InfoTab from "./components/InfoTab";
 
 interface PlatformStats {
   totalLeads: number;
@@ -20,73 +17,14 @@ interface PlatformStats {
   activeBuyers: number;
 }
 
-interface RevenueDay {
-  day: string;
-  revenue: number;
-  txCount: number;
-}
-
 interface AdminLead {
   id: string;
   providerName: string;
   buyerName: string;
   payoutAmount: number;
-  buyerTotal: number;
-  providerNet: number;
   platformFee: number;
   payoutStatus: string;
   submittedAt: string;
-  vehicleInfo: string | null;
-  customerState: string | null;
-}
-
-interface PendingPayoutGroup {
-  providerId: string;
-  providerName: string;
-  providerVenmo: string | null;
-  providerPayoutMethod: string | null;
-  leads: {
-    id: string;
-    buyerName: string;
-    vehicleInfo: string | null;
-    providerNet: number;
-    submittedAt: string;
-  }[];
-  totalNet: number;
-}
-
-interface AdminUser {
-  id: string;
-  email: string;
-  username: string;
-  role: string;
-  displayName: string;
-  businessName: string | null;
-  phone: string | null;
-  location: string | null;
-  isActive: boolean;
-  createdAt: string;
-  payoutMethod: string | null;
-  payoutVenmo: string | null;
-  totalLeads: number;
-  totalVolume: number;
-}
-
-interface OperatingCost {
-  id: string;
-  name: string;
-  amount: number;
-  frequency: "monthly" | "yearly" | "per_transaction";
-  category: string;
-  description: string | null;
-}
-
-interface ProfitabilityData {
-  weekly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
-  monthly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
-  yearly: { completedRevenue: number; pendingRevenue: number; completedTxCount: number };
-  venmoFees: number;
-  venmoTxCount: number;
 }
 
 interface DetailedUser {
@@ -100,12 +38,9 @@ interface DetailedUser {
   location: string | null;
   isActive: boolean;
   createdAt: string;
-  payoutMethod: string | null;
-  payoutVenmo: string | null;
   totalLeads: number;
   totalVolume: number;
   lastLeadAt: string | null;
-  platformFeesEarned: number;
   yearlyEarnings: number;
   needs1099: boolean;
 }
@@ -122,11 +57,25 @@ interface PlatformFees {
   fee_mixed_buyer_share: number;
 }
 
-export default function AdminPanel() {
-  const { currentUser, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"profitability" | "info" | "payments">("profitability");
+interface TwilioStatus {
+  configured: boolean;
+  phoneNumber: string | null;
+}
 
-  // Inline login form state
+interface StripeStatus {
+  payoutsEnabled: boolean;
+  chargesEnabled: boolean;
+  businessName: string | null;
+  email: string | null;
+}
+
+type Tab = "overview" | "users" | "platform";
+
+export default function AdminPanel() {
+  const { currentUser, isLoading: authLoading, isAuthenticated, login, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+
+  // Login state
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -137,21 +86,19 @@ export default function AdminPanel() {
     setLoginLoading(true);
     setLoginError("");
     try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: loginEmail.trim().toLowerCase(),
-          password: loginPassword,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        window.location.href = "/admin";
-      } else {
-        setLoginError(data.error || "Invalid credentials");
+      const result = await login(loginEmail, loginPassword);
+      if (!result.success) {
+        setLoginError(result.error || "Invalid credentials");
         setLoginLoading(false);
+        return;
       }
+      if (result.role && result.role !== "admin") {
+        setLoginError("This account does not have admin access.");
+        setLoginLoading(false);
+        return;
+      }
+      // Force full reload so useSession() picks up the new session cookie
+      window.location.href = "/admin";
     } catch {
       setLoginError("Login failed. Please try again.");
       setLoginLoading(false);
@@ -160,98 +107,105 @@ export default function AdminPanel() {
 
   // Data state
   const [stats, setStats] = useState<PlatformStats | null>(null);
-  const [revenueByDay, setRevenueByDay] = useState<RevenueDay[]>([]);
   const [recentLeads, setRecentLeads] = useState<AdminLead[]>([]);
-  const [pendingPayouts, setPendingPayouts] = useState<PendingPayoutGroup[]>([]);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [leadsThisMonth, setLeadsThisMonth] = useState(0);
+  const [detailedUsers, setDetailedUsers] = useState<DetailedUser[]>([]);
+  const [platformFees, setPlatformFees] = useState<PlatformFees | null>(null);
+  const [twilioStatus, setTwilioStatus] = useState<TwilioStatus | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Fee settings state
-  const [platformFees, setPlatformFees] = useState<PlatformFees | null>(null);
-
-  // New tab data state
-  const [operatingCosts, setOperatingCosts] = useState<OperatingCost[]>([]);
-  const [profitability, setProfitability] = useState<ProfitabilityData | null>(null);
-  const [detailedUsers, setDetailedUsers] = useState<DetailedUser[]>([]);
-
-  // Fetch data when authenticated as admin
   useEffect(() => {
     if (!isAuthenticated || !currentUser || currentUser.role !== "admin") return;
-    const fetchStats = async () => {
+    const fetchData = async () => {
       setStatsLoading(true);
       try {
-        const res = await fetch("/api/admin/stats");
-        const data = await res.json();
-        if (data.success) {
-          setStats(data.stats);
-          setRevenueByDay(data.revenueByDay);
-          setRecentLeads(data.recentLeads);
-          setPendingPayouts(data.pendingPayouts || []);
-          setUsers(data.users || []);
-          if (data.platformFees) {
-            setPlatformFees(data.platformFees);
-          }
-          if (data.operatingCosts) setOperatingCosts(data.operatingCosts);
-          if (data.profitability) setProfitability(data.profitability);
-          if (data.detailedUsers) setDetailedUsers(data.detailedUsers);
+        const [statsRes, stripeRes] = await Promise.all([
+          fetch("/api/admin/stats", { cache: "no-store" }),
+          fetch("/api/admin/stripe-status", { cache: "no-store" }),
+        ]);
+        const statsData = await statsRes.json();
+        if (statsData.success) {
+          setStats(statsData.stats);
+          setRecentLeads(statsData.recentLeads);
+          setLeadsThisMonth(statsData.leadsThisMonth ?? 0);
+          setDetailedUsers(statsData.detailedUsers || []);
+          setPlatformFees(statsData.platformFees || null);
+          setTwilioStatus(statsData.twilioStatus || null);
         } else {
-          setError(data.error || "Failed to load stats");
+          setError(statsData.error || "Failed to load stats");
+        }
+        const stripeData = await stripeRes.json();
+        if (stripeData.success) {
+          setStripeStatus(stripeData);
         }
       } catch (e) {
-        console.error("Failed to fetch admin stats:", e);
-        setError("Failed to load stats");
+        console.error("Failed to fetch admin data:", e);
+        setError("Failed to load data");
       } finally {
         setStatsLoading(false);
       }
     };
-    fetchStats();
+    fetchData();
   }, [isAuthenticated, currentUser]);
 
   const refreshData = async () => {
     try {
-      const res = await fetch("/api/admin/stats");
+      const res = await fetch("/api/admin/stats", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setStats(data.stats);
-        setRevenueByDay(data.revenueByDay);
         setRecentLeads(data.recentLeads);
-        setPendingPayouts(data.pendingPayouts || []);
-        setUsers(data.users || []);
-        if (data.platformFees) {
-          setPlatformFees(data.platformFees);
-        }
-        if (data.operatingCosts) setOperatingCosts(data.operatingCosts);
-        if (data.profitability) setProfitability(data.profitability);
-        if (data.detailedUsers) setDetailedUsers(data.detailedUsers);
+        setLeadsThisMonth(data.leadsThisMonth ?? 0);
+        setDetailedUsers(data.detailedUsers || []);
+        setPlatformFees(data.platformFees || null);
+        setTwilioStatus(data.twilioStatus || null);
       }
     } catch (e) {
       console.error("Refresh failed:", e);
     }
   };
 
+  const handleToggleUser = async (userId: string, isActive: boolean) => {
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, isActive }),
+      });
+      if (res.ok) {
+        setDetailedUsers(prev => prev.map(u =>
+          u.id === userId ? { ...u, isActive } : u
+        ));
+      }
+    } catch (e) {
+      console.error("Toggle failed:", e);
+    }
+  };
+
+  // --- Loading ---
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
   }
 
+  // --- Login Screen ---
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-200">
           <div className="text-center mb-6">
-            <Image src="/woml-v3.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
+            <Image src="/woml-navy.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
           </div>
-
           {loginError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
               {loginError}
             </div>
           )}
-
           <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
             <div>
               <label className="block text-gray-600 text-sm mb-1.5">Email</label>
@@ -292,7 +246,6 @@ export default function AdminPanel() {
               )}
             </button>
           </form>
-
           <Link href="/" className="block text-gray-500 hover:text-[#E8822A] mt-6 text-sm text-center transition">
             Back to Home
           </Link>
@@ -301,16 +254,16 @@ export default function AdminPanel() {
     );
   }
 
+  // --- Dashboard ---
   return (
-    <div className="min-h-screen bg-black">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200">
+    <div className="min-h-screen bg-[#0d1b2e]">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/10">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-v3.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
+            <Image src="/woml-navy.png" alt="WOML" width={160} height={48} className="h-12 w-auto object-contain" />
           </Link>
           <div>
-            <h1 className="text-white font-bold text-lg">WOML Owner Portal</h1>
+            <h1 className="text-white font-bold text-lg">Admin Portal</h1>
             <p className="text-gray-500 text-xs">{currentUser.email}</p>
           </div>
         </div>
@@ -336,181 +289,328 @@ export default function AdminPanel() {
           </div>
         ) : stats ? (
           <>
-            {/* Top Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white p-5 rounded-xl border border-gray-200">
-                <div className="text-gray-600 text-sm mb-1">WOML Revenue</div>
-                <div className="text-3xl font-bold text-[#E8822A]">${stats.completedRevenue.toFixed(2)}</div>
-                <div className="text-gray-500 text-xs mt-1">collected fees</div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200">
-                <div className="text-gray-600 text-sm mb-1">Awaiting Forward</div>
-                <div className="text-3xl font-bold text-blue-400">{stats.processingLeads}</div>
-                <div className="text-gray-500 text-xs mt-1">leads to forward</div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200">
-                <div className="text-gray-600 text-sm mb-1">Total Leads</div>
-                <div className="text-3xl font-bold text-gray-900">{stats.totalLeads}</div>
-                <div className="text-gray-500 text-xs mt-1">{stats.paidLeads} completed</div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200">
-                <div className="text-gray-600 text-sm mb-1">Lead Volume</div>
-                <div className="text-3xl font-bold text-purple-400">${stats.totalLeadVolume.toFixed(2)}</div>
-                <div className="text-gray-500 text-xs mt-1">total transacted</div>
-              </div>
-            </div>
-
-            {/* Marketplace Health */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
-              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.activeProviders}</div>
-                  <div className="text-gray-600 text-sm">Providers</div>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.activeBuyers}</div>
-                  <div className="text-gray-600 text-sm">Businesses</div>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-[#E8822A]/20 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{stats.activeConnections}</div>
-                  <div className="text-gray-600 text-sm">Connections</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Banner — Pending Payouts */}
-            {pendingPayouts.length > 0 && (
-              <div className="mb-6 bg-gradient-to-r from-[#E8822A] to-[#D47526] rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-white font-semibold">
-                      {pendingPayouts.length} provider{pendingPayouts.length !== 1 ? "s" : ""} awaiting payout
-                    </div>
-                    <div className="text-white/70 text-sm">
-                      ${pendingPayouts.reduce((sum, p) => sum + p.totalNet, 0).toFixed(2)} to forward
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveTab("payments")}
-                  className="bg-white hover:bg-white/90 text-[#E8822A] px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2"
-                >
-                  Go to Payouts
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
             {/* Tabs */}
-            <div className="flex gap-2 mb-6 flex-wrap">
-              {(["profitability", "payments", "info"] as const).map((tab) => {
-                const labels: Record<string, string> = {
-                  payments: "Payments", profitability: "Profitability",
-                  info: "Users",
-                };
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-lg font-medium transition relative ${
-                      activeTab === tab
-                        ? "bg-[#E8822A] text-white"
-                        : "bg-gray-100 text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    {labels[tab]}
-                    {tab === "payments" && pendingPayouts.length > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                        {pendingPayouts.length}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <div className="flex gap-2 mb-8">
+              {(["overview", "users", "platform"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-5 py-2.5 rounded-lg font-medium transition capitalize ${
+                    activeTab === tab
+                      ? "bg-[#E8822A] text-white"
+                      : "bg-white/5 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
-            {/* ===== PROFITABILITY TAB ===== */}
-            {activeTab === "profitability" && profitability && (
-              <ProfitabilityTab
-                operatingCosts={operatingCosts}
-                profitability={profitability}
-                onCostsChanged={refreshData}
-                revenueByDay={revenueByDay}
-                feeLabel={platformFees?.fee_type === "flat" ? `$${(platformFees?.fee_total ?? 2).toFixed(2)}/lead` : platformFees?.fee_type === "percent" ? `${platformFees.fee_percent}%` : ""}
-              />
+            {/* ===== OVERVIEW TAB ===== */}
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <MetricCard label="Total Leads" value={stats.totalLeads} />
+                  <MetricCard label="This Month" value={leadsThisMonth} />
+                  <MetricCard label="Revenue" value={`$${stats.completedRevenue.toFixed(2)}`} accent />
+                  <MetricCard label="Active Providers" value={stats.activeProviders} />
+                  <MetricCard label="Active Businesses" value={stats.activeBuyers} />
+                </div>
+
+                <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-white/10">
+                    <h3 className="text-white font-semibold">Recent Leads</h3>
+                  </div>
+                  {recentLeads.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-gray-500">No leads yet</div>
+                  ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left">Date</th>
+                          <th className="px-6 py-3 text-left">Provider</th>
+                          <th className="px-6 py-3 text-left">Business</th>
+                          <th className="px-6 py-3 text-right">Amount</th>
+                          <th className="px-6 py-3 text-right">Fee</th>
+                          <th className="px-6 py-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {recentLeads.map((lead) => (
+                          <tr key={lead.id} className="hover:bg-white/[0.02]">
+                            <td className="px-6 py-3 text-gray-300 text-sm">
+                              {new Date(lead.submittedAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-3 text-white text-sm">{lead.providerName}</td>
+                            <td className="px-6 py-3 text-white text-sm">{lead.buyerName}</td>
+                            <td className="px-6 py-3 text-white text-sm text-right">
+                              ${lead.payoutAmount.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-3 text-[#E8822A] text-sm text-right">
+                              ${lead.platformFee.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-3 text-right">
+                              <StatusBadge status={lead.payoutStatus} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
             )}
 
-            {/* ===== PAYMENTS TAB ===== */}
-            {activeTab === "payments" && platformFees && (
-              <PaymentsTab
-                platformFees={platformFees}
-                onFeesSaved={(fees) => {
-                  setPlatformFees(fees);
-                  refreshData();
-                }}
-                pendingPayouts={pendingPayouts}
-                completedRevenue={stats.completedRevenue}
-                pendingRevenue={stats.pendingRevenue}
-                onPayoutForwarded={refreshData}
-              />
+            {/* ===== USERS TAB ===== */}
+            {activeTab === "users" && (
+              <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                  <h3 className="text-white font-semibold">All Users ({detailedUsers.length})</h3>
+                </div>
+                {detailedUsers.length === 0 ? (
+                  <div className="px-6 py-8 text-center text-gray-500">No users</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left">Name</th>
+                          <th className="px-6 py-3 text-left">Email</th>
+                          <th className="px-6 py-3 text-left">Role</th>
+                          <th className="px-6 py-3 text-left">Joined</th>
+                          <th className="px-6 py-3 text-right">Leads</th>
+                          <th className="px-6 py-3 text-right">Volume</th>
+                          <th className="px-6 py-3 text-left">Last Active</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {detailedUsers.map((user) => (
+                          <tr key={user.id} className="hover:bg-white/[0.02]">
+                            <td className="px-6 py-3 text-white text-sm">
+                              {user.displayName}
+                              {user.businessName && (
+                                <span className="text-gray-500 text-xs block">{user.businessName}</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-3 text-gray-300 text-sm">{user.email}</td>
+                            <td className="px-6 py-3">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                user.role === "provider"
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : user.role === "admin"
+                                  ? "bg-purple-500/20 text-purple-400"
+                                  : "bg-[#E8822A]/20 text-[#E8822A]"
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 text-gray-400 text-sm">
+                              {new Date(user.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-3 text-white text-sm text-right">{user.totalLeads}</td>
+                            <td className="px-6 py-3 text-white text-sm text-right">
+                              ${user.totalVolume.toFixed(2)}
+                            </td>
+                            <td className="px-6 py-3 text-gray-400 text-sm">
+                              {user.lastLeadAt
+                                ? timeAgo(user.lastLeadAt)
+                                : "Never"}
+                            </td>
+                            <td className="px-6 py-3 text-center">
+                              {user.role !== "admin" && (
+                                <button
+                                  onClick={() => handleToggleUser(user.id, !user.isActive)}
+                                  className={`text-xs font-medium px-3 py-1 rounded transition ${
+                                    user.isActive
+                                      ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                                      : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                  }`}
+                                >
+                                  {user.isActive ? "Suspend" : "Reactivate"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
 
-            {/* ===== INFO TAB ===== */}
-            {activeTab === "info" && (
-              <InfoTab
-                detailedUsers={detailedUsers}
-                recentLeads={recentLeads}
-                onToggleUser={async (userId, isActive) => {
-                  try {
-                    const res = await fetch("/api/admin/users", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ userId, isActive }),
-                    });
-                    if (res.ok) {
-                      setDetailedUsers(prev => prev.map(u =>
-                        u.id === userId ? { ...u, isActive } : u
-                      ));
-                      setUsers(prev => prev.map(u =>
-                        u.id === userId ? { ...u, isActive } : u
-                      ));
-                    }
-                  } catch (e) {
-                    console.error("Toggle failed:", e);
-                  }
-                }}
-              />
+            {/* ===== PLATFORM TAB ===== */}
+            {activeTab === "platform" && (
+              <div className="space-y-6">
+                {/* Stripe + Twilio Status */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                    <h3 className="text-white font-semibold mb-4">Stripe Connect</h3>
+                    {stripeStatus ? (
+                      <div className="space-y-3">
+                        <StatusRow label="Charges" ok={stripeStatus.chargesEnabled} />
+                        <StatusRow label="Payouts" ok={stripeStatus.payoutsEnabled} />
+                        {stripeStatus.businessName && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Business</span>
+                            <span className="text-white">{stripeStatus.businessName}</span>
+                          </div>
+                        )}
+                        {stripeStatus.email && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Email</span>
+                            <span className="text-gray-300">{stripeStatus.email}</span>
+                          </div>
+                        )}
+                        <a
+                          href="https://dashboard.stripe.com"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block mt-4 text-center text-sm text-[#E8822A] hover:text-[#D47526] transition"
+                        >
+                          Open Stripe Dashboard
+                        </a>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-sm">Unable to fetch Stripe status</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                    <h3 className="text-white font-semibold mb-4">Twilio SMS</h3>
+                    {twilioStatus ? (
+                      <div className="space-y-3">
+                        <StatusRow label="Configured" ok={twilioStatus.configured} />
+                        {twilioStatus.phoneNumber && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Phone</span>
+                            <span className="text-white">{twilioStatus.phoneNumber}</span>
+                          </div>
+                        )}
+                        <p className="text-gray-500 text-xs mt-2">
+                          Toll-free verification required for production SMS delivery
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-sm">Unable to fetch Twilio status</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fee Structure */}
+                {platformFees && (
+                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                    <h3 className="text-white font-semibold mb-4">Fee Structure</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Type</div>
+                        <div className="text-white font-medium capitalize">{platformFees.fee_type}</div>
+                      </div>
+                      {platformFees.fee_type === "flat" && (
+                        <>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Total Fee</div>
+                            <div className="text-white font-medium">${platformFees.fee_total.toFixed(2)}/lead</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Split</div>
+                            <div className="text-white font-medium">
+                              Buyer: ${platformFees.fee_buyer.toFixed(2)} / Provider: ${platformFees.fee_provider.toFixed(2)}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {platformFees.fee_type === "percent" && (
+                        <>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Rate</div>
+                            <div className="text-white font-medium">{platformFees.fee_percent}%</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Buyer Share</div>
+                            <div className="text-white font-medium">{platformFees.fee_percent_buyer_share}%</div>
+                          </div>
+                        </>
+                      )}
+                      {platformFees.fee_type === "mixed" && (
+                        <>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Flat + %</div>
+                            <div className="text-white font-medium">
+                              ${platformFees.fee_mixed_flat.toFixed(2)} + {platformFees.fee_mixed_percent}%
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gray-400 text-xs uppercase tracking-wider mb-1">Buyer Share</div>
+                            <div className="text-white font-medium">{platformFees.fee_mixed_buyer_share}%</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-xs mt-4">
+                      To change fee structure, update directly in the database (platform_settings table)
+                    </p>
+                  </div>
+                )}
+
+                {/* 1099 Tracker */}
+                {(() => {
+                  const providers = detailedUsers.filter(u => u.role === "provider");
+                  const flagged = providers.filter(u => u.yearlyEarnings >= 500);
+                  if (flagged.length === 0) return (
+                    <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                      <h3 className="text-white font-semibold mb-2">1099 Tracker</h3>
+                      <p className="text-gray-500 text-sm">No providers approaching the $600 threshold this year</p>
+                    </div>
+                  );
+                  return (
+                    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-white/10">
+                        <h3 className="text-white font-semibold">1099 Tracker</h3>
+                        <p className="text-gray-500 text-xs mt-1">
+                          Providers at or approaching $600 in yearly earnings (requires Form 1099-NEC)
+                        </p>
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left">Provider</th>
+                            <th className="px-6 py-3 text-left">Email</th>
+                            <th className="px-6 py-3 text-right">Yearly Earnings</th>
+                            <th className="px-6 py-3 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {flagged.map((u) => (
+                            <tr key={u.id} className="hover:bg-white/[0.02]">
+                              <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
+                              <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
+                              <td className="px-6 py-3 text-white text-sm text-right">
+                                ${u.yearlyEarnings.toFixed(2)}
+                              </td>
+                              <td className="px-6 py-3 text-right">
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                  u.needs1099
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-yellow-500/20 text-yellow-400"
+                                }`}>
+                                  {u.needs1099 ? "1099 Required" : "Approaching"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
           </>
         ) : (
           <div className="text-center py-24">
-            <p className="text-gray-400">Failed to load stats. Please try refreshing.</p>
+            <p className="text-gray-400">Failed to load data. Please try refreshing.</p>
           </div>
         )}
       </main>
@@ -518,4 +618,51 @@ export default function AdminPanel() {
   );
 }
 
-// Provider Payout Group Component
+// --- Helper Components ---
+
+function MetricCard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+  return (
+    <div className="bg-white/5 p-5 rounded-xl border border-white/10">
+      <div className="text-gray-400 text-sm mb-1">{label}</div>
+      <div className={`text-3xl font-bold ${accent ? "text-[#E8822A]" : "text-white"}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    completed: "bg-green-500/20 text-green-400",
+    processing: "bg-blue-500/20 text-blue-400",
+    pending: "bg-yellow-500/20 text-yellow-400",
+    failed: "bg-red-500/20 text-red-400",
+  };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded ${styles[status] || "bg-gray-500/20 text-gray-400"}`}>
+      {status}
+    </span>
+  );
+}
+
+function StatusRow({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="flex justify-between items-center text-sm">
+      <span className="text-gray-400">{label}</span>
+      <span className={`font-medium ${ok ? "text-green-400" : "text-red-400"}`}>
+        {ok ? "Enabled" : "Disabled"}
+      </span>
+    </div>
+  );
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}

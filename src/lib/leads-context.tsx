@@ -117,13 +117,6 @@ export interface Provider {
   totalLeads: number;
   totalEarnings: number;
   status: "active" | "inactive" | "suspended" | "terminated";
-  paymentMethod?: "venmo" | "paypal" | "bank";
-  paymentDetails?: {
-    venmoUsername?: string;
-    paypalEmail?: string;
-    bankAccountLast4?: string;
-    bankRoutingLast4?: string;
-  };
   recurringPayout?: boolean;
   payoutFrequency?: "per_lead" | "weekly" | "biweekly" | "monthly";
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,7 +10,6 @@ import { useConnections, type ApiConnection, type DiscoveryUser } from "@/lib/co
 import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
-import { WOML_PLATFORM } from "@/lib/master-operator";
 import BusinessRevenueChart from "./components/BusinessRevenueChart";
 import InviteTab from "./components/InviteTab";
 
@@ -36,12 +35,11 @@ interface ApiLead {
   payoutCompletedAt: string | null;
   submittedAt: string;
   providerName: string | null;
-  providerVenmo?: string | null;
   buyerName: string | null;
   buyerBusinessName: string | null;
 }
 
-type Tab = "dashboard" | "leads" | "requests" | "providers" | "rolodex" | "ledger" | "settings" | "invite";
+type Tab = "dashboard" | "leads" | "requests" | "rolodex" | "ledger" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -85,7 +83,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "leads", "requests", "providers", "rolodex", "ledger", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "leads", "requests", "rolodex", "ledger", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
@@ -106,7 +104,6 @@ function BusinessPortalContent() {
     updateConnectionTerms,
     terminateConnection,
     sendInvitationToProvider,
-    fetchUsersByRole,
   } = useConnections();
 
   // Fetch leads from database API (not localStorage)
@@ -118,27 +115,40 @@ function BusinessPortalContent() {
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
+  const fetchLeads = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leads", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) {
+        setDbLeads(data.leads);
+      }
+    } catch (err) {
+      console.error("Failed to fetch leads:", err);
+    } finally {
+      setDbLeadsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!currentUser) return;
-    const fetchLeads = async () => {
-      try {
-        const res = await fetch("/api/leads");
-        const data = await res.json();
-        if (data.success) {
-          setDbLeads(data.leads);
-        }
-      } catch (err) {
-        console.error("Failed to fetch leads:", err);
-      } finally {
-        setDbLeadsLoading(false);
-      }
-    };
     fetchLeads();
     // Fetch platform fee settings
     fetch("/api/platform-fees").then(r => r.json()).then(d => {
       if (d.success) setFeeSettings(d.settings);
     }).catch(() => {});
-  }, [currentUser]);
+  }, [currentUser, fetchLeads]);
+
+  // Re-fetch leads when tab regains focus
+  useEffect(() => {
+    if (!currentUser) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchLeads();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [currentUser, fetchLeads]);
 
   // Handle Stripe payment return
   useEffect(() => {
@@ -147,9 +157,7 @@ function BusinessPortalContent() {
       setPaymentNotice("Payment successful! Leads are being processed.");
       setActiveTab("leads");
       // Re-fetch leads to get updated statuses
-      fetch("/api/leads").then(r => r.json()).then(d => {
-        if (d.success) setDbLeads(d.leads);
-      }).catch(() => {});
+      fetchLeads();
       // Clear the query param
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
@@ -160,6 +168,24 @@ function BusinessPortalContent() {
       setActiveTab("leads");
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
+      window.history.replaceState({}, "", url.toString());
+      setTimeout(() => setPaymentNotice(null), 5000);
+    }
+
+    // Handle Stripe setup return (bank account connection)
+    const stripeParam = searchParams.get("stripe");
+    if (stripeParam === "success") {
+      setPaymentNotice("Bank account connected successfully!");
+      setActiveTab("settings");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe");
+      window.history.replaceState({}, "", url.toString());
+      setTimeout(() => setPaymentNotice(null), 8000);
+    } else if (stripeParam === "cancel") {
+      setPaymentNotice("Bank setup was cancelled. You can connect later in Settings.");
+      setActiveTab("settings");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe");
       window.history.replaceState({}, "", url.toString());
       setTimeout(() => setPaymentNotice(null), 5000);
     }
@@ -189,14 +215,6 @@ function BusinessPortalContent() {
 
   // Calculate CRM analytics from uploaded data
   const calculateCrmAnalytics = (data: UploadedRecord[]): AnalyticsData => {
-    // Helper to parse Y/N values
-    const parseYesNo = (value: unknown): boolean => {
-      if (typeof value === "boolean") return value;
-      if (typeof value === "number") return value === 1;
-      const str = String(value || "").toLowerCase().trim();
-      return str === "y" || str === "yes" || str === "true" || str === "1";
-    };
-
     const totalLeads = data.length;
     const totalContacted = data.filter(r => r.contactMade).length;
     const totalSold = data.filter(r => r.sold).length;
@@ -265,9 +283,6 @@ function BusinessPortalContent() {
       }))
       .sort((a, b) => b.totalLeads - a.totalLeads);
 
-    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
-    const avgPremium = totalSold > 0 ? totalPremium / totalSold : 0;
-
     return {
       totalLeads,
       totalContacted,
@@ -278,13 +293,6 @@ function BusinessPortalContent() {
       overallPaymentRate,
       providerStats,
       businessStats,
-      totalCustomers: totalLeads,
-      boundPolicies: totalSold,
-      renewedPolicies: 0,
-      lapsedPolicies: 0,
-      retentionRate: overallConversionRate,
-      totalPremium,
-      avgPremium,
     };
   };
 
@@ -348,7 +356,7 @@ function BusinessPortalContent() {
 
       const records: UploadedRecord[] = jsonData.map((row, index) => {
         const customerName = String(
-          getColumn(row, "Name of Person", "Insurance Seeker", "Customer Name", "Customer", "Name") || "Unknown"
+          getColumn(row, "Name of Person", "Customer Name", "Customer", "Name") || "Unknown"
         );
 
         const businessSender = String(
@@ -362,7 +370,7 @@ function BusinessPortalContent() {
         // Get raw Y/N values for debugging
         const rawPaid = getColumn(row, "Paid (Y/N)", "Paid the Lead Generator", "Paid", "Payment Made");
         const rawContact = getColumn(row, "Contact Made (Y/N)", "Contact Made", "Contacted", "Contact");
-        const rawSold = getColumn(row, "Sold (Y/N)", "Sold Lead Business", "Sold", "Converted", "Policy Sold");
+        const rawSold = getColumn(row, "Sold (Y/N)", "Sold", "Converted");
 
         // Debug first few rows
         if (index < 3) {
@@ -377,10 +385,7 @@ function BusinessPortalContent() {
           console.log(`[CRM Parser] Row ${index + 1}: Paid=${paidGenerator} Contact=${contactMade} Sold=${sold}`);
         }
 
-        const rawPremium = getColumn(row, "Premium", "Annual Premium", "Amount") || 0;
-        const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
         const date = parseExcelDate(getColumn(row, "Date", "Created"));
-        const carrier = String(getColumn(row, "Carrier", "Insurance Company") || "");
 
         return {
           customerName,
@@ -391,10 +396,7 @@ function BusinessPortalContent() {
           sold,
           providerName: individualSender,
           customerEmail: String(getColumn(row, "Email", "Customer Email") || ""),
-          policyStatus: sold ? "bound" as const : "lead" as const,
-          premium,
           date,
-          carrier,
         };
       });
 
@@ -435,7 +437,7 @@ function BusinessPortalContent() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+          <Image src="/woml-orange.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
         </div>
       </div>
@@ -482,7 +484,7 @@ function BusinessPortalContent() {
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-logo.png"
+          src="/woml-orange.png"
           alt=""
           width={600}
           height={600}
@@ -497,7 +499,7 @@ function BusinessPortalContent() {
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
               <Image
-                src="/woml-logo.png"
+                src="/woml-orange.png"
                 alt="WOML - Word of Mouth Leads"
                 width={240}
                 height={70}
@@ -522,7 +524,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "requests", "leads", "providers", "rolodex", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "requests", "leads", "rolodex", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -532,7 +534,7 @@ function BusinessPortalContent() {
                   : "bg-white text-gray-600 hover:text-[#E8822A] hover:bg-gray-100 border border-gray-200"
               }`}
             >
-              {tab === "providers" ? "My Providers" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === "requests" && pendingRequests.length > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
                   {pendingRequests.length}
@@ -1109,34 +1111,6 @@ function BusinessPortalContent() {
             }
           };
 
-          const handleBatchMarkPaid = async (ids: string[]) => {
-            const total = ids.reduce((sum, id) => {
-              const lead = dbLeads.find(l => l.id === id);
-              return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
-            }, 0);
-            if (!confirm(`Confirm you paid $${total.toFixed(2)} to @womleads via Venmo for ${ids.length} lead${ids.length !== 1 ? "s" : ""}?`)) return;
-            setBatchMarkingPaid(true);
-            try {
-              const res = await fetch("/api/leads/batch-mark-paid", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ leadIds: ids }),
-              });
-              if (res.ok) {
-                setDbLeads(prev => prev.map(l => ids.includes(l.id) ? { ...l, payoutStatus: "processing" } : l));
-                setSelectedLeads(prev => {
-                  const next = new Set(prev);
-                  ids.forEach(id => next.delete(id));
-                  return next;
-                });
-              }
-            } catch (e) {
-              console.error("Batch mark paid failed:", e);
-            } finally {
-              setBatchMarkingPaid(false);
-            }
-          };
-
           return (
           <div className="space-y-4">
             {paymentNotice && (
@@ -1224,22 +1198,6 @@ function BusinessPortalContent() {
                             >
                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
                               {batchMarkingPaid ? "Processing..." : `Pay $${groupSelectedTotal.toFixed(2)} via Stripe`}
-                            </button>
-                            <a
-                              href={`https://venmo.com/${WOML_PLATFORM.venmoUsername}?txn=pay&amount=${groupSelectedTotal.toFixed(2)}&note=${encodeURIComponent(`WOML Batch - ${groupSelectedIds.length} leads from ${group.providerName}`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium transition border border-gray-200 hover:bg-gray-50"
-                            >
-                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3.5c.8 1.3 1.2 2.7 1.2 4.3 0 3.4-2.9 7.8-5.2 10.9H9.2L7 4.6l5-.5.9 7.3c.8-1.3 1.8-3.4 1.8-4.8 0-1-.2-1.7-.4-2.3l5.2-1z"/></svg>
-                              Venmo
-                            </a>
-                            <button
-                              onClick={() => handleBatchMarkPaid(groupSelectedIds)}
-                              disabled={batchMarkingPaid}
-                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1.5 rounded-lg text-sm font-medium transition border border-amber-200 disabled:opacity-50"
-                            >
-                              {batchMarkingPaid ? "Processing..." : `Mark ${groupSelectedIds.length} Sent to WOML`}
                             </button>
                           </div>
                         )}
@@ -1393,20 +1351,6 @@ function BusinessPortalContent() {
           </div>
           );
         })()}
-
-        {/* Providers Tab */}
-        {activeTab === "providers" && (
-          <TabErrorBoundary tabName="Providers">
-            <ProvidersTab
-              fetchUsersByRole={fetchUsersByRole}
-              sendInvitationToProvider={sendInvitationToProvider}
-              updateConnectionTerms={updateConnectionTerms}
-              terminateConnection={terminateConnection}
-              activeConnections={activeConnections}
-              feeSettings={feeSettings}
-            />
-          </TabErrorBoundary>
-        )}
 
         {/* Ledger Tab */}
         {activeTab === "ledger" && (
@@ -1701,7 +1645,6 @@ function ProvidersTab({
   const getPayoutLabel = (method: string | null | undefined) => {
     if (!method) return null;
     switch (method) {
-      case "venmo": return "Venmo";
       case "paypal": return "PayPal";
       case "cashapp": return "CashApp";
       case "bank": return "Bank Transfer";
@@ -1835,11 +1778,6 @@ function ProvidersTab({
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
             {badge.label}
           </span>
-          {provider.payoutMethod && (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-purple-50 text-purple-600">
-              {getPayoutLabel(provider.payoutMethod)}
-            </span>
-          )}
           {connection && (
             <span className="text-xs text-emerald-600 font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
           )}
@@ -2063,13 +2001,9 @@ function ProvidersTab({
                 </div>
                 <div>
                   <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Preferred Payment</p>
-                  {selectedProvider.payoutMethod ? (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700">
-                      {getPayoutLabel(selectedProvider.payoutMethod)}
-                    </span>
-                  ) : (
-                    <p className="text-gray-400 font-medium italic">Not provided</p>
-                  )}
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700">
+                    Stripe Connect
+                  </span>
                 </div>
               </div>
 
@@ -2273,7 +2207,7 @@ function ProvidersTab({
                           onChange={(e) => setInviteMessage(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] text-sm"
                           rows={2}
-                          placeholder="Hi! I'd like to partner with you for insurance leads..."
+                          placeholder="Hi! I'd like to partner with you for leads..."
                         />
                       </div>
 
@@ -2656,23 +2590,6 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
   );
 }
 
-function PaymentMethodBadge({ method }: { method: string }) {
-  const styles: Record<string, { bg: string; text: string; icon: string }> = {
-    venmo: { bg: "bg-orange-100", text: "text-orange-700", icon: "V" },
-    paypal: { bg: "bg-indigo-100", text: "text-indigo-700", icon: "P" },
-    bank: { bg: "bg-emerald-100", text: "text-emerald-700", icon: "B" },
-    pending: { bg: "bg-gray-100", text: "text-gray-500", icon: "?" },
-  };
-
-  const style = styles[method] || styles.pending;
-
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
-      <span className="font-bold">{style.icon}</span>
-      {method.charAt(0).toUpperCase() + method.slice(1)}
-    </span>
-  );
-}
 
 // Rolodex Tab - View connected providers as baseball cards
 function RolodexTab({
@@ -2912,11 +2829,6 @@ function ProviderDetailModal({
                 }`}>
                   {provider.status}
                 </span>
-                {provider.paymentMethod && (
-                  <span className="px-2 py-0.5 rounded-full text-xs bg-white/10 text-white/80">
-                    {provider.paymentMethod}
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -2980,7 +2892,7 @@ function ProviderDetailModal({
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-gray-800 font-medium">Current Payout Rate</p>
-                      <p className="text-gray-500 text-sm">Payment: {provider.paymentMethod || "Not set"}</p>
+                      <p className="text-gray-500 text-sm">Payout: Stripe Connect</p>
                     </div>
                     <p className="text-2xl font-bold text-[#E8822A]">${Number(provider.payoutRate || 0).toFixed(2)}/lead</p>
                   </div>
@@ -3030,19 +2942,15 @@ function ProviderDetailModal({
 
 // Analytics Tab - Excel Upload & Data Visualization
 interface UploadedRecord {
-  customerName: string;          // Name of person (insurance seeker)
+  customerName: string;          // Name of person (customer)
   businessSender: string;        // Business sender (at company level)
   individualSender: string;      // Individual sender (car salesman providing business)
   paidGenerator: boolean;        // Paid the lead generator or not (Y/N)
   contactMade: boolean;          // Contact made with the lead (Y/N)
-  sold: boolean;                 // Sold lead business (Y/N)
-  // Legacy fields for backward compatibility
+  sold: boolean;                 // Converted (Y/N)
   providerName?: string;
   customerEmail?: string;
-  policyStatus?: "lead" | "quoted" | "bound" | "renewed" | "lapsed" | "cancelled";
-  premium?: number;
   date?: string;
-  carrier?: string;
 }
 
 interface ProviderPerformance {
@@ -3076,14 +2984,6 @@ interface AnalyticsData {
     soldLeads: number;
     conversionRate: number;
   }[];
-  // Legacy fields
-  totalCustomers: number;
-  boundPolicies: number;
-  renewedPolicies: number;
-  lapsedPolicies: number;
-  retentionRate: number;
-  totalPremium: number;
-  avgPremium: number;
 }
 
 // Weekly time-series data for dot plot visualization
@@ -3317,12 +3217,6 @@ function AnalyticsTab({
       }))
       .sort((a, b) => b.totalLeads - a.totalLeads);
 
-    // Legacy metrics for backward compatibility
-    const boundPolicies = totalSold;
-    const totalCustomers = totalLeads;
-    const totalPremium = data.reduce((sum, r) => sum + (r.premium || 0), 0);
-    const avgPremium = boundPolicies > 0 ? totalPremium / boundPolicies : 0;
-
     return {
       totalLeads,
       totalContacted,
@@ -3333,14 +3227,6 @@ function AnalyticsTab({
       overallPaymentRate,
       providerStats,
       businessStats,
-      // Legacy
-      totalCustomers,
-      boundPolicies,
-      renewedPolicies: 0,
-      lapsedPolicies: 0,
-      retentionRate: overallConversionRate,
-      totalPremium,
-      avgPremium,
     };
   };
 
@@ -3405,7 +3291,7 @@ function AnalyticsTab({
       // Map columns to our format (flexible mapping for new format)
       const records: UploadedRecord[] = jsonData.map((row, index) => {
         const customerName = String(
-          getColumn(row, "Name of Person", "Insurance Seeker", "Customer Name", "Customer", "Name") || "Unknown"
+          getColumn(row, "Name of Person", "Customer Name", "Customer", "Name") || "Unknown"
         );
 
         const businessSender = String(
@@ -3419,7 +3305,7 @@ function AnalyticsTab({
         // Get raw Y/N values for debugging
         const rawPaid = getColumn(row, "Paid (Y/N)", "Paid the Lead Generator", "Paid", "Payment Made", "Paid Generator");
         const rawContact = getColumn(row, "Contact Made (Y/N)", "Contact Made", "Contacted", "Contact");
-        const rawSold = getColumn(row, "Sold (Y/N)", "Sold Lead Business", "Sold", "Converted", "Policy Sold");
+        const rawSold = getColumn(row, "Sold (Y/N)", "Sold", "Converted");
 
         // Debug first few rows
         if (index < 3) {
@@ -3434,23 +3320,10 @@ function AnalyticsTab({
           console.log(`[File Parser] Row ${index + 1}: Paid=${paidGenerator} Contact=${contactMade} Sold=${sold}`);
         }
 
-        // Legacy format columns (for backward compatibility)
         const providerName = individualSender;
         const customerEmail = String(getColumn(row, "Email", "Customer Email") || "");
 
-        const rawStatus = String(getColumn(row, "Status", "Policy Status") || "lead").toLowerCase();
-        let policyStatus: UploadedRecord["policyStatus"] = "lead";
-        if (sold || rawStatus.includes("bound") || rawStatus.includes("sold")) policyStatus = "bound";
-        else if (rawStatus.includes("renew")) policyStatus = "renewed";
-        else if (rawStatus.includes("lapse") || rawStatus.includes("cancel")) policyStatus = "lapsed";
-        else if (rawStatus.includes("quote")) policyStatus = "quoted";
-
-        const rawPremium = getColumn(row, "Premium", "Annual Premium", "Amount") || 0;
-        const premium = typeof rawPremium === "number" ? rawPremium : parseFloat(String(rawPremium).replace(/[^0-9.]/g, "")) || 0;
-
         const date = parseExcelDate(getColumn(row, "Date", "Created"));
-
-        const carrier = String(getColumn(row, "Carrier", "Insurance Company") || "");
 
         return {
           customerName,
@@ -3459,13 +3332,9 @@ function AnalyticsTab({
           paidGenerator,
           contactMade,
           sold,
-          // Legacy fields
           providerName,
           customerEmail,
-          policyStatus,
-          premium,
           date,
-          carrier,
         };
       });
 
@@ -3827,63 +3696,6 @@ function AnalyticsTab({
             </div>
           )}
 
-          {/* Retention Breakdown Chart */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Policy Status Breakdown</h4>
-            <div className="flex items-center gap-8">
-              {/* Simple donut visualization */}
-              <div className="relative w-40 h-40">
-                <svg viewBox="0 0 36 36" className="w-full h-full">
-                  <path
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="3"
-                  />
-                  <path
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3"
-                    strokeDasharray={`${analytics.retentionRate}, 100`}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold text-[#E8822A]">{analytics.retentionRate.toFixed(0)}%</span>
-                </div>
-              </div>
-              <div className="flex-1 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                    <span className="text-gray-600">Renewed</span>
-                  </div>
-                  <span className="font-medium text-gray-800">{analytics.renewedPolicies}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-                    <span className="text-gray-600">Bound (New)</span>
-                  </div>
-                  <span className="font-medium text-gray-800">{analytics.boundPolicies - analytics.renewedPolicies}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                    <span className="text-gray-600">Lapsed/Cancelled</span>
-                  </div>
-                  <span className="font-medium text-gray-800">{analytics.lapsedPolicies}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-                    <span className="text-gray-600">Other (Lead/Quoted)</span>
-                  </div>
-                  <span className="font-medium text-gray-800">{analytics.totalCustomers - analytics.boundPolicies - analytics.lapsedPolicies}</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -3893,18 +3705,14 @@ function AnalyticsTab({
 // Settings Tab
 function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings }) {
   const { updateUser } = useAuth();
+  const [email, setEmail] = useState(currentBuyer?.email || "");
   const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
   const [phone, setPhone] = useState(currentBuyer?.phone || "");
   const [profilePicture, setProfilePicture] = useState("");
-  const [payoutMethod, setPayoutMethod] = useState("venmo");
-  const [payoutVenmo, setPayoutVenmo] = useState("");
-  const [payoutPaypal, setPayoutPaypal] = useState("");
-  const [payoutCashapp, setPayoutCashapp] = useState("");
-  const [payoutBankRouting, setPayoutBankRouting] = useState("");
-  const [payoutBankAccount, setPayoutBankAccount] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<"not_connected" | "connected">("not_connected");
+  const [stripeLoading, setStripeLoading] = useState(false);
 
   // Fetch full profile on mount
   useEffect(() => {
@@ -3915,17 +3723,11 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           const data = await res.json();
           const p = data.profile;
           if (p.profilePictureUrl) setProfilePicture(p.profilePictureUrl);
-          if (p.payoutMethod) setPayoutMethod(p.payoutMethod);
-          if (p.payoutVenmo) setPayoutVenmo(p.payoutVenmo);
-          if (p.payoutPaypal) setPayoutPaypal(p.payoutPaypal);
-          if (p.payoutCashapp) setPayoutCashapp(p.payoutCashapp);
-          if (p.payoutBankRouting) setPayoutBankRouting(p.payoutBankRouting);
-          if (p.payoutBankAccount) setPayoutBankAccount(p.payoutBankAccount);
+          if (p.stripeCustomerId) setStripeStatus("connected");
         }
       } catch (e) {
         console.error("Failed to load profile:", e);
       }
-      setProfileLoaded(true);
     }
     loadProfile();
   }, []);
@@ -3976,27 +3778,16 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
     if (!currentBuyer) return;
     setSaving(true);
     await updateUser({
+      email,
       businessName,
       phone,
       profilePictureUrl: profilePicture || undefined,
-      payoutMethod: payoutMethod as any,
-      payoutVenmo,
-      payoutPaypal,
-      payoutCashapp,
-      payoutBankRouting,
-      payoutBankAccount,
     } as any);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const payoutOptions = [
-    { value: "venmo", label: "Venmo", icon: "V" },
-    { value: "paypal", label: "PayPal", icon: "P" },
-    { value: "cashapp", label: "CashApp", icon: "$" },
-    { value: "bank", label: "Bank Account", icon: "B" },
-  ];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl shadow-sm">
@@ -4038,11 +3829,10 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           <label className="block text-gray-700 text-sm font-medium mb-2">Email</label>
           <input
             type="email"
-            value={currentBuyer?.email || ""}
-            disabled
-            className="w-full px-4 py-2 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 cursor-not-allowed"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition"
           />
-          <p className="text-gray-400 text-xs mt-1">Email cannot be changed</p>
         </div>
         <div>
           <label className="block text-gray-700 text-sm font-medium mb-2">Username</label>
@@ -4081,96 +3871,58 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           />
         </div>
 
-        {/* Payment Method */}
-        <div>
-          <label className="block text-gray-700 text-sm font-medium mb-3">Payment Method</label>
-          <p className="text-gray-400 text-xs mb-3">Set your payment accounts for paying lead providers</p>
-          <div className="grid grid-cols-2 gap-2">
-            {payoutOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setPayoutMethod(opt.value)}
-                className={`flex items-center gap-2 p-3 rounded-lg border-2 transition text-left ${
-                  payoutMethod === opt.value
-                    ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
-                    : "border-gray-200 hover:border-gray-300 text-gray-600"
-                }`}
-              >
-                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  payoutMethod === opt.value ? "bg-[#E8822A] text-white" : "bg-gray-100 text-gray-500"
-                }`}>{opt.icon}</span>
-                <span className="font-medium text-sm">{opt.label}</span>
-              </button>
-            ))}
+        {/* Stripe Payment Method */}
+        <div className="border-t border-gray-200 pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-gray-700 text-sm font-medium">Payment Method</label>
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+              stripeStatus === "connected"
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-700"
+            }`}>
+              {stripeStatus === "connected" ? "Connected" : "Not Connected"}
+            </span>
           </div>
+          <p className="text-gray-500 text-sm mb-4">
+            {stripeStatus === "connected"
+              ? "Your payment method is connected via Stripe. You can update it anytime."
+              : "Connect a bank account or card to pay lead rewards to your providers."}
+          </p>
+          <button
+            onClick={async () => {
+              setStripeLoading(true);
+              try {
+                const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
+                const data = await res.json();
+                if (data.setupUrl) {
+                  window.location.href = data.setupUrl;
+                } else {
+                  alert(data.error || "Failed to set up payment method.");
+                  setStripeLoading(false);
+                }
+              } catch {
+                alert("Failed to connect Stripe. Please try again.");
+                setStripeLoading(false);
+              }
+            }}
+            disabled={stripeLoading}
+            className="bg-gray-900 hover:bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+          >
+            {stripeLoading ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Connecting...
+              </>
+            ) : stripeStatus === "connected" ? (
+              "Update Payment Method"
+            ) : (
+              "Connect Bank Account"
+            )}
+          </button>
         </div>
-
-        {/* Conditional payment detail inputs */}
-        {profileLoaded && (
-          <div>
-            {payoutMethod === "venmo" && (
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Venmo Username</label>
-                <input
-                  type="text"
-                  value={payoutVenmo}
-                  onChange={(e) => setPayoutVenmo(e.target.value)}
-                  placeholder="@username"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                />
-              </div>
-            )}
-            {payoutMethod === "paypal" && (
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">PayPal Email</label>
-                <input
-                  type="email"
-                  value={payoutPaypal}
-                  onChange={(e) => setPayoutPaypal(e.target.value)}
-                  placeholder="email@example.com"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                />
-              </div>
-            )}
-            {payoutMethod === "cashapp" && (
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">CashApp Tag</label>
-                <input
-                  type="text"
-                  value={payoutCashapp}
-                  onChange={(e) => setPayoutCashapp(e.target.value)}
-                  placeholder="$cashtag"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                />
-              </div>
-            )}
-            {payoutMethod === "bank" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">Routing Number</label>
-                  <input
-                    type="text"
-                    value={payoutBankRouting}
-                    onChange={(e) => setPayoutBankRouting(e.target.value)}
-                    placeholder="9-digit routing number"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-sm font-medium mb-2">Account Number</label>
-                  <input
-                    type="text"
-                    value={payoutBankAccount}
-                    onChange={(e) => setPayoutBankAccount(e.target.value)}
-                    placeholder="Account number"
-                    className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         <button
           onClick={handleSave}
@@ -4955,7 +4707,7 @@ function LoadingFallback() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <Image src="/woml-logo.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+        <Image src="/woml-orange.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
       </div>
     </div>

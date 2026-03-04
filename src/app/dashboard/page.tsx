@@ -52,7 +52,7 @@ export default function Dashboard() {
 
           {role === "provider" && (
             <Link
-              href="/submit-lead"
+              href="/provider-dashboard"
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,7 +164,7 @@ function ProviderDashboard({ leads, provider }: { leads: Lead[]; provider: Provi
             </svg>
             <p className="text-slate-400 mb-4">No leads submitted yet</p>
             <Link
-              href="/submit-lead"
+              href="/provider-dashboard"
               className="inline-block bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg transition"
             >
               Submit Your First Lead

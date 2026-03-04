@@ -121,12 +121,6 @@ export async function POST(request: NextRequest) {
       businessType,
       licensedStates,
       profilePictureUrl,
-      payoutMethod,
-      payoutVenmo,
-      payoutPaypal,
-      payoutCashapp,
-      payoutBankRouting,
-      payoutBankAccount,
     });
 
     if (!result.success || !result.user) {

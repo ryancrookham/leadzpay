@@ -4,6 +4,7 @@ import {
   getInviteTokenByToken,
   getUserById,
   deactivateInviteToken,
+  deleteInviteTokenPermanently,
   updateInviteToken,
 } from "@/lib/db";
 
@@ -112,10 +113,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
-    await deactivateInviteToken(tokenRow.id);
+    const permanent = request.nextUrl.searchParams.get("permanent") === "true";
+    if (permanent) {
+      await deleteInviteTokenPermanently(tokenRow.id);
+    } else {
+      await deactivateInviteToken(tokenRow.id);
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[INVITE-TOKENS] DELETE error:", error);
-    return NextResponse.json({ error: "Failed to deactivate invite token" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete invite token" }, { status: 500 });
   }
 }

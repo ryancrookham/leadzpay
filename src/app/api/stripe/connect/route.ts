@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
     // Create a new Express Connect account
     const account = await stripe.accounts.create({
       type: "express",
+      business_type: "individual",
+      business_profile: {
+        mcc: "7311",
+        product_description: "Lead generation referrals",
+        url: "https://www.womleads.com",
+      },
       email: user.email,
       metadata: {
         woml_user_id: user.id,

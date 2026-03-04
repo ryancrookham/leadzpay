@@ -60,7 +60,7 @@ export const registerBuyerSchema = z.object({
   password: passwordSchema,
   username: usernameSchema,
   businessName: z.string().min(1, "Business name required").max(255),
-  businessType: z.enum(["insurance_agency", "broker", "carrier", "other"]),
+  businessType: z.string().min(1, "Business type required").max(100),
   phone: phoneSchema,
   licensedStates: z.array(stateCodeSchema).min(1, "At least one licensed state required"),
   npn: z.string().max(50).optional(),
@@ -76,9 +76,6 @@ export const updateProfileSchema = z.object({
   displayName: z.string().max(100).optional(),
   phone: phoneSchema,
   location: z.string().max(255).optional(),
-  payoutMethod: z.enum(["venmo", "paypal", "bank"]).optional(),
-  venmoUsername: z.string().max(100).optional(),
-  paypalEmail: emailSchema.optional(),
 });
 
 // ============================================
@@ -102,28 +99,10 @@ export const addressSchema = z.object({
   zipCode: zipCodeSchema,
 });
 
-export const licenseDataSchema = z.object({
-  licenseNumber: z.string().min(1, "License number required").max(50),
-  licenseState: stateCodeSchema,
-  expirationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
-  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  licenseClass: z.string().max(10).optional(),
-});
-
-export const vehicleInfoSchema = z.object({
-  year: z.number().int().min(1900).max(new Date().getFullYear() + 2),
-  make: z.string().min(1, "Vehicle make required").max(50),
-  model: z.string().min(1, "Vehicle model required").max(50),
-  vin: z.string().length(17, "VIN must be 17 characters").optional(),
-});
-
 export const submitLeadSchema = z.object({
   connectionId: uuidSchema,
   customerInfo: customerInfoSchema,
   address: addressSchema,
-  licenseData: licenseDataSchema.optional(),
-  vehicleInfo: vehicleInfoSchema.optional(),
-  quoteType: z.enum(["asap", "standard", "comprehensive"]).default("standard"),
   notes: z.string().max(1000).optional(),
 });
 
@@ -174,37 +153,6 @@ export const payoutSchema = z.object({
   amount: z.number().positive("Amount must be positive"),
   providerId: uuidSchema,
   stripeAccountId: z.string().min(1, "Stripe account ID required"),
-});
-
-// ============================================
-// CRM Schemas
-// ============================================
-
-export const pushLeadToCrmSchema = z.object({
-  licenseData: z.object({
-    firstName: z.string(),
-    lastName: z.string(),
-    fullName: z.string(),
-    dateOfBirth: z.string(),
-    age: z.number(),
-    gender: z.string(),
-    licenseNumber: z.string(),
-    licenseState: z.string(),
-    expirationDate: z.string(),
-    isValid: z.boolean(),
-    isExpired: z.boolean(),
-    address: z.object({
-      street: z.string(),
-      city: z.string(),
-      state: z.string(),
-      zipCode: z.string(),
-    }),
-  }),
-  email: emailSchema,
-  phone: z.string(),
-  providerId: uuidSchema.optional(),
-  providerName: z.string().optional(),
-  leadType: z.enum(["quote", "asap", "transfer"]).default("quote"),
 });
 
 // ============================================
@@ -288,11 +236,8 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CustomerInfoInput = z.infer<typeof customerInfoSchema>;
 export type AddressInput = z.infer<typeof addressSchema>;
-export type LicenseDataInput = z.infer<typeof licenseDataSchema>;
-export type VehicleInfoInput = z.infer<typeof vehicleInfoSchema>;
 export type SubmitLeadInput = z.infer<typeof submitLeadSchema>;
 export type ConnectionTermsInput = z.infer<typeof connectionTermsSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type PayoutInput = z.infer<typeof payoutSchema>;
-export type PushLeadToCrmInput = z.infer<typeof pushLeadToCrmSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;

@@ -11,7 +11,6 @@ export const MASTER_OPERATOR = {
 // WOML Platform Configuration
 export const WOML_PLATFORM = {
   email: "womleads@outlook.com",
-  venmoUsername: "womleads",
   name: "WOML - Word of Mouth Leads",
 };
 

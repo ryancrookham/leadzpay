@@ -99,7 +99,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           console.log("[AUTH] Login successful:", email, "role:", user.role);
           return dbUserToAuthUser(user);
         } catch (error) {
-          console.error("[AUTH] Error during authorization:", error);
+          const errMsg = error instanceof Error ? error.message : String(error);
+          const errStack = error instanceof Error ? error.stack : undefined;
+          console.error("[AUTH] Authorization error:", {
+            email,
+            error: errMsg,
+            stack: errStack,
+            isDbError: errMsg.includes("402") || errMsg.includes("connect") || errMsg.includes("ECONNREFUSED"),
+            timestamp: new Date().toISOString(),
+          });
           return null;
         }
       },
@@ -166,12 +174,6 @@ export async function registerUser(data: {
   businessType?: string;
   licensedStates?: string[];
   profilePictureUrl?: string;
-  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank';
-  payoutVenmo?: string;
-  payoutPaypal?: string;
-  payoutCashapp?: string;
-  payoutBankRouting?: string;
-  payoutBankAccount?: string;
 }): Promise<{ success: boolean; error?: string; user?: DbUser }> {
   try {
     // Check if user already exists
@@ -196,12 +198,6 @@ export async function registerUser(data: {
       business_type: data.businessType,
       licensed_states: data.licensedStates,
       profile_picture_url: data.profilePictureUrl,
-      payout_method: data.payoutMethod,
-      payout_venmo: data.payoutVenmo,
-      payout_paypal: data.payoutPaypal,
-      payout_cashapp: data.payoutCashapp,
-      payout_bank_routing: data.payoutBankRouting,
-      payout_bank_account: data.payoutBankAccount,
     });
 
     return { success: true, user };

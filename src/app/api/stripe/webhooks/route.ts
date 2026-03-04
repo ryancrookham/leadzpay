@@ -7,6 +7,12 @@ import {
   batchUpdateLeadPayoutStatus,
   createTransaction,
   getPlatformSettings,
+  hasWebhookBeenProcessed,
+  markWebhookProcessed,
+  updateTransactionStatusByLeadId,
+  getProviderByStripeAccountId,
+  getProcessingLeadsByProviderId,
+  updateUserStripeAccount,
 } from "@/lib/db";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
 import Stripe from "stripe";
@@ -33,9 +39,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
+    // Idempotency check — skip if already processed
+    if (await hasWebhookBeenProcessed(event.id)) {
+      console.log(`Webhook event ${event.id} already processed, skipping`);
+      return NextResponse.json({ received: true, skipped: "already processed" });
+    }
+
     switch (event.type) {
       case "checkout.session.completed":
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
+
+      case "checkout.session.expired":
+        await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session);
+        break;
+
+      case "account.updated":
+        await handleAccountUpdated(event.data.object as Stripe.Account);
+        break;
+
+      case "payment_intent.payment_failed":
+        await handlePaymentFailed(event.data.object as Stripe.PaymentIntent);
         break;
 
       case "transfer.reversed":
@@ -45,6 +69,9 @@ export async function POST(request: NextRequest) {
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
+
+    // Mark event as processed
+    await markWebhookProcessed(event.id);
 
     return NextResponse.json({ received: true });
   } catch (error) {
@@ -58,7 +85,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const buyerId = session.metadata?.buyer_id;
 
   if (!leadIdsStr || !buyerId) {
-    console.error("Checkout session missing metadata:", session.id);
+    // Setup-mode sessions (bank account connection) have no lead metadata — skip silently
+    console.log("Checkout session without lead metadata (likely setup mode):", session.id);
     return;
   }
 
@@ -69,9 +97,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.error("No leads found for checkout session:", session.id);
     return;
   }
-
-  // Mark all leads as processing
-  await batchUpdateLeadPayoutStatus(leadIds, "processing");
 
   // Get platform fee settings
   const platformFees = await getPlatformSettings();
@@ -89,22 +114,26 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const providers = await getProvidersByIds(providerIds);
   const providerMap = new Map(providers.map(p => [p.id, p]));
 
-  // Create transfers for each provider
+  let failedProviders = 0;
+
+  // Process each provider group independently
   for (const [providerId, providerLeads] of leadsByProvider) {
     const provider = providerMap.get(providerId);
+    const providerLeadIds = providerLeads.map(l => l.id);
 
-    // Calculate total transfer amount for this provider (rate per lead minus provider fee)
+    // Calculate total transfer amount for this provider
     let transferCents = 0;
     for (const lead of providerLeads) {
       const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
       transferCents += Math.round(breakdown.providerNet * 100);
     }
 
-    const providerLeadIds = providerLeads.map(l => l.id);
+    // Mark this provider's leads as processing
+    await batchUpdateLeadPayoutStatus(providerLeadIds, "processing");
 
     if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
-      // Provider not connected to Stripe — leave as processing (manual payout via Venmo)
-      console.log(`Provider ${providerId} not on Stripe Connect — leads stay processing for manual payout`);
+      // Provider not connected to Stripe — leave as processing until they complete onboarding
+      console.log(`Provider ${providerId} not on Stripe Connect — leads stay processing`);
 
       // Still create platform_fee transactions
       for (const lead of providerLeads) {
@@ -132,6 +161,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         amount: transferCents,
         currency: "usd",
         destination: provider.stripe_account_id,
+        transfer_group: session.id, // Links multi-provider payments for reconciliation
         metadata: {
           lead_ids: providerLeadIds.join(","),
           provider_id: providerId,
@@ -180,9 +210,47 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       console.log(`Transfer ${transfer.id} created for provider ${providerId}: $${(transferCents / 100).toFixed(2)}`);
     } catch (error) {
       console.error(`Transfer failed for provider ${providerId}:`, error);
-      // Mark leads as failed
+      failedProviders++;
+
+      // Mark this provider's leads as failed
       await batchUpdateLeadStripeTransfer(providerLeadIds, "", "failed");
+
+      // Create a transfer_failed transaction record for each lead so the ledger reflects what happened
+      for (const lead of providerLeads) {
+        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+        await createTransaction({
+          type: "lead_payout",
+          status: "failed",
+          amount: breakdown.providerNet,
+          fee_amount: breakdown.providerFee,
+          net_amount: 0,
+          from_account_id: null,
+          to_account_id: providerId,
+          lead_id: lead.id,
+          connection_id: lead.connection_id || undefined,
+          description: `Provider payout failed — transfer to Stripe Connect rejected`,
+        });
+
+        // Platform fee still recorded (business was charged)
+        await createTransaction({
+          type: "platform_fee",
+          status: "completed",
+          amount: breakdown.totalPlatformFee,
+          fee_amount: 0,
+          net_amount: breakdown.totalPlatformFee,
+          from_account_id: buyerId,
+          to_account_id: null,
+          lead_id: lead.id,
+          connection_id: lead.connection_id || undefined,
+          stripe_payment_id: session.payment_intent as string || undefined,
+          description: `Platform fee for lead (transfer to provider failed)`,
+        });
+      }
     }
+  }
+
+  if (failedProviders > 0) {
+    console.warn(`[WEBHOOK] ${failedProviders} provider transfer(s) failed for checkout ${session.id} — requires admin attention`);
   }
 }
 
@@ -194,7 +262,122 @@ async function handleTransferReversed(transfer: Stripe.Transfer) {
   }
 
   const leadIds = leadIdsStr.split(",");
-  // Mark affected leads back to pending
+
+  // Reset leads to pending
   await batchUpdateLeadPayoutStatus(leadIds, "pending");
-  console.log(`Transfer ${transfer.id} reversed — ${leadIds.length} leads reset to pending`);
+
+  // Update transaction records to reflect the reversal
+  for (const leadId of leadIds) {
+    await updateTransactionStatusByLeadId(leadId, "lead_payout", "reversed");
+  }
+
+  console.log(`Transfer ${transfer.id} reversed — ${leadIds.length} leads reset to pending, transactions marked reversed`);
+}
+
+async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
+  const leadIdsStr = session.metadata?.lead_ids;
+  if (!leadIdsStr) {
+    // Setup-mode sessions have no lead metadata
+    console.log("Checkout session expired (no lead metadata):", session.id);
+    return;
+  }
+
+  console.log(`Checkout session ${session.id} expired — no action needed, leads remain pending`);
+}
+
+async function handleAccountUpdated(account: Stripe.Account) {
+  // Only process if onboarding just completed
+  if (!account.details_submitted) {
+    return;
+  }
+
+  const provider = await getProviderByStripeAccountId(account.id);
+  if (!provider) {
+    console.log(`Account ${account.id} updated but no matching provider found`);
+    return;
+  }
+
+  // Update provider's onboarding status in DB
+  if (!provider.stripe_onboarding_complete) {
+    await updateUserStripeAccount(provider.id, account.id, true);
+    console.log(`Provider ${provider.id} completed Stripe onboarding`);
+  }
+
+  // Check for leads stuck in "processing" that can now be transferred
+  const processingLeads = await getProcessingLeadsByProviderId(provider.id);
+  if (processingLeads.length === 0) {
+    return;
+  }
+
+  console.log(`Processing ${processingLeads.length} pending transfers for provider ${provider.id}`);
+
+  const platformFees = await getPlatformSettings();
+
+  // Calculate total transfer amount
+  let transferCents = 0;
+  for (const lead of processingLeads) {
+    const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+    transferCents += Math.round(breakdown.providerNet * 100);
+  }
+
+  const leadIds = processingLeads.map(l => l.id);
+
+  try {
+    // Create the transfer now that provider is onboarded
+    const transfer = await stripe.transfers.create({
+      amount: transferCents,
+      currency: "usd",
+      destination: account.id,
+      metadata: {
+        lead_ids: leadIds.join(","),
+        provider_id: provider.id,
+        trigger: "account_updated_backfill",
+      },
+    });
+
+    // Mark leads as completed
+    await batchUpdateLeadStripeTransfer(leadIds, transfer.id, "completed");
+
+    // Create transaction records for each lead
+    for (const lead of processingLeads) {
+      const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+
+      await createTransaction({
+        type: "lead_payout",
+        status: "completed",
+        amount: breakdown.providerNet,
+        fee_amount: breakdown.providerFee,
+        net_amount: breakdown.providerNet,
+        from_account_id: null,
+        to_account_id: provider.id,
+        lead_id: lead.id,
+        connection_id: lead.connection_id || undefined,
+        stripe_payment_id: transfer.id,
+        description: `Provider payout via Stripe Connect (backfill after onboarding)`,
+      });
+    }
+
+    console.log(`Backfill transfer ${transfer.id} created for provider ${provider.id}: $${(transferCents / 100).toFixed(2)}`);
+  } catch (error) {
+    console.error(`Backfill transfer failed for provider ${provider.id}:`, error);
+    // Leave leads in processing state — admin will need to retry
+  }
+}
+
+async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
+  const leadIdsStr = paymentIntent.metadata?.lead_ids;
+  const buyerId = paymentIntent.metadata?.buyer_id;
+
+  if (!leadIdsStr) {
+    console.log("Payment failed without lead metadata:", paymentIntent.id);
+    return;
+  }
+
+  const leadIds = leadIdsStr.split(",");
+
+  console.log(`Payment ${paymentIntent.id} failed for ${leadIds.length} leads (buyer: ${buyerId})`);
+  console.log(`Failure reason: ${paymentIntent.last_payment_error?.message || "unknown"}`);
+
+  // Leads should still be in "pending" status since checkout wasn't completed
+  // Log for monitoring but no state change needed
 }

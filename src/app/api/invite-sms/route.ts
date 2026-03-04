@@ -63,10 +63,22 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Error sending SMS invite:", error);
 
-    const errorMessage =
-      error instanceof Error && error.message?.includes("is not a valid phone number")
-        ? "That phone number appears to be invalid. Please check and try again."
-        : "Failed to send text invite. Please try again.";
+    // Parse Twilio error for a specific, actionable message
+    const twilioCode = (error as { code?: number })?.code;
+    const twilioMessage = error instanceof Error ? error.message : "";
+
+    let errorMessage: string;
+    if (twilioCode === 21608 || twilioCode === 21610 || twilioMessage.includes("unverified")) {
+      errorMessage = "SMS is temporarily unavailable — our toll-free number is pending verification. Please use the copy link button to share the invite URL directly.";
+    } else if (twilioCode === 21211 || twilioMessage.includes("is not a valid phone number")) {
+      errorMessage = "That phone number appears to be invalid. Please check and try again.";
+    } else if (twilioCode === 21606 || twilioMessage.includes("not a mobile number")) {
+      errorMessage = "That number cannot receive SMS. Please use a mobile number.";
+    } else if (twilioCode === 20003 || twilioMessage.includes("Authenticate")) {
+      errorMessage = "SMS service credentials are invalid. Please contact support.";
+    } else {
+      errorMessage = `SMS failed: ${twilioMessage || "Unknown error"}. Try using the copy link button instead.`;
+    }
 
     return NextResponse.json(
       { success: false, error: errorMessage },
