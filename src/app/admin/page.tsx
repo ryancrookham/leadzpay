@@ -69,11 +69,11 @@ interface StripeStatus {
   email: string | null;
 }
 
-type Tab = "overview" | "users" | "platform";
+type Tab = "users" | "data" | "platform";
 
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, login, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("users");
 
   // Login state
   const [loginEmail, setLoginEmail] = useState("");
@@ -291,7 +291,7 @@ export default function AdminPanel() {
           <>
             {/* Tabs */}
             <div className="flex gap-2 mb-8">
-              {(["overview", "users", "platform"] as const).map((tab) => (
+              {(["users", "data", "platform"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -306,8 +306,94 @@ export default function AdminPanel() {
               ))}
             </div>
 
-            {/* ===== OVERVIEW TAB ===== */}
-            {activeTab === "overview" && (
+            {/* ===== USERS TAB ===== */}
+            {activeTab === "users" && (
+              <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                  <h3 className="text-white font-semibold">All Users ({detailedUsers.length})</h3>
+                </div>
+                {detailedUsers.length === 0 ? (
+                  <div className="px-6 py-8 text-center text-gray-500">No users</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                          <th className="px-6 py-3 text-left">Name</th>
+                          <th className="px-6 py-3 text-left">Role</th>
+                          <th className="px-6 py-3 text-left">Email</th>
+                          <th className="px-6 py-3 text-left">Joined</th>
+                          <th className="px-6 py-3 text-right">Leads</th>
+                          <th className="px-6 py-3 text-right">Volume</th>
+                          <th className="px-6 py-3 text-left">Last Active</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {[...detailedUsers]
+                          .sort((a, b) => {
+                            const roleOrder: Record<string, number> = { buyer: 0, provider: 1, admin: 2 };
+                            const roleDiff = (roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3);
+                            if (roleDiff !== 0) return roleDiff;
+                            return a.displayName.localeCompare(b.displayName);
+                          })
+                          .map((user) => (
+                          <tr key={user.id} className="hover:bg-white/[0.02]">
+                            <td className="px-6 py-3 text-white text-sm">
+                              {user.displayName}
+                              {user.businessName && (
+                                <span className="text-gray-500 text-xs block">{user.businessName}</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-3">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                user.role === "provider"
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : user.role === "admin"
+                                  ? "bg-purple-500/20 text-purple-400"
+                                  : "bg-[#E8822A]/20 text-[#E8822A]"
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 text-gray-300 text-sm">{user.email}</td>
+                            <td className="px-6 py-3 text-gray-400 text-sm">
+                              {new Date(user.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-3 text-white text-sm text-right">{user.totalLeads}</td>
+                            <td className="px-6 py-3 text-white text-sm text-right">
+                              ${Number(user.totalVolume).toFixed(2)}
+                            </td>
+                            <td className="px-6 py-3 text-gray-400 text-sm">
+                              {user.lastLeadAt
+                                ? timeAgo(user.lastLeadAt)
+                                : "Never"}
+                            </td>
+                            <td className="px-6 py-3 text-center">
+                              {user.role !== "admin" && (
+                                <button
+                                  onClick={() => handleToggleUser(user.id, !user.isActive)}
+                                  className={`text-xs font-medium px-3 py-1 rounded transition ${
+                                    user.isActive
+                                      ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                                      : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                  }`}
+                                >
+                                  {user.isActive ? "Suspend" : "Reactivate"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== DATA TAB ===== */}
+            {activeTab === "data" && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <MetricCard label="Total Leads" value={stats.totalLeads} />
@@ -358,85 +444,53 @@ export default function AdminPanel() {
                     </table>
                   )}
                 </div>
-              </div>
-            )}
 
-            {/* ===== USERS TAB ===== */}
-            {activeTab === "users" && (
-              <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
-                <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-                  <h3 className="text-white font-semibold">All Users ({detailedUsers.length})</h3>
-                </div>
-                {detailedUsers.length === 0 ? (
-                  <div className="px-6 py-8 text-center text-gray-500">No users</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-gray-400 text-xs uppercase tracking-wider">
-                          <th className="px-6 py-3 text-left">Name</th>
-                          <th className="px-6 py-3 text-left">Email</th>
-                          <th className="px-6 py-3 text-left">Role</th>
-                          <th className="px-6 py-3 text-left">Joined</th>
-                          <th className="px-6 py-3 text-right">Leads</th>
-                          <th className="px-6 py-3 text-right">Volume</th>
-                          <th className="px-6 py-3 text-left">Last Active</th>
-                          <th className="px-6 py-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {detailedUsers.map((user) => (
-                          <tr key={user.id} className="hover:bg-white/[0.02]">
-                            <td className="px-6 py-3 text-white text-sm">
-                              {user.displayName}
-                              {user.businessName && (
-                                <span className="text-gray-500 text-xs block">{user.businessName}</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-3 text-gray-300 text-sm">{user.email}</td>
-                            <td className="px-6 py-3">
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                user.role === "provider"
-                                  ? "bg-blue-500/20 text-blue-400"
-                                  : user.role === "admin"
-                                  ? "bg-purple-500/20 text-purple-400"
-                                  : "bg-[#E8822A]/20 text-[#E8822A]"
-                              }`}>
-                                {user.role}
-                              </span>
-                            </td>
-                            <td className="px-6 py-3 text-gray-400 text-sm">
-                              {new Date(user.createdAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-3 text-white text-sm text-right">{user.totalLeads}</td>
-                            <td className="px-6 py-3 text-white text-sm text-right">
-                              ${Number(user.totalVolume).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-3 text-gray-400 text-sm">
-                              {user.lastLeadAt
-                                ? timeAgo(user.lastLeadAt)
-                                : "Never"}
-                            </td>
-                            <td className="px-6 py-3 text-center">
-                              {user.role !== "admin" && (
-                                <button
-                                  onClick={() => handleToggleUser(user.id, !user.isActive)}
-                                  className={`text-xs font-medium px-3 py-1 rounded transition ${
-                                    user.isActive
-                                      ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                      : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                                  }`}
-                                >
-                                  {user.isActive ? "Suspend" : "Reactivate"}
-                                </button>
-                              )}
-                            </td>
+                {/* 1099 Tracker — only renders if flagged providers exist */}
+                {(() => {
+                  const providers = detailedUsers.filter(u => u.role === "provider");
+                  const flagged = providers.filter(u => u.yearlyEarnings >= 500);
+                  if (flagged.length === 0) return null;
+                  return (
+                    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-white/10">
+                        <h3 className="text-white font-semibold">1099 Tracker</h3>
+                        <p className="text-gray-500 text-xs mt-1">
+                          Providers at or approaching $600 in yearly earnings (requires Form 1099-NEC)
+                        </p>
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left">Provider</th>
+                            <th className="px-6 py-3 text-left">Email</th>
+                            <th className="px-6 py-3 text-right">Yearly Earnings</th>
+                            <th className="px-6 py-3 text-right">Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {flagged.map((u) => (
+                            <tr key={u.id} className="hover:bg-white/[0.02]">
+                              <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
+                              <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
+                              <td className="px-6 py-3 text-white text-sm text-right">
+                                ${Number(u.yearlyEarnings).toFixed(2)}
+                              </td>
+                              <td className="px-6 py-3 text-right">
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                  u.needs1099
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-yellow-500/20 text-yellow-400"
+                                }`}>
+                                  {u.needs1099 ? "1099 Required" : "Approaching"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -553,58 +607,6 @@ export default function AdminPanel() {
                     </p>
                   </div>
                 )}
-
-                {/* 1099 Tracker */}
-                {(() => {
-                  const providers = detailedUsers.filter(u => u.role === "provider");
-                  const flagged = providers.filter(u => u.yearlyEarnings >= 500);
-                  if (flagged.length === 0) return (
-                    <div className="bg-white/5 rounded-xl border border-white/10 p-6">
-                      <h3 className="text-white font-semibold mb-2">1099 Tracker</h3>
-                      <p className="text-gray-500 text-sm">No providers approaching the $600 threshold this year</p>
-                    </div>
-                  );
-                  return (
-                    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
-                      <div className="px-6 py-4 border-b border-white/10">
-                        <h3 className="text-white font-semibold">1099 Tracker</h3>
-                        <p className="text-gray-500 text-xs mt-1">
-                          Providers at or approaching $600 in yearly earnings (requires Form 1099-NEC)
-                        </p>
-                      </div>
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-gray-400 text-xs uppercase tracking-wider">
-                            <th className="px-6 py-3 text-left">Provider</th>
-                            <th className="px-6 py-3 text-left">Email</th>
-                            <th className="px-6 py-3 text-right">Yearly Earnings</th>
-                            <th className="px-6 py-3 text-right">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {flagged.map((u) => (
-                            <tr key={u.id} className="hover:bg-white/[0.02]">
-                              <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
-                              <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
-                              <td className="px-6 py-3 text-white text-sm text-right">
-                                ${Number(u.yearlyEarnings).toFixed(2)}
-                              </td>
-                              <td className="px-6 py-3 text-right">
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                  u.needs1099
-                                    ? "bg-red-500/20 text-red-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
-                                }`}>
-                                  {u.needs1099 ? "1099 Required" : "Approaching"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })()}
               </div>
             )}
           </>
