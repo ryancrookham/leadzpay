@@ -75,12 +75,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
 
   // Generate form state
   const [label, setLabel] = useState("");
-  const [ratePerLead, setRatePerLead] = useState(50);
   const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
-  const [enableWeeklyCap, setEnableWeeklyCap] = useState(false);
-  const [weeklyCap, setWeeklyCap] = useState(20);
-  const [enableMonthlyCap, setEnableMonthlyCap] = useState(false);
-  const [monthlyCap, setMonthlyCap] = useState(80);
   const [enableExpiry, setEnableExpiry] = useState(false);
   const [expiryDate, setExpiryDate] = useState("");
   const [enableMaxUses, setEnableMaxUses] = useState(false);
@@ -256,10 +251,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
   };
 
   const handleGenerate = async () => {
-    if (ratePerLead < 5 || ratePerLead > 500) {
-      alert("Rate per lead must be between $5 and $500");
-      return;
-    }
+    if (!savedCriteria) return;
     setIsGenerating(true);
     setNewInviteUrl(null);
     try {
@@ -268,10 +260,10 @@ export default function InviteTab({ businessName }: InviteTabProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           label: label || null,
-          ratePerLead,
+          ratePerLead: Number(savedCriteria.payout_per_lead),
           paymentTiming,
-          weeklyCap: enableWeeklyCap ? weeklyCap : null,
-          monthlyCap: enableMonthlyCap ? monthlyCap : null,
+          weeklyCap: savedCriteria.weekly_cap,
+          monthlyCap: savedCriteria.monthly_cap,
           expiresAt: enableExpiry ? new Date(expiryDate).toISOString() : null,
           maxUses: enableMaxUses ? maxUses : null,
           terminationNoticeDays: terminationDays,
@@ -281,10 +273,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       if (data.inviteUrl) {
         setNewInviteUrl(data.inviteUrl);
         setLabel("");
-        setRatePerLead(50);
         setPaymentTiming("per_lead");
-        setEnableWeeklyCap(false);
-        setEnableMonthlyCap(false);
         setEnableExpiry(false);
         setEnableMaxUses(false);
         await fetchTokens();
@@ -594,124 +583,91 @@ export default function InviteTab({ businessName }: InviteTabProps) {
           Create a unique link to invite providers. They'll see your business name and earn rate when they sign up.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Link Label (internal)</label>
-            <input
-              type="text"
-              value={label}
-              onChange={e => setLabel(e.target.value)}
-              placeholder="e.g. Facebook Ads Campaign"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-            />
+        {!savedCriteria && !criteriaLoading ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-amber-800 text-sm font-medium">Set your Lead Criteria above before generating invite links.</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rate Per Lead ($)</label>
-            <input
-              type="number"
-              value={ratePerLead}
-              onChange={e => setRatePerLead(Number(e.target.value))}
-              min={5}
-              max={500}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Timing</label>
-            <select
-              value={paymentTiming}
-              onChange={e => setPaymentTiming(e.target.value as typeof paymentTiming)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+        ) : savedCriteria ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Link Label (internal)</label>
+                <input
+                  type="text"
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  placeholder="e.g. Facebook Ads Campaign"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Timing</label>
+                <select
+                  value={paymentTiming}
+                  onChange={e => setPaymentTiming(e.target.value as typeof paymentTiming)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                >
+                  <option value="per_lead">Per Lead</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Termination Notice (days)</label>
+                <input
+                  type="number"
+                  value={terminationDays}
+                  onChange={e => setTerminationDays(Number(e.target.value))}
+                  min={0}
+                  max={90}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                />
+              </div>
+            </div>
+
+            {/* Optional constraints */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={enableExpiry} onChange={e => setEnableExpiry(e.target.checked)} className="rounded" />
+                  Set Expiry Date
+                </label>
+                {enableExpiry && (
+                  <input
+                    type="date"
+                    value={expiryDate}
+                    onChange={e => setExpiryDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={enableMaxUses} onChange={e => setEnableMaxUses(e.target.checked)} className="rounded" />
+                  Limit Max Uses
+                </label>
+                {enableMaxUses && (
+                  <input
+                    type="number"
+                    value={maxUses}
+                    onChange={e => setMaxUses(Number(e.target.value))}
+                    min={1}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="px-6 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition disabled:opacity-50"
             >
-              <option value="per_lead">Per Lead</option>
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Bi-weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Termination Notice (days)</label>
-            <input
-              type="number"
-              value={terminationDays}
-              onChange={e => setTerminationDays(Number(e.target.value))}
-              min={0}
-              max={90}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-            />
-          </div>
-        </div>
-
-        {/* Optional constraints */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={enableWeeklyCap} onChange={e => setEnableWeeklyCap(e.target.checked)} className="rounded" />
-              Set Weekly Lead Cap
-            </label>
-            {enableWeeklyCap && (
-              <input
-                type="number"
-                value={weeklyCap}
-                onChange={e => setWeeklyCap(Number(e.target.value))}
-                min={1}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={enableMonthlyCap} onChange={e => setEnableMonthlyCap(e.target.checked)} className="rounded" />
-              Set Monthly Lead Cap
-            </label>
-            {enableMonthlyCap && (
-              <input
-                type="number"
-                value={monthlyCap}
-                onChange={e => setMonthlyCap(Number(e.target.value))}
-                min={1}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={enableExpiry} onChange={e => setEnableExpiry(e.target.checked)} className="rounded" />
-              Set Expiry Date
-            </label>
-            {enableExpiry && (
-              <input
-                type="date"
-                value={expiryDate}
-                onChange={e => setExpiryDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={enableMaxUses} onChange={e => setEnableMaxUses(e.target.checked)} className="rounded" />
-              Limit Max Uses
-            </label>
-            {enableMaxUses && (
-              <input
-                type="number"
-                value={maxUses}
-                onChange={e => setMaxUses(Number(e.target.value))}
-                min={1}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-        </div>
-
-        <button
-          onClick={handleGenerate}
-          disabled={isGenerating}
-          className="px-6 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition disabled:opacity-50"
-        >
-          {isGenerating ? "Generating..." : "Generate Invite Link"}
-        </button>
+              {isGenerating ? "Generating..." : "Generate Invite Link"}
+            </button>
+          </>
+        ) : null}
 
         {newInviteUrl && (
           <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
