@@ -302,24 +302,6 @@ function ProviderOnboardingContent() {
     }
   };
 
-  const handleSkipStripe = async () => {
-    setAdvancing(true);
-    try {
-      const res = await fetch("/api/provider-onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "skip_stripe" }),
-      });
-      const data = await res.json();
-      if (data.complete) {
-        router.push("/provider-dashboard");
-      }
-    } catch {
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setAdvancing(false);
-    }
-  };
 
   // Loading state
   if (mode === "loading") {
@@ -733,14 +715,6 @@ function ProviderOnboardingContent() {
                 )}
               </button>
 
-              <button
-                onClick={handleSkipStripe}
-                disabled={advancing}
-                className="w-full py-3 border border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                {advancing ? "Processing..." : "Skip for Now"}
-              </button>
-              <p className="text-gray-400 text-xs text-center mt-2">You can always connect your bank account later from your dashboard settings.</p>
             </div>
           )}
         </div>
