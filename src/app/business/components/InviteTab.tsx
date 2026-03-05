@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface InviteToken {
   id: string;
@@ -57,13 +57,13 @@ const BASE_URL = "https://www.womleads.com";
 
 export default function InviteTab({ businessName }: InviteTabProps) {
   const [tokens, setTokens] = useState<InviteToken[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const loadedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   // Criteria state
   const [savedCriteria, setSavedCriteria] = useState<SavedCriteria | null>(null);
   const [savedFields, setSavedFields] = useState<SavedField[]>([]);
-  const [criteriaLoading, setCriteriaLoading] = useState(true);
   const [criteriaEditing, setCriteriaEditing] = useState(false);
   const [criteriaSaving, setCriteriaSaving] = useState(false);
   const [criteriaPayoutPerLead, setCriteriaPayoutPerLead] = useState(50);
@@ -94,7 +94,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
   const [smsResult, setSmsResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchTokens = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/invite-tokens");
@@ -109,13 +108,10 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       }
     } catch {
       setError("Failed to load invite links");
-    } finally {
-      setLoading(false);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCriteria = useCallback(async () => {
-    setCriteriaLoading(true);
     try {
       const res = await fetch("/api/business-criteria");
       const data = await res.json();
@@ -128,14 +124,13 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       }
     } catch {
       // silently fail
-    } finally {
-      setCriteriaLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchTokens();
-    fetchCriteria();
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    Promise.all([fetchTokens(), fetchCriteria()]).then(() => setDataLoaded(true));
   }, [fetchTokens, fetchCriteria]);
 
   const startEditCriteria = () => {
@@ -386,6 +381,16 @@ export default function InviteTab({ businessName }: InviteTabProps) {
     return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[type] || "bg-gray-100 text-gray-600"}`}>{type}</span>;
   };
 
+  if (!dataLoaded) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="bg-gray-200 rounded-xl h-48" />
+        <div className="bg-gray-200 rounded-xl h-36" />
+        <div className="bg-gray-200 rounded-xl h-24" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
 
@@ -396,9 +401,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
           Define your deal terms and what information providers must submit with each lead.
         </p>
 
-        {criteriaLoading ? (
-          <p className="text-gray-400 text-sm">Loading criteria...</p>
-        ) : !savedCriteria && !criteriaEditing ? (
+        {!savedCriteria && !criteriaEditing ? (
           <button
             onClick={startEditCriteria}
             className="px-6 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition"
@@ -623,7 +626,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
           Create a unique link to invite providers. They'll see your business name and earn rate when they sign up.
         </p>
 
-        {!savedCriteria && !criteriaLoading ? (
+        {!savedCriteria ? (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-amber-800 text-sm font-medium">Set your Lead Criteria above before generating invite links.</p>
           </div>
@@ -708,9 +711,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Your Invite Links</h3>
 
-        {loading ? (
-          <p className="text-gray-400 text-sm">Loading...</p>
-        ) : error ? (
+        {error ? (
           <p className="text-red-500 text-sm">{error}</p>
         ) : tokens.length === 0 ? (
           <p className="text-gray-400 text-sm">No invite links yet. Generate one above to start inviting providers.</p>
@@ -730,7 +731,7 @@ export default function InviteTab({ businessName }: InviteTabProps) {
               </thead>
               <tbody>
                 {tokens.map(token => {
-                  const inviteUrl = `${BASE_URL}/auth/register?token=${token.token}`;
+                  const inviteUrl = `${BASE_URL}/provider-onboarding?token=${token.token}`;
                   const usesDisplay = token.max_uses !== null
                     ? `${token.use_count}/${token.max_uses}`
                     : `${token.use_count}/∞`;

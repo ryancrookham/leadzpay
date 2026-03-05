@@ -121,12 +121,6 @@ export interface ProviderRegistrationData {
   phone?: string;
   location?: string;
   profilePictureUrl?: string;
-  payoutMethod?: 'venmo' | 'paypal' | 'cashapp' | 'bank';
-  payoutVenmo?: string;
-  payoutPaypal?: string;
-  payoutCashapp?: string;
-  payoutBankRouting?: string;
-  payoutBankAccount?: string;
   inviteToken?: string;
   inviteCode?: string;
 }

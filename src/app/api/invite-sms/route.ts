@@ -31,8 +31,8 @@ export async function POST(request: NextRequest) {
 
     // Build the signup URL — embed invite token if provided
     const signupUrl = inviteToken
-      ? `https://www.womleads.com/auth/register?token=${inviteToken}`
-      : "https://www.womleads.com/auth/register?role=provider";
+      ? `https://www.womleads.com/provider-onboarding?token=${inviteToken}`
+      : "https://www.womleads.com/provider-onboarding";
 
     const earningLine = ratePerLead ? ` Earn $${ratePerLead}/lead.` : "";
     const messageBody = `WOMLeads: ${senderName} invited you to join their provider network!${earningLine} Sign up here: ${signupUrl}`;

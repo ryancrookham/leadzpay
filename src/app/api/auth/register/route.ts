@@ -8,6 +8,7 @@ import {
   getInviteByCode,
   markInviteAccepted,
   getActiveBusinessCriteria,
+  updateProviderOnboardingStep,
 } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
@@ -26,12 +27,6 @@ export async function POST(request: NextRequest) {
       businessType,
       licensedStates,
       profilePictureUrl,
-      payoutMethod,
-      payoutVenmo,
-      payoutPaypal,
-      payoutCashapp,
-      payoutBankRouting,
-      payoutBankAccount,
       inviteToken,
       inviteCode,
     } = body;
@@ -153,6 +148,10 @@ export async function POST(request: NextRequest) {
 
       await incrementInviteTokenUseCount(tokenRow.id);
       await createInviteTokenUse(tokenRow.id, result.user.id, connection.id);
+
+      // Steps 1-3 (terms, criteria, profile) were completed pre-registration
+      // Set onboarding to step 4 (Stripe setup)
+      await updateProviderOnboardingStep(result.user.id, 4);
     }
 
     // Handle invite code — create connection with pre-negotiated terms

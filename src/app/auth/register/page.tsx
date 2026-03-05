@@ -6,8 +6,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
-type PayoutMethod = "venmo" | "paypal" | "cashapp" | "bank";
-
 function RegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -17,19 +15,6 @@ function RegisterContent() {
   const requestedRole = searchParams.get("role");
   const tokenParam = searchParams.get("token");
   const inviteCodeParam = searchParams.get("invite");
-
-  // Invite token state (from invite_tokens system)
-  const [inviteData, setInviteData] = useState<{
-    businessName: string;
-    ratePerLead: number;
-    paymentTiming: string;
-    channelName?: string;
-    weeklyLeadCap?: number;
-    monthlyLeadCap?: number;
-    terminationNoticeDays?: number;
-  } | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(!!tokenParam);
 
   // Invite code state (from invites system)
   const [inviteCodeData, setInviteCodeData] = useState<{
@@ -53,13 +38,7 @@ function RegisterContent() {
   const [buyerStripeLoading, setBuyerStripeLoading] = useState(false);
   const [buyerStripeError, setBuyerStripeError] = useState<string | null>(null);
 
-  // Step management
-  const [step, setStep] = useState(1);
-  // Provider form step: terms → account → stripe (terms only shown when invite token present)
-  const [formStep, setFormStep] = useState<"terms" | "account" | "stripe">(tokenParam ? "terms" : "account");
-  const [termsDeclined, setTermsDeclined] = useState(false);
-
-  // Step 1: Profile fields
+  // Provider profile fields
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -69,18 +48,17 @@ function RegisterContent() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Step 2: Payout fields
-  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod | null>(null);
-  const [venmoUsername, setVenmoUsername] = useState("");
-  const [paypalEmail, setPaypalEmail] = useState("");
-  const [cashappTag, setCashappTag] = useState("");
-  const [bankRouting, setBankRouting] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
-
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Prevents auth redirect from firing while we're transitioning to the Stripe step
   const [pendingStripeConnect, setPendingStripeConnect] = useState(false);
+
+  // Redirect token-based invites to new provider onboarding flow
+  useEffect(() => {
+    if (tokenParam) {
+      router.replace(`/provider-onboarding?token=${tokenParam}`);
+    }
+  }, [tokenParam, router]);
 
   // Redirect if already authenticated (suppressed while awaiting Stripe Connect step)
   useEffect(() => {
@@ -89,31 +67,6 @@ function RegisterContent() {
       window.location.href = targetUrl;
     }
   }, [isAuthenticated, currentUser, isLoading, pendingStripeConnect]);
-
-  // Validate invite token from URL on mount
-  useEffect(() => {
-    if (!tokenParam) return;
-    setTokenLoading(true);
-    fetch(`/api/invite-tokens/${tokenParam}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.valid) {
-          setInviteData({
-            businessName: data.businessName,
-            ratePerLead: data.ratePerLead,
-            paymentTiming: data.paymentTiming,
-            channelName: data.channelName,
-            weeklyLeadCap: data.weeklyLeadCap,
-            monthlyLeadCap: data.monthlyLeadCap,
-            terminationNoticeDays: data.terminationNoticeDays,
-          });
-        } else {
-          setInviteError(data.error || "This invite link is invalid or has expired.");
-        }
-      })
-      .catch(() => setInviteError("Failed to validate invite link. Please try again."))
-      .finally(() => setTokenLoading(false));
-  }, [tokenParam]);
 
   // Verify invite code if present
   useEffect(() => {
@@ -194,9 +147,8 @@ function RegisterContent() {
     }
   };
 
-  const validateStep1 = (): boolean => {
+  const validateProfile = (): boolean => {
     setError("");
-
     if (!username.trim()) {
       setError("Username is required");
       return false;
@@ -236,69 +188,10 @@ function RegisterContent() {
     return true;
   };
 
-  const validateStep2 = (): boolean => {
-    setError("");
-
-    if (!payoutMethod) {
-      setError("Please select a payout method");
-      return false;
-    }
-
-    if (payoutMethod === "venmo" && !venmoUsername.trim()) {
-      setError("Please enter your Venmo username");
-      return false;
-    }
-    if (payoutMethod === "paypal" && !paypalEmail.trim()) {
-      setError("Please enter your PayPal email");
-      return false;
-    }
-    if (payoutMethod === "cashapp" && !cashappTag.trim()) {
-      setError("Please enter your Cash App $cashtag");
-      return false;
-    }
-    if (payoutMethod === "bank") {
-      if (!bankRouting.trim()) {
-        setError("Please enter your bank routing number");
-        return false;
-      }
-      if (!bankAccount.trim()) {
-        setError("Please enter your bank account number");
-        return false;
-      }
-      if (!/^\d{9}$/.test(bankRouting)) {
-        setError("Routing number must be exactly 9 digits");
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  const handleContinue = () => {
-    if (validateStep1()) {
-      setStep(2);
-    }
-  };
-
-  const handleBack = () => {
-    setError("");
-    setStep(1);
-  };
-
-  const formatTiming = (timing: string) => {
-    switch (timing) {
-      case "immediate": return "Immediate";
-      case "weekly": return "Weekly";
-      case "biweekly": return "Bi-Weekly";
-      case "monthly": return "Monthly";
-      default: return timing;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateStep2()) {
+    if (!validateProfile()) {
       return;
     }
 
@@ -314,13 +207,6 @@ function RegisterContent() {
         phone: phone || undefined,
         location: location || undefined,
         profilePictureUrl: profilePicture || undefined,
-        payoutMethod: payoutMethod || undefined,
-        payoutVenmo: payoutMethod === "venmo" ? venmoUsername : undefined,
-        payoutPaypal: payoutMethod === "paypal" ? paypalEmail : undefined,
-        payoutCashapp: payoutMethod === "cashapp" ? cashappTag : undefined,
-        payoutBankRouting: payoutMethod === "bank" ? bankRouting : undefined,
-        payoutBankAccount: payoutMethod === "bank" ? bankAccount : undefined,
-        inviteToken: tokenParam || undefined,
         inviteCode: inviteCodeParam && inviteCodeData?.valid ? inviteCodeParam : undefined,
       });
 
@@ -395,7 +281,8 @@ function RegisterContent() {
     }
   };
 
-  if (isLoading || tokenLoading) {
+  // Show spinner while redirecting token-based invites or loading auth
+  if (isLoading || tokenParam) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
@@ -404,7 +291,7 @@ function RegisterContent() {
   }
 
   // Buyer registration flow
-  if (requestedRole === "buyer" && !tokenParam) {
+  if (requestedRole === "buyer") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
@@ -549,24 +436,7 @@ function RegisterContent() {
     );
   }
 
-  // If token was provided but is invalid, show error and block registration
-  if (tokenParam && inviteError) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl border border-gray-200 max-w-md w-full shadow-lg text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Invalid Invite Link</h2>
-          <p className="text-gray-500 mb-6">{inviteError}</p>
-          <Link href="/auth/login" className="text-[#E8822A] hover:underline font-medium">Go to Login</Link>
-        </div>
-      </div>
-    );
-  }
-
+  // Provider registration form (single step — direct or invite-code based)
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
       {/* Watermark Logo Background */}
@@ -594,38 +464,9 @@ function RegisterContent() {
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
-            {step === 1 ? "Create Your Profile" : "Set Up Your Payouts"}
+            Create Your Profile
           </h1>
-          {inviteData && (
-            <div className="mt-2 mb-1 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-semibold text-sm">
-                Join {inviteData.businessName}&apos;s Network — Earn ${inviteData.ratePerLead}/lead
-              </p>
-              {inviteData.channelName && (
-                <p className="text-green-700 text-xs mt-0.5">{inviteData.channelName}</p>
-              )}
-            </div>
-          )}
-          <p className="text-gray-500">
-            Step {step} of 2 {step === 1 ? "- Your provider profile" : "- How would you like to be paid?"}
-          </p>
-        </div>
-
-        {/* Progress indicator */}
-        <div className="flex items-center justify-center mb-6">
-          <div className="flex items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
-              step >= 1 ? "bg-[#E8822A] text-white" : "bg-gray-200 text-gray-500"
-            }`}>
-              1
-            </div>
-            <div className={`w-16 h-1 ${step >= 2 ? "bg-[#E8822A]" : "bg-gray-200"}`}></div>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
-              step >= 2 ? "bg-[#E8822A] text-white" : "bg-gray-200 text-gray-500"
-            }`}>
-              2
-            </div>
-          </div>
+          <p className="text-gray-500">Set up your provider account</p>
         </div>
 
         {/* Invite Code Banner */}
@@ -658,413 +499,164 @@ function RegisterContent() {
           </div>
         )}
 
-        {/* Terms Declined */}
-        {termsDeclined && (
-          <div className="text-center space-y-4">
-            <p className="text-gray-600">You declined the terms. You can close this page or go back to review.</p>
+        {/* Registration Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Profile Picture */}
+          <div className="flex flex-col items-center mb-4">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
             <button
-              onClick={() => { setTermsDeclined(false); setFormStep("terms"); }}
-              className="text-[#E8822A] hover:underline font-medium"
+              type="button"
+              onClick={handleProfilePictureClick}
+              className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-[#E8822A] hover:bg-gray-50 transition group"
             >
-              Review Terms Again
+              {profilePicture ? (
+                <img
+                  src={profilePicture}
+                  alt="Profile preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-center">
+                  <svg className="w-8 h-8 mx-auto text-gray-400 group-hover:text-[#E8822A] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+              )}
             </button>
-          </div>
-        )}
-
-        {/* ── Step 0: Terms Review ── */}
-        {!termsDeclined && formStep === "terms" && inviteData && (
-          <div className="space-y-4">
-            <p className="text-gray-500 text-sm text-center">Review the terms of this deal before creating your account.</p>
-
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="bg-[#E8822A]/5 border-b border-gray-200 px-5 py-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Deal Terms</p>
-              </div>
-              <div className="divide-y divide-gray-100">
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Business</span>
-                  <span className="text-sm font-semibold text-gray-800">{inviteData.businessName}</span>
-                </div>
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Rate per Lead</span>
-                  <span className="text-lg font-bold text-[#E8822A]">${inviteData.ratePerLead}</span>
-                </div>
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Payment Timing</span>
-                  <span className="text-sm font-semibold text-gray-800">{formatTiming(inviteData.paymentTiming)}</span>
-                </div>
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Weekly Lead Cap</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    {inviteData.weeklyLeadCap ? `${inviteData.weeklyLeadCap} leads/week` : "Unlimited"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Monthly Lead Cap</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    {inviteData.monthlyLeadCap ? `${inviteData.monthlyLeadCap} leads/month` : "Unlimited"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center px-5 py-3">
-                  <span className="text-sm text-gray-600">Termination Notice</span>
-                  <span className="text-sm font-semibold text-gray-800">{inviteData.terminationNoticeDays === 0 ? "Anytime" : `${inviteData.terminationNoticeDays} days`}</span>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-xs text-gray-400 text-center px-2">
-              By accepting, you agree to submit leads exclusively to this business under the terms above.
-              Payouts are made via bank transfer through Stripe.
+            <p className="text-sm text-gray-500 mt-2">
+              {profilePicture ? "Click to change photo" : "Add a photo (optional)"}
             </p>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setTermsDeclined(true)}
-                className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium transition hover:bg-gray-50"
-              >
-                Decline
-              </button>
-              <button
-                onClick={() => setFormStep("account")}
-                className="flex-1 py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
-              >
-                Accept Terms & Continue
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
-            </div>
           </div>
-        )}
 
-        {/* Step 1: Profile Information */}
-        {formStep === "account" && step === 1 && (
-          <form onSubmit={(e) => { e.preventDefault(); handleContinue(); }} className="space-y-4">
-            {/* Profile Picture */}
-            <div className="flex flex-col items-center mb-4">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*"
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={handleProfilePictureClick}
-                className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-[#E8822A] hover:bg-gray-50 transition group"
-              >
-                {profilePicture ? (
-                  <img
-                    src={profilePicture}
-                    alt="Profile preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center">
-                    <svg className="w-8 h-8 mx-auto text-gray-400 group-hover:text-[#E8822A] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                )}
-              </button>
-              <p className="text-sm text-gray-500 mt-2">
-                {profilePicture ? "Click to change photo" : "Add a photo (optional)"}
-              </p>
-            </div>
-
-            {/* Username and Email */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="johndoe"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Display Name */}
+          {/* Username and Email */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-gray-700 text-sm font-medium mb-2">
-                Display Name
+                Username
               </label>
               <input
                 type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                placeholder="John Doe"
+                placeholder="johndoe"
                 required
               />
             </div>
-
-            {/* Phone and Location */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Phone <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="(555) 123-4567"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Location <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="Philadelphia, PA"
-                />
-              </div>
-            </div>
-
-            {/* Password Fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="Min. 8 characters"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                  placeholder="Confirm password"
-                  required
-                />
-              </div>
-            </div>
-
-            <p className="text-xs text-gray-400">
-              Password must be at least 8 characters with at least one letter and one number.
-            </p>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition flex items-center justify-center gap-2 mt-6"
-            >
-              Continue
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </button>
-          </form>
-        )}
-
-        {/* Step 2: Payout Setup */}
-        {formStep === "account" && step === 2 && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <p className="text-gray-600 text-sm mb-4">
-              Choose how you&apos;d like to receive payments for your leads.
-            </p>
-
-            {/* Venmo Option */}
-            <div
-              className={`border rounded-lg p-4 cursor-pointer transition ${
-                payoutMethod === "venmo"
-                  ? "border-[#E8822A] bg-[#E8822A]/5"
-                  : "border-gray-200 hover:border-gray-300"
-              }`}
-              onClick={() => setPayoutMethod("venmo")}
-            >
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="payoutMethod"
-                  checked={payoutMethod === "venmo"}
-                  onChange={() => setPayoutMethod("venmo")}
-                  className="w-4 h-4 text-[#E8822A]"
-                />
-                <span className="ml-3 font-medium text-gray-900">Venmo</span>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Email
               </label>
-              {payoutMethod === "venmo" && (
-                <div className="mt-3 ml-7">
-                  <input
-                    type="text"
-                    value={venmoUsername}
-                    onChange={(e) => setVenmoUsername(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                    placeholder="@john-doe"
-                  />
-                </div>
-              )}
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+                placeholder="you@example.com"
+                required
+              />
             </div>
+          </div>
 
-            {/* PayPal Option */}
-            <div
-              className={`border rounded-lg p-4 cursor-pointer transition ${
-                payoutMethod === "paypal"
-                  ? "border-[#E8822A] bg-[#E8822A]/5"
-                  : "border-gray-200 hover:border-gray-300"
-              }`}
-              onClick={() => setPayoutMethod("paypal")}
-            >
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="payoutMethod"
-                  checked={payoutMethod === "paypal"}
-                  onChange={() => setPayoutMethod("paypal")}
-                  className="w-4 h-4 text-[#E8822A]"
-                />
-                <span className="ml-3 font-medium text-gray-900">PayPal</span>
+          {/* Display Name */}
+          <div>
+            <label className="block text-gray-700 text-sm font-medium mb-2">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+              placeholder="John Doe"
+              required
+            />
+          </div>
+
+          {/* Phone and Location */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Phone <span className="text-gray-400">(optional)</span>
               </label>
-              {payoutMethod === "paypal" && (
-                <div className="mt-3 ml-7">
-                  <input
-                    type="email"
-                    value={paypalEmail}
-                    onChange={(e) => setPaypalEmail(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                    placeholder="paypal@example.com"
-                  />
-                </div>
-              )}
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+                placeholder="(555) 123-4567"
+              />
             </div>
-
-            {/* CashApp Option */}
-            <div
-              className={`border rounded-lg p-4 cursor-pointer transition ${
-                payoutMethod === "cashapp"
-                  ? "border-[#E8822A] bg-[#E8822A]/5"
-                  : "border-gray-200 hover:border-gray-300"
-              }`}
-              onClick={() => setPayoutMethod("cashapp")}
-            >
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="payoutMethod"
-                  checked={payoutMethod === "cashapp"}
-                  onChange={() => setPayoutMethod("cashapp")}
-                  className="w-4 h-4 text-[#E8822A]"
-                />
-                <span className="ml-3 font-medium text-gray-900">Cash App</span>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Location <span className="text-gray-400">(optional)</span>
               </label>
-              {payoutMethod === "cashapp" && (
-                <div className="mt-3 ml-7">
-                  <input
-                    type="text"
-                    value={cashappTag}
-                    onChange={(e) => setCashappTag(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                    placeholder="$johndoe"
-                  />
-                </div>
-              )}
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+                placeholder="Philadelphia, PA"
+              />
             </div>
+          </div>
 
-            {/* Bank Account Option */}
-            <div
-              className={`border rounded-lg p-4 cursor-pointer transition ${
-                payoutMethod === "bank"
-                  ? "border-[#E8822A] bg-[#E8822A]/5"
-                  : "border-gray-200 hover:border-gray-300"
-              }`}
-              onClick={() => setPayoutMethod("bank")}
-            >
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="payoutMethod"
-                  checked={payoutMethod === "bank"}
-                  onChange={() => setPayoutMethod("bank")}
-                  className="w-4 h-4 text-[#E8822A]"
-                />
-                <span className="ml-3 font-medium text-gray-900">Bank Account</span>
+          {/* Password Fields */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Password
               </label>
-              {payoutMethod === "bank" && (
-                <div className="mt-3 ml-7 space-y-3">
-                  <input
-                    type="text"
-                    value={bankRouting}
-                    onChange={(e) => setBankRouting(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                    placeholder="Routing Number (9 digits)"
-                  />
-                  <input
-                    type="text"
-                    value={bankAccount}
-                    onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
-                    placeholder="Account Number"
-                  />
-                </div>
-              )}
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+                placeholder="Min. 8 characters"
+                required
+              />
             </div>
+            <div>
+              <label className="block text-gray-700 text-sm font-medium mb-2">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition"
+                placeholder="Confirm password"
+                required
+              />
+            </div>
+          </div>
 
-            {/* Buttons */}
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                onClick={handleBack}
-                disabled={isSubmitting}
-                className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium transition hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                </svg>
-                Back
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Creating...
-                  </>
-                ) : (
-                  "Complete Registration"
-                )}
-              </button>
-            </div>
-          </form>
-        )}
+          <p className="text-xs text-gray-400">
+            Password must be at least 8 characters with at least one letter and one number.
+          </p>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Creating...
+              </>
+            ) : (
+              "Create Account"
+            )}
+          </button>
+        </form>
 
         <div className="mt-6 text-center">
           <p className="text-gray-500 text-sm">

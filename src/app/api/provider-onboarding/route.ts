@@ -4,11 +4,7 @@ import {
   getProviderOnboardingState,
   getActiveConnectionForProvider,
   getBusinessCriteriaWithFields,
-  createTermsAcceptance,
-  createCriteriaAcknowledgment,
-  updateProviderOnboardingStep,
   completeProviderOnboarding,
-  updateUser,
   getUserById,
 } from '@/lib/db';
 
@@ -79,65 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Onboarding already complete' }, { status: 400 });
   }
 
-  const connection = await getActiveConnectionForProvider(session.user.id);
-
   switch (action) {
-    case 'accept_terms': {
-      if (state.step !== 1) {
-        return NextResponse.json({ error: 'Invalid step for this action' }, { status: 400 });
-      }
-      if (!connection) {
-        return NextResponse.json({ error: 'No active connection' }, { status: 400 });
-      }
-      const criteriaResult = await getBusinessCriteriaWithFields(connection.buyer_id);
-      if (criteriaResult) {
-        await createTermsAcceptance({
-          provider_id: session.user.id,
-          business_id: connection.buyer_id,
-          criteria_id: criteriaResult.criteria.id,
-        });
-      }
-      await updateProviderOnboardingStep(session.user.id, 2);
-      return NextResponse.json({ step: 2 });
-    }
-
-    case 'acknowledge_criteria': {
-      if (state.step !== 2) {
-        return NextResponse.json({ error: 'Invalid step for this action' }, { status: 400 });
-      }
-      if (!connection) {
-        return NextResponse.json({ error: 'No active connection' }, { status: 400 });
-      }
-      const criteriaResult = await getBusinessCriteriaWithFields(connection.buyer_id);
-      if (criteriaResult) {
-        await createCriteriaAcknowledgment({
-          provider_id: session.user.id,
-          business_id: connection.buyer_id,
-          criteria_id: criteriaResult.criteria.id,
-        });
-      }
-      await updateProviderOnboardingStep(session.user.id, 3);
-      return NextResponse.json({ step: 3 });
-    }
-
-    case 'update_profile': {
-      if (state.step !== 3) {
-        return NextResponse.json({ error: 'Invalid step for this action' }, { status: 400 });
-      }
-      const { displayName, phone, location, profilePictureUrl } = body;
-      if (!displayName || !phone || !location) {
-        return NextResponse.json({ error: 'Display name, phone, and location are required' }, { status: 400 });
-      }
-      await updateUser(session.user.id, {
-        display_name: displayName,
-        phone,
-        location,
-        profile_picture_url: profilePictureUrl || undefined,
-      } as Partial<import('@/lib/db').DbUser>);
-      await updateProviderOnboardingStep(session.user.id, 4);
-      return NextResponse.json({ step: 4 });
-    }
-
     case 'complete_stripe': {
       if (state.step !== 4) {
         return NextResponse.json({ error: 'Invalid step for this action' }, { status: 400 });

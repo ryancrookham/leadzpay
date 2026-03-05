@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       expires_at: expiresAt || null,
     });
 
-    const inviteUrl = `https://www.womleads.com/auth/register?token=${token}`;
+    const inviteUrl = `https://www.womleads.com/provider-onboarding?token=${token}`;
 
     return NextResponse.json({ token: inviteToken, inviteUrl }, { status: 201 });
   } catch (error) {
