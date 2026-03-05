@@ -448,23 +448,28 @@ function ProviderOnboardingContent() {
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-sm text-blue-800">
-                <ul className="list-disc list-inside space-y-1 text-blue-700">
-                  <li>You will be paid the rate above for each qualified lead you submit.</li>
-                  <li>Leads must contain accurate, real customer information.</li>
-                  <li>Payouts are made via bank transfer through Stripe.</li>
-                </ul>
+              <div className="flex flex-col gap-2 mb-6">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="rounded w-5 h-5 text-[#E8822A] mt-0.5 flex-shrink-0"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">
+                    I accept these terms and the{' '}
+                    <a
+                      href="/WOML_Provider_Agreement.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-orange-500 underline hover:text-orange-600 font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      WOML Provider Agreement ↗
+                    </a>
+                  </span>
+                </label>
               </div>
-
-              <label className="flex items-center gap-3 cursor-pointer mb-6">
-                <input
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={e => setTermsAccepted(e.target.checked)}
-                  className="rounded w-5 h-5 text-[#E8822A]"
-                />
-                <span className="text-sm text-gray-700 font-medium">I accept these terms</span>
-              </label>
 
               <div className="flex gap-3">
                 <button
