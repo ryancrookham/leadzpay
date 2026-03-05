@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 
-interface InviteToken {
+export interface InviteToken {
   id: string;
   token: string;
   label: string | null;
@@ -29,7 +29,7 @@ interface CriteriaField {
   sortOrder: number;
 }
 
-interface SavedCriteria {
+export interface SavedCriteria {
   id: string;
   payout_per_lead: number;
   weekly_cap: number | null;
@@ -39,7 +39,7 @@ interface SavedCriteria {
   is_active: boolean;
 }
 
-interface SavedField {
+export interface SavedField {
   id: string;
   field_type: "PHOTO" | "TEXT" | "BINARY";
   label: string;
@@ -51,19 +51,21 @@ interface SavedField {
 
 interface InviteTabProps {
   businessName: string;
+  initialTokens: InviteToken[];
+  initialCriteria: SavedCriteria | null;
+  initialFields: SavedField[];
 }
 
 const BASE_URL = "https://www.womleads.com";
 
-export default function InviteTab({ businessName }: InviteTabProps) {
-  const [tokens, setTokens] = useState<InviteToken[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const loadedRef = useRef(false);
+export default function InviteTab({ businessName, initialTokens, initialCriteria, initialFields }: InviteTabProps) {
+  const [tokens, setTokens] = useState<InviteToken[]>(initialTokens);
+  const [dataLoaded] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Criteria state
-  const [savedCriteria, setSavedCriteria] = useState<SavedCriteria | null>(null);
-  const [savedFields, setSavedFields] = useState<SavedField[]>([]);
+  const [savedCriteria, setSavedCriteria] = useState<SavedCriteria | null>(initialCriteria);
+  const [savedFields, setSavedFields] = useState<SavedField[]>(initialFields);
   const [criteriaEditing, setCriteriaEditing] = useState(false);
   const [criteriaSaving, setCriteriaSaving] = useState(false);
   const [criteriaPayoutPerLead, setCriteriaPayoutPerLead] = useState(50);
@@ -126,12 +128,6 @@ export default function InviteTab({ businessName }: InviteTabProps) {
       // silently fail
     }
   }, []);
-
-  useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-    Promise.all([fetchTokens(), fetchCriteria()]).then(() => setDataLoaded(true));
-  }, [fetchTokens, fetchCriteria]);
 
   const startEditCriteria = () => {
     if (savedCriteria) {

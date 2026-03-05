@@ -11,7 +11,7 @@ import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import BusinessRevenueChart from "./components/BusinessRevenueChart";
-import InviteTab from "./components/InviteTab";
+import InviteTab, { type InviteToken, type SavedCriteria, type SavedField } from "./components/InviteTab";
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -112,15 +112,37 @@ function BusinessPortalContent() {
     sendInvitationToProvider,
   } = useConnections();
 
-  // Fetch leads from database API (not localStorage)
+  // Fetch all dashboard data from unified endpoint
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
   const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
   const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
+  const [inviteTokens, setInviteTokens] = useState<InviteToken[]>([]);
+  const [savedCriteria, setSavedCriteria] = useState<SavedCriteria | null>(null);
+  const [savedFields, setSavedFields] = useState<SavedField[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/business/dashboard", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) {
+        setDbLeads(data.leads);
+        setFeeSettings(data.feeSettings);
+        setInviteTokens(data.inviteTokens);
+        setSavedCriteria(data.criteria);
+        setSavedFields(data.criteriaFields);
+      }
+    } catch (err) {
+      console.error("Failed to fetch dashboard:", err);
+    } finally {
+      setDbLeadsLoading(false);
+    }
+  }, []);
+
+  // Also keep a leads-only refetcher for post-payment refresh
   const fetchLeads = useCallback(async () => {
     try {
       const res = await fetch("/api/leads", { cache: "no-store" });
@@ -130,31 +152,25 @@ function BusinessPortalContent() {
       }
     } catch (err) {
       console.error("Failed to fetch leads:", err);
-    } finally {
-      setDbLeadsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (!currentUser) return;
-    fetchLeads();
-    // Fetch platform fee settings
-    fetch("/api/platform-fees").then(r => r.json()).then(d => {
-      if (d.success) setFeeSettings(d.settings);
-    }).catch(() => {});
-  }, [currentUser, fetchLeads]);
+    fetchDashboard();
+  }, [currentUser, fetchDashboard]);
 
-  // Re-fetch leads when tab regains focus
+  // Re-fetch when tab regains focus
   useEffect(() => {
     if (!currentUser) return;
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        fetchLeads();
+        fetchDashboard();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [currentUser, fetchLeads]);
+  }, [currentUser, fetchDashboard]);
 
   // Handle Stripe payment return
   useEffect(() => {
@@ -1408,7 +1424,12 @@ function BusinessPortalContent() {
         {/* Invite Tab */}
         {activeTab === "invite" && (
           <TabErrorBoundary tabName="Invite">
-            <InviteTab businessName={currentBuyer?.businessName || "Your Business"} />
+            <InviteTab
+              businessName={currentBuyer?.businessName || "Your Business"}
+              initialTokens={inviteTokens}
+              initialCriteria={savedCriteria}
+              initialFields={savedFields}
+            />
           </TabErrorBoundary>
         )}
       </div>
