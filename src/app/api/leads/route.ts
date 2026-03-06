@@ -11,6 +11,9 @@ import {
   getPlatformSettings,
   getActiveBusinessCriteria,
   getCriteriaFields,
+  ensureDuplicateCheckColumns,
+  checkDuplicateLead,
+  hashIdentifier,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
@@ -50,6 +53,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "A valid email address is required (e.g. name@gmail.com)" },
         { status: 400 }
+      );
+    }
+
+    // Duplicate detection — hash email and phone, check platform-wide
+    await ensureDuplicateCheckColumns();
+    const emailHash = customerData.email
+      ? await hashIdentifier(customerData.email)
+      : null;
+    const phoneHash = customerData.phone
+      ? await hashIdentifier(customerData.phone)
+      : null;
+    const duplicateLeadId = await checkDuplicateLead(emailHash, phoneHash);
+    if (duplicateLeadId) {
+      return NextResponse.json(
+        {
+          error: "Duplicate lead detected. This individual has already been submitted on the WOML platform and cannot be submitted again.",
+          duplicateLeadId,
+        },
+        { status: 409 }
       );
     }
 
@@ -111,6 +133,8 @@ export async function POST(request: NextRequest) {
       connection_id: connectionId,
       customer_data_encrypted: encrypted,
       customer_data_iv: iv,
+      customer_email_hash: emailHash ?? undefined,
+      customer_phone_hash: phoneHash ?? undefined,
       customer_state: vehicleData?.state || customerData?.state || null,
       vehicle_year: vehicleData?.year || null,
       vehicle_make: vehicleData?.make || null,

@@ -41,7 +41,7 @@ interface LeadFormData {
 }
 
 // Form step type for lead submission
-type FormStep = "form" | "success";
+type FormStep = "form" | "success" | "duplicate";
 
 type Tab = "dashboard" | "connection" | "leads" | "earnings" | "profile";
 
@@ -780,6 +780,12 @@ function ConnectionTab({
       });
       const apiData = await apiRes.json();
       if (!apiData.success) {
+        if (apiRes.status === 409) {
+          // Duplicate lead detected
+          setFormStep("duplicate");
+          setIsSubmittingLead(false);
+          return;
+        }
         alert("Lead submission failed: " + (apiData.error || "Unknown error. Please try again."));
         setIsSubmittingLead(false);
         return;
@@ -845,6 +851,33 @@ function ConnectionTab({
           </div>
         )}
 
+        {/* Duplicate Lead Flagged */}
+        {formStep === "duplicate" && (
+          <div className="bg-red-50 border border-red-300 rounded-xl p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xl font-bold text-red-800">Duplicate Lead Flagged</p>
+                <p className="text-red-700 text-sm mt-1">This individual has already been submitted on the WOML platform. Duplicate leads are never compensable — the same person cannot be paid for twice, regardless of timing.</p>
+              </div>
+            </div>
+            <div className="bg-red-100 rounded-lg p-4 mb-4 text-sm text-red-800">
+              <p className="font-semibold mb-1">Why was this flagged?</p>
+              <p>The email address or phone number you entered matches a lead that already exists in the system. This applies platform-wide — not just to your submissions.</p>
+            </div>
+            <button
+              onClick={() => { setFormStep("form"); setIsSubmittingLead(false); }}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition"
+            >
+              Go Back &amp; Edit
+            </button>
+          </div>
+        )}
+
         {/* Success Message */}
         {leadSubmitted && formStep === "success" && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
@@ -870,7 +903,7 @@ function ConnectionTab({
         )}
 
         {/* Connection Info Card - Always visible */}
-        {formStep !== "success" && (
+        {formStep !== "success" && formStep !== "duplicate" && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
             {/* Check lead caps */}
             {(() => {
@@ -984,7 +1017,7 @@ function ConnectionTab({
         )}
 
         {/* Lead Submission Form */}
-        {showLeadForm && formStep !== "success" && (
+        {showLeadForm && formStep !== "success" && formStep !== "duplicate" && (
           <div className="bg-white rounded-xl border-2 border-[#E8822A] p-6 shadow-lg">
             {/* Header with close button */}
             <div className="flex items-center justify-between mb-6">
