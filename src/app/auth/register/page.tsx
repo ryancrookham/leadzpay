@@ -37,6 +37,7 @@ function RegisterContent() {
   const [buyerFormStep, setBuyerFormStep] = useState<"account" | "stripe">("account");
   const [buyerStripeLoading, setBuyerStripeLoading] = useState(false);
   const [buyerStripeError, setBuyerStripeError] = useState<string | null>(null);
+  const [agreementChecked, setAgreementChecked] = useState(false);
 
   // Provider profile fields
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -239,6 +240,7 @@ function RegisterContent() {
       return;
     }
     setBuyerSubmitting(true);
+    setPendingStripeConnect(true); // MUST be set before async call to prevent redirect race
     try {
       const result = await registerBuyer({
         email: buyerEmail,
@@ -251,12 +253,13 @@ function RegisterContent() {
         complianceAcknowledged: true,
       });
       if (result.success) {
-        setPendingStripeConnect(true);
         setBuyerFormStep("stripe");
       } else {
+        setPendingStripeConnect(false);
         setBuyerError(result.error || "Registration failed");
       }
     } catch {
+      setPendingStripeConnect(false);
       setBuyerError("Registration failed. Please try again.");
     } finally {
       setBuyerSubmitting(false);
@@ -267,6 +270,9 @@ function RegisterContent() {
     setBuyerStripeLoading(true);
     setBuyerStripeError(null);
     try {
+      // Record business agreement acceptance first
+      await fetch("/api/stripe/record-agreement", { method: "POST" });
+
       const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
       const data = await res.json();
       if (data.setupUrl) {
@@ -399,9 +405,26 @@ function RegisterContent() {
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerStripeError}</div>
               )}
 
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="business-agreement"
+                  checked={agreementChecked}
+                  onChange={(e) => setAgreementChecked(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-[#E8822A] cursor-pointer flex-shrink-0"
+                />
+                <label htmlFor="business-agreement" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
+                  I have read and agree to the{" "}
+                  <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-[#E8822A] hover:underline font-medium">
+                    WOML Business Agreement
+                  </a>
+                  . I understand this is a binding legal agreement governing my use of the platform.
+                </label>
+              </div>
+
               <button
                 onClick={handleConnectBuyerStripe}
-                disabled={buyerStripeLoading}
+                disabled={buyerStripeLoading || !agreementChecked}
                 className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {buyerStripeLoading ? (
@@ -415,16 +438,6 @@ function RegisterContent() {
                   </>
                 )}
               </button>
-
-              <p className="text-xs text-gray-400 text-center">
-                You can also complete this from your dashboard settings later.{" "}
-                <button
-                  onClick={() => { window.location.href = "/business"; }}
-                  className="text-[#E8822A] hover:underline"
-                >
-                  Skip for now
-                </button>
-              </p>
             </div>
           )}
 

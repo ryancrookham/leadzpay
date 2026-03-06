@@ -121,6 +121,12 @@ function BusinessPortalContent() {
   const [savedFields, setSavedFields] = useState<SavedField[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [batchMarkingPaid, setBatchMarkingPaid] = useState(false);
+
+  // Stripe setup enforcement
+  const [stripeSetupChecked, setStripeSetupChecked] = useState(false);
+  const [stripeSetupComplete, setStripeSetupComplete] = useState(true); // default true to avoid flash
+  const [stripeOverlayLoading, setStripeOverlayLoading] = useState(false);
+  const [overlayAgreementChecked, setOverlayAgreementChecked] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
@@ -159,6 +165,20 @@ function BusinessPortalContent() {
     if (!currentUser) return;
     fetchDashboard();
   }, [currentUser, fetchDashboard]);
+
+  // Check Stripe setup status for buyer
+  useEffect(() => {
+    if (!currentUser) return;
+    fetch("/api/stripe/setup-status")
+      .then(r => r.json())
+      .then(data => {
+        setStripeSetupComplete(data.complete === true);
+        setStripeSetupChecked(true);
+      })
+      .catch(() => {
+        setStripeSetupChecked(true); // Allow through on error to avoid permanent lockout
+      });
+  }, [currentUser]);
 
   // Re-fetch when tab regains focus
   useEffect(() => {
@@ -455,12 +475,82 @@ function BusinessPortalContent() {
   };
 
   // Show branded loading state during auth check
-  if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser)) {
+  if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser) || !stripeSetupChecked) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-orange.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Block dashboard access if Stripe setup is not complete
+  if (!stripeSetupComplete) {
+    const handleOverlayConnect = async () => {
+      setStripeOverlayLoading(true);
+      try {
+        await fetch("/api/stripe/record-agreement", { method: "POST" });
+        const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
+        const data = await res.json();
+        if (data.setupUrl) {
+          window.location.href = data.setupUrl;
+        } else {
+          setStripeOverlayLoading(false);
+        }
+      } catch {
+        setStripeOverlayLoading(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 max-w-md w-full p-8 text-center">
+          <Image src="/woml-orange.png" alt="WOML" width={180} height={54} className="mx-auto mb-6" priority />
+          <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">One more step</h2>
+          <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+            Connect your bank to start receiving leads and paying providers.
+          </p>
+
+          <div className="flex items-start gap-3 text-left mb-6">
+            <input
+              type="checkbox"
+              id="overlay-agreement"
+              checked={overlayAgreementChecked}
+              onChange={(e) => setOverlayAgreementChecked(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-[#E8822A] cursor-pointer flex-shrink-0"
+            />
+            <label htmlFor="overlay-agreement" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
+              I have read and agree to the{" "}
+              <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-[#E8822A] hover:underline font-medium">
+                WOML Business Agreement
+              </a>
+              . I understand this is a binding legal agreement governing my use of the platform.
+            </label>
+          </div>
+
+          <button
+            onClick={handleOverlayConnect}
+            disabled={stripeOverlayLoading || !overlayAgreementChecked}
+            className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {stripeOverlayLoading ? (
+              <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Connecting...</>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                Connect Business Bank Account
+              </>
+            )}
+          </button>
         </div>
       </div>
     );
@@ -3984,7 +4074,116 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         >
           {saving ? "Saving..." : "Save Settings"}
         </button>
+
+        {/* ── Close Account ─────────────────────────────────────────────── */}
+        <div className="border-t border-red-100 pt-6 mt-2">
+          <h4 className="text-sm font-semibold text-red-700 mb-2">Close Account</h4>
+          <p className="text-gray-500 text-sm mb-4">
+            Closing your account deactivates all provider invite links and your channel. You remain responsible for any leads accepted before closure. Account closure is only available once all outstanding lead payments have been completed.
+          </p>
+          <CloseAccountButton buyerId={currentBuyer?.id || null} />
+        </div>
       </div>
+    </div>
+  );
+}
+
+function CloseAccountButton({ buyerId }: { buyerId: string | null }) {
+  const [checking, setChecking] = useState(false);
+  const [unpaidCount, setUnpaidCount] = useState<number | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [closed, setClosed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCheckAndClose = async () => {
+    if (!buyerId) return;
+    setChecking(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account/close", { method: "GET" });
+      const data = await res.json();
+      if (!data.success) { setError(data.error || "Failed to check account status."); setChecking(false); return; }
+      setUnpaidCount(data.unpaidLeads);
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    setClosing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account/close", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setClosed(true);
+        setTimeout(() => { window.location.href = "/"; }, 3000);
+      } else {
+        setError(data.error || "Account closure failed. Please contact womleads@outlook.com.");
+      }
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  if (closed) {
+    return (
+      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+        Your account has been closed. Redirecting...
+      </div>
+    );
+  }
+
+  if (unpaidCount !== null && unpaidCount > 0) {
+    return (
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-amber-800 text-sm font-semibold mb-1">Outstanding Payments</p>
+        <p className="text-amber-700 text-sm mb-3">
+          You have <strong>{unpaidCount} unpaid lead{unpaidCount !== 1 ? "s" : ""}</strong>. All lead payments must be completed before your account can be closed. Please go to your Ledger tab to pay outstanding balances.
+        </p>
+        <button onClick={() => setUnpaidCount(null)} className="text-amber-700 underline text-sm">Dismiss</button>
+      </div>
+    );
+  }
+
+  if (unpaidCount === 0) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-red-800 text-sm font-semibold mb-1">All payments are up to date.</p>
+        <p className="text-red-700 text-sm mb-4">
+          This action is permanent. Your channel will be deactivated, all provider invite links will stop working, and your account data will be locked. This cannot be undone.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={handleConfirmClose}
+            disabled={closing}
+            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          >
+            {closing ? "Closing..." : "Yes, close my account"}
+          </button>
+          <button onClick={() => setUnpaidCount(null)} className="text-gray-500 hover:text-gray-700 text-sm px-4 py-2">
+            Cancel
+          </button>
+        </div>
+        {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleCheckAndClose}
+        disabled={checking}
+        className="border border-red-300 text-red-600 hover:bg-red-50 px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+      >
+        {checking ? "Checking..." : "Request Account Closure"}
+      </button>
+      {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
     </div>
   );
 }

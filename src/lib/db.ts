@@ -45,6 +45,9 @@ export interface DbUser {
   // Onboarding fields
   onboarding_step: number;
   onboarding_complete: boolean;
+  // Buyer Stripe setup
+  buyer_stripe_setup_complete: boolean;
+  business_agreement_accepted_at: string | null;
 }
 
 export type ConnectionStatus =
@@ -614,12 +617,72 @@ export async function updateUserPassword(userId: string, passwordHash: string): 
 // Lead queries
 // ============================================
 
+// ── Duplicate detection ───────────────────────────────────────────────────────
+// We store SHA-256 hashes of normalised email and phone at insert time so we
+// can detect duplicates without ever decrypting stored PII.
+// The migration runs once (ALTER TABLE IF NOT EXISTS is idempotent in Postgres).
+
+export async function ensureDuplicateCheckColumns(): Promise<void> {
+  const sql = getSql();
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_email_hash TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_phone_hash TEXT`;
+}
+
+function normalise(value: string | undefined | null): string {
+  if (!value) return '';
+  return value.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+export async function hashIdentifier(value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalise(value));
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Returns the matching lead ID if a duplicate is found, otherwise null.
+ * Checks email hash and phone hash independently — a match on either is a duplicate.
+ * Scope is platform-wide (all businesses), as per WOML policy.
+ */
+export async function checkDuplicateLead(
+  emailHash: string | null,
+  phoneHash: string | null,
+): Promise<string | null> {
+  if (!emailHash && !phoneHash) return null;
+  const sql = getSql();
+
+  if (emailHash && phoneHash) {
+    const result = await sql`
+      SELECT id FROM leads
+      WHERE customer_email_hash = ${emailHash}
+         OR customer_phone_hash = ${phoneHash}
+      LIMIT 1
+    `;
+    return (result[0] as { id: string } | undefined)?.id ?? null;
+  }
+  if (emailHash) {
+    const result = await sql`
+      SELECT id FROM leads WHERE customer_email_hash = ${emailHash} LIMIT 1
+    `;
+    return (result[0] as { id: string } | undefined)?.id ?? null;
+  }
+  // phoneHash only
+  const result = await sql`
+    SELECT id FROM leads WHERE customer_phone_hash = ${phoneHash} LIMIT 1
+  `;
+  return (result[0] as { id: string } | undefined)?.id ?? null;
+}
+
 export async function createLead(data: {
   provider_id: string;
   buyer_id: string;
   connection_id: string;
   customer_data_encrypted: string;
   customer_data_iv: string;
+  customer_email_hash?: string;
+  customer_phone_hash?: string;
   customer_state?: string;
   vehicle_year?: number;
   vehicle_make?: string;
@@ -633,11 +696,13 @@ export async function createLead(data: {
     INSERT INTO leads (
       provider_id, buyer_id, connection_id,
       customer_data_encrypted, customer_data_iv,
+      customer_email_hash, customer_phone_hash,
       customer_state, vehicle_year, vehicle_make, vehicle_model,
       payout_amount, stripe_payment_id, criteria_fields_data
     ) VALUES (
       ${data.provider_id}, ${data.buyer_id}, ${data.connection_id},
       ${data.customer_data_encrypted}, ${data.customer_data_iv},
+      ${data.customer_email_hash || null}, ${data.customer_phone_hash || null},
       ${data.customer_state || null}, ${data.vehicle_year || null},
       ${data.vehicle_make || null}, ${data.vehicle_model || null},
       ${data.payout_amount}, ${data.stripe_payment_id || null},
@@ -1717,5 +1782,31 @@ export async function getCriteriaAcknowledgment(providerId: string, criteriaId: 
     LIMIT 1
   `;
   return first<DbProviderCriteriaAcknowledgment>(result);
+}
+
+// ============================================
+// Buyer Stripe Setup & Business Agreement
+// ============================================
+
+export async function ensureBuyerStripeColumns(): Promise<void> {
+  const sql = getSql();
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS buyer_stripe_setup_complete BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_agreement_accepted_at TIMESTAMPTZ`;
+}
+
+export async function setBuyerStripeSetupComplete(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE users SET buyer_stripe_setup_complete = true, updated_at = NOW() WHERE id = ${userId}`;
+}
+
+export async function getBuyerStripeSetupComplete(userId: string): Promise<boolean> {
+  const sql = getSql();
+  const result = await sql`SELECT buyer_stripe_setup_complete FROM users WHERE id = ${userId} LIMIT 1`;
+  return (result[0] as { buyer_stripe_setup_complete: boolean } | undefined)?.buyer_stripe_setup_complete ?? false;
+}
+
+export async function recordBusinessAgreementAccepted(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE users SET business_agreement_accepted_at = NOW(), updated_at = NOW() WHERE id = ${userId}`;
 }
 

@@ -85,8 +85,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const buyerId = session.metadata?.buyer_id;
 
   if (!leadIdsStr || !buyerId) {
-    // Setup-mode sessions (bank account connection) have no lead metadata — skip silently
-    console.log("Checkout session without lead metadata (likely setup mode):", session.id);
+    // Setup-mode sessions (bank account connection) have no lead metadata
+    if (session.mode === 'setup' && session.customer) {
+      try {
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(process.env.DATABASE_URL!);
+        await sql`UPDATE users SET buyer_stripe_setup_complete = true, updated_at = NOW() WHERE stripe_customer_id = ${session.customer as string}`;
+        console.log(`Buyer Stripe setup complete for customer ${session.customer}`);
+      } catch (err) {
+        console.error('Failed to mark buyer_stripe_setup_complete:', err);
+      }
+    } else {
+      console.log("Checkout session without lead metadata (likely setup mode):", session.id);
+    }
     return;
   }
 
