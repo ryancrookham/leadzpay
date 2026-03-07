@@ -290,7 +290,7 @@ function RegisterContent() {
   // Show spinner while redirecting token-based invites or loading auth
   if (isLoading || tokenParam) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
@@ -300,7 +300,7 @@ function RegisterContent() {
   if (requestedRole === "provider" && !inviteCodeParam) {
     router.replace("/auth/login?error=invite-required");
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
@@ -309,14 +309,14 @@ function RegisterContent() {
   // Buyer registration flow
   if (requestedRole === "buyer") {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4 relative">
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-          <Image src="/woml-v3.png" alt="" width={500} height={500} className="opacity-[0.03] select-none" priority />
+          <Image src="/woml-alt-orange.png" alt="" width={500} height={500} className="opacity-[0.03] select-none" priority />
         </div>
         <div className="relative z-10 bg-white p-8 rounded-2xl border border-gray-200 max-w-lg w-full shadow-lg">
           <div className="text-center mb-6">
             <Link href="/">
-              <Image src="/woml-v3.png" alt="WOML" width={260} height={75} className="mx-auto mb-4 h-18 w-auto object-contain" />
+              <Image src="/woml-alt-orange.png" alt="WOML" width={180} height={54} className="mx-auto mb-4 h-14 w-auto object-contain" />
             </Link>
             <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
               {buyerFormStep === "account" ? "Create Business Account" : "Connect Your Bank"}
@@ -461,11 +461,11 @@ function RegisterContent() {
 
   // Provider registration form (single step — direct or invite-code based)
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4 relative">
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-v3.png"
+          src="/woml-alt-orange.png"
           alt=""
           width={500}
           height={500}
@@ -479,11 +479,11 @@ function RegisterContent() {
         <div className="text-center mb-6">
           <Link href="/" className="inline-block">
             <Image
-              src="/woml-v3.png"
+              src="/woml-alt-orange.png"
               alt="WOML - Word of Mouth Leads"
-              width={260}
-              height={75}
-              className="mx-auto mb-4 h-18 w-auto object-contain"
+              width={180}
+              height={54}
+              className="mx-auto mb-4 h-14 w-auto object-contain"
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
@@ -708,7 +708,7 @@ function RegisterContent() {
 
 function LoadingFallback() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
     </div>
   );

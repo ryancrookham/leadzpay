@@ -169,10 +169,10 @@ export default function ProviderDashboard() {
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isProvider(currentUser)) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#E77500] flex items-center justify-center">
         <div className="text-center">
-          <Image src="/woml-orange.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A] mx-auto"></div>
+          <Image src="/woml-alt-white.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
         </div>
       </div>
     );
@@ -208,11 +208,11 @@ export default function ProviderDashboard() {
   const connectionStatus = getConnectionStatus();
 
   return (
-    <div className="min-h-screen bg-gray-50 relative">
+    <div className="min-h-screen bg-[#E77500] relative">
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-orange.png"
+          src="/woml-alt-white.png"
           alt=""
           width={600}
           height={600}
@@ -222,20 +222,20 @@ export default function ProviderDashboard() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-8 py-4">
+      <header className="relative z-10 bg-[#E77500] border-b border-white/20 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
               <Image
-                src="/woml-orange.png"
+                src="/woml-alt-white.png"
                 alt="WOML - Word of Mouth Leads"
-                width={240}
-                height={70}
-                className="h-16 w-auto object-contain"
+                width={140}
+                height={42}
+                className="h-10 w-auto object-contain"
               />
             </Link>
-            <span className="text-gray-300">|</span>
-            <span className="text-[#E8822A] font-medium">Provider Portal</span>
+            <span className="text-white/30">|</span>
+            <span className="text-white font-medium">Provider Portal</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -244,13 +244,13 @@ export default function ProviderDashboard() {
                 connectionStatus.status === "terms_pending" ? "bg-amber-500" :
                 connectionStatus.status === "pending" ? "bg-orange-500" : "bg-gray-400"
               }`} />
-              <span className="text-sm text-gray-500">{connectionStatus.message}</span>
+              <span className="text-sm text-white/70">{connectionStatus.message}</span>
             </div>
-            <span className="text-gray-300">|</span>
-            <span className="text-gray-600">{currentProvider?.displayName}</span>
+            <span className="text-white/30">|</span>
+            <span className="text-white/90">{currentProvider?.displayName}</span>
             <button
               onClick={handleLogout}
-              className="text-gray-500 hover:text-[#E8822A] transition flex items-center gap-2"
+              className="text-white/70 hover:text-white transition flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -333,8 +333,8 @@ export default function ProviderDashboard() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-[#E8822A] text-white shadow-md"
-                  : "bg-white text-gray-600 hover:text-[#E8822A] hover:bg-gray-100 border border-gray-200"
+                  ? "bg-white text-[#E77500] shadow-md"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
               {tab === "connection" ? "Connection" : tab.charAt(0).toUpperCase() + tab.slice(1)}

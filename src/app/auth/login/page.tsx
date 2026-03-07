@@ -57,18 +57,18 @@ function LoginContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4 relative">
       {/* Watermark Logo Background */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
         <Image
-          src="/woml-orange.png"
+          src="/woml-alt-orange.png"
           alt=""
           width={500}
           height={500}
@@ -81,11 +81,11 @@ function LoginContent() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
             <Image
-              src="/woml-orange.png"
+              src="/woml-alt-orange.png"
               alt="WOML - Word of Mouth Leads"
-              width={260}
-              height={75}
-              className="mx-auto mb-4 h-18 w-auto object-contain"
+              width={180}
+              height={54}
+              className="mx-auto mb-4 h-14 w-auto object-contain"
             />
           </Link>
           <h1 className="text-2xl font-bold text-[#E8822A] mb-2">Welcome Back</h1>
@@ -203,7 +203,7 @@ function LoginContent() {
 
 function LoadingFallback() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
     </div>
   );

@@ -187,7 +187,7 @@ export default function AdminPanel() {
   // --- Loading ---
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center">
+      <div className="min-h-screen bg-[#152238] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
@@ -196,10 +196,10 @@ export default function AdminPanel() {
   // --- Login Screen ---
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
-      <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#152238] flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-200">
           <div className="text-center mb-6">
-            <Image src="/woml-navy.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
+            <Image src="/woml-alt-white.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
           </div>
           {loginError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
@@ -256,11 +256,11 @@ export default function AdminPanel() {
 
   // --- Dashboard ---
   return (
-    <div className="min-h-screen bg-[#0d1b2e]">
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/10">
+    <div className="min-h-screen bg-[#152238]">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-white/20">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/woml-navy.png" alt="WOML" width={160} height={48} className="h-12 w-auto object-contain" />
+            <Image src="/woml-alt-white.png" alt="WOML" width={160} height={48} className="h-12 w-auto object-contain" />
           </Link>
           <div>
             <h1 className="text-white font-bold text-lg">Admin Portal</h1>
@@ -297,8 +297,8 @@ export default function AdminPanel() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-5 py-2.5 rounded-lg font-medium transition capitalize ${
                     activeTab === tab
-                      ? "bg-[#E8822A] text-white"
-                      : "bg-white/5 text-gray-400 hover:text-white"
+                      ? "bg-white/20 text-white border border-white/30"
+                      : "text-white/70 hover:text-white hover:bg-white/10"
                   }`}
                 >
                   {tab}
@@ -308,7 +308,7 @@ export default function AdminPanel() {
 
             {/* ===== USERS TAB ===== */}
             {activeTab === "users" && (
-              <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+              <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
                 <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
                   <h3 className="text-white font-semibold">All Users ({detailedUsers.length})</h3>
                 </div>
@@ -403,7 +403,7 @@ export default function AdminPanel() {
                   <MetricCard label="Active Businesses" value={stats.activeBuyers} />
                 </div>
 
-                <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
                   <div className="px-6 py-4 border-b border-white/10">
                     <h3 className="text-white font-semibold">Recent Leads</h3>
                   </div>
@@ -451,7 +451,7 @@ export default function AdminPanel() {
                   const flagged = providers.filter(u => u.yearlyEarnings >= 500);
                   if (flagged.length === 0) return null;
                   return (
-                    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                    <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
                       <div className="px-6 py-4 border-b border-white/10">
                         <h3 className="text-white font-semibold">1099 Tracker</h3>
                         <p className="text-gray-500 text-xs mt-1">
@@ -499,7 +499,7 @@ export default function AdminPanel() {
               <div className="space-y-6">
                 {/* Stripe + Twilio Status */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                  <div className="bg-white/10 rounded-xl border border-white/10 p-6">
                     <h3 className="text-white font-semibold mb-4">Stripe Connect</h3>
                     {stripeStatus ? (
                       <div className="space-y-3">
@@ -531,7 +531,7 @@ export default function AdminPanel() {
                     )}
                   </div>
 
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                  <div className="bg-white/10 rounded-xl border border-white/10 p-6">
                     <h3 className="text-white font-semibold mb-4">Twilio SMS</h3>
                     {twilioStatus ? (
                       <div className="space-y-3">
@@ -554,7 +554,7 @@ export default function AdminPanel() {
 
                 {/* Fee Structure */}
                 {platformFees && (
-                  <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+                  <div className="bg-white/10 rounded-xl border border-white/10 p-6">
                     <h3 className="text-white font-semibold mb-4">Fee Structure</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
@@ -624,7 +624,7 @@ export default function AdminPanel() {
 
 function MetricCard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
-    <div className="bg-white/5 p-5 rounded-xl border border-white/10">
+    <div className="bg-white/10 p-5 rounded-xl border border-white/10">
       <div className="text-gray-400 text-sm mb-1">{label}</div>
       <div className={`text-3xl font-bold ${accent ? "text-[#E8822A]" : "text-white"}`}>
         {value}
