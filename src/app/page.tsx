@@ -1,14 +1,37 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Home() {
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
+  const [activeDoc, setActiveDoc] = useState<'business' | 'provider' | 'privacy'>('business');
 
   // Get dashboard URL based on user role
   const dashboardUrl = currentUser?.role === "admin" ? "/admin" : currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
+
+  const docs = [
+    {
+      id: 'business',
+      label: 'Business Agreement',
+      description: 'Terms governing business accounts, lead channels, and payout structures.',
+      url: '/WOML_Business_Agreement.pdf',
+    },
+    {
+      id: 'provider',
+      label: 'Provider Agreement',
+      description: 'Terms for lead providers — submissions, earnings, and platform conduct.',
+      url: '/WOML_Provider_Agreement.pdf',
+    },
+    {
+      id: 'privacy',
+      label: 'Privacy Policy',
+      description: 'How WOML collects, uses, protects, and in limited cases commercializes data.',
+      url: '/WOML_Privacy_Policy.pdf',
+    },
+  ] as const;
 
   // Show minimal loading state only while checking auth
   if (isLoading) {
@@ -115,19 +138,81 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/20 py-8 px-8 bg-[#E77500]">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center">
-            <Image
-              src="/woml-v3.png"
-              alt="WOML - Word of Mouth Leads"
-              width={120}
-              height={36}
-              className="h-9 w-auto object-contain"
+      {/* Legal Documents Section */}
+      <section className="border-t border-white/20 py-16 px-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-white font-bold text-2xl mb-2">Legal Documents</h2>
+            <p className="text-white/60 text-sm">
+              All WOML platform agreements and policies are publicly available below.
+              Documents are updated here whenever changes are made.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {docs.map((doc) => (
+              <button
+                key={doc.id}
+                onClick={() => setActiveDoc(doc.id)}
+                className={`px-5 py-2.5 rounded-lg text-sm font-medium transition border ${
+                  activeDoc === doc.id
+                    ? 'bg-white text-[#E77500] border-white'
+                    : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                }`}
+              >
+                {doc.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-white/50 text-xs mb-4">
+            {docs.find((d) => d.id === activeDoc)?.description}
+          </p>
+          <div className="rounded-xl overflow-hidden border border-white/20 shadow-xl">
+            <iframe
+              key={activeDoc}
+              src={docs.find((d) => d.id === activeDoc)?.url}
+              className="w-full h-[780px]"
+              title={docs.find((d) => d.id === activeDoc)?.label}
             />
           </div>
-          <div className="text-white/60 text-sm">© 2025 WOML. All rights reserved.</div>
+          <div className="text-center mt-4">
+            <a
+              href={docs.find((d) => d.id === activeDoc)?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/50 hover:text-white text-xs transition underline underline-offset-2"
+            >
+              Open in new tab ↗
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/20 py-8 px-8 bg-[#E77500]">
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
+          <Image
+            src="/woml-v3.png"
+            alt="WOML - Word of Mouth Leads"
+            width={120}
+            height={36}
+            className="h-9 w-auto object-contain"
+          />
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer"
+              className="text-white/50 hover:text-white/80 text-xs transition">
+              Business Agreement
+            </a>
+            <span className="text-white/30 text-xs">·</span>
+            <a href="/WOML_Provider_Agreement.pdf" target="_blank" rel="noopener noreferrer"
+              className="text-white/50 hover:text-white/80 text-xs transition">
+              Provider Agreement
+            </a>
+            <span className="text-white/30 text-xs">·</span>
+            <a href="/WOML_Privacy_Policy.pdf" target="_blank" rel="noopener noreferrer"
+              className="text-white/50 hover:text-white/80 text-xs transition">
+              Privacy Policy
+            </a>
+          </div>
+          <div className="text-white/40 text-xs">© 2026 WOML LLC. All rights reserved.</div>
         </div>
       </footer>
     </div>
