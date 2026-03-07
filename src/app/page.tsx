@@ -166,23 +166,30 @@ export default function Home() {
           <p className="text-center text-white/50 text-xs mb-4">
             {docs.find((d) => d.id === activeDoc)?.description}
           </p>
-          <div className="rounded-xl overflow-hidden border border-white/20 shadow-xl">
-            <iframe
-              key={activeDoc}
-              src={docs.find((d) => d.id === activeDoc)?.url}
-              className="w-full h-[780px]"
-              title={docs.find((d) => d.id === activeDoc)?.label}
-            />
-          </div>
-          <div className="text-center mt-4">
-            <a
-              href={docs.find((d) => d.id === activeDoc)?.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/50 hover:text-white text-xs transition underline underline-offset-2"
-            >
-              Open in new tab ↗
-            </a>
+          <div className="rounded-xl border border-white/20 shadow-xl bg-white/10 p-8 text-center">
+            <h3 className="text-white font-bold text-xl mb-2">
+              {docs.find((d) => d.id === activeDoc)?.label}
+            </h3>
+            <p className="text-white/60 text-sm mb-6">
+              {docs.find((d) => d.id === activeDoc)?.description}
+            </p>
+            <div className="flex justify-center gap-3">
+              <a
+                href={docs.find((d) => d.id === activeDoc)?.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-white/90 text-[#E77500] px-6 py-2.5 rounded-lg font-medium transition"
+              >
+                View PDF
+              </a>
+              <a
+                href={docs.find((d) => d.id === activeDoc)?.url}
+                download
+                className="bg-white hover:bg-white/90 text-[#E77500] px-6 py-2.5 rounded-lg font-medium transition"
+              >
+                Download
+              </a>
+            </div>
           </div>
         </div>
       </section>
