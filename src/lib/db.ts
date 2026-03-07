@@ -48,6 +48,7 @@ export interface DbUser {
   // Buyer Stripe setup
   buyer_stripe_setup_complete: boolean;
   business_agreement_accepted_at: string | null;
+  disabled_at: string | null;
 }
 
 export type ConnectionStatus =
@@ -1808,5 +1809,24 @@ export async function getBuyerStripeSetupComplete(userId: string): Promise<boole
 export async function recordBusinessAgreementAccepted(userId: string): Promise<void> {
   const sql = getSql();
   await sql`UPDATE users SET business_agreement_accepted_at = NOW(), updated_at = NOW() WHERE id = ${userId}`;
+}
+
+// ============================================
+// Account Disable (Soft Delete)
+// ============================================
+
+export async function ensureDisabledAtColumn(): Promise<void> {
+  const sql = getSql();
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMPTZ DEFAULT NULL`;
+}
+
+export async function disableAccount(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE users SET disabled_at = NOW(), updated_at = NOW() WHERE id = ${userId}`;
+}
+
+export async function enableAccount(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE users SET disabled_at = NULL, updated_at = NOW() WHERE id = ${userId}`;
 }
 

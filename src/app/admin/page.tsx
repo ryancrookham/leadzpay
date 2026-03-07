@@ -43,6 +43,7 @@ interface DetailedUser {
   lastLeadAt: string | null;
   yearlyEarnings: number;
   needs1099: boolean;
+  disabledAt: string | null;
 }
 
 interface PlatformFees {
@@ -181,6 +182,23 @@ export default function AdminPanel() {
       }
     } catch (e) {
       console.error("Toggle failed:", e);
+    }
+  };
+
+  const handleEnableAccount = async (userId: string) => {
+    try {
+      const res = await fetch("/api/admin/account/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (res.ok) {
+        setDetailedUsers(prev => prev.map(u =>
+          u.id === userId ? { ...u, disabledAt: null } : u
+        ));
+      }
+    } catch (e) {
+      console.error("Enable account failed:", e);
     }
   };
 
@@ -371,16 +389,41 @@ export default function AdminPanel() {
                             </td>
                             <td className="px-6 py-3 text-center">
                               {user.role !== "admin" && (
-                                <button
-                                  onClick={() => handleToggleUser(user.id, !user.isActive)}
-                                  className={`text-xs font-medium px-3 py-1 rounded transition ${
-                                    user.isActive
-                                      ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                      : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                                  }`}
-                                >
-                                  {user.isActive ? "Suspend" : "Reactivate"}
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  {user.disabledAt ? (
+                                    <>
+                                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                                        Disabled
+                                      </span>
+                                      <button
+                                        onClick={() => handleEnableAccount(user.id)}
+                                        className="text-xs font-medium px-3 py-1 rounded transition bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                      >
+                                        Re-enable
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                        user.isActive
+                                          ? "bg-green-500/20 text-green-400"
+                                          : "bg-red-500/20 text-red-400"
+                                      }`}>
+                                        {user.isActive ? "Active" : "Suspended"}
+                                      </span>
+                                      <button
+                                        onClick={() => handleToggleUser(user.id, !user.isActive)}
+                                        className={`text-xs font-medium px-3 py-1 rounded transition ${
+                                          user.isActive
+                                            ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                                            : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                        }`}
+                                      >
+                                        {user.isActive ? "Suspend" : "Reactivate"}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>

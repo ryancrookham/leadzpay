@@ -102,6 +102,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null;
           }
 
+          if (user.disabled_at) {
+            console.log("[AUTH] User disabled:", email);
+            return null;
+          }
+
           console.log("[AUTH] Login successful:", email, "role:", user.role);
           return dbUserToAuthUser(user);
         } catch (error) {

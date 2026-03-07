@@ -43,6 +43,21 @@ function LoginContent() {
         const targetUrl = result.role === "admin" ? "/admin" : result.role === "buyer" ? "/business" : "/provider-dashboard";
         window.location.href = targetUrl;
       } else {
+        // Check if account is disabled
+        try {
+          const checkRes = await fetch("/api/auth/check-disabled", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email.trim() }),
+          });
+          const checkData = await checkRes.json();
+          if (checkData.disabled) {
+            setError("This account has been disabled. Contact support to re-enable.");
+            setIsSubmitting(false);
+            return;
+          }
+        } catch { /* ignore check errors */ }
+
         setError(result.error || "Invalid email or password");
         setDebugInfo(`Login failed: ${result.error || "Unknown error"}`);
         setIsSubmitting(false);

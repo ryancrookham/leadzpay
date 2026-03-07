@@ -1860,6 +1860,85 @@ function ProfileTab({
           </div>
         </div>
       </div>
+
+      {/* ── Disable Account (Danger Zone) ────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mt-6">
+        <h3 className="text-sm font-semibold text-red-700 mb-2">Danger Zone</h3>
+        <p className="text-gray-500 text-sm mb-4">
+          Disabling your account prevents login and hides your profile. Your data is preserved and an admin can re-enable your account if you contact support.
+        </p>
+        <ProviderDisableButton />
+      </div>
+    </div>
+  );
+}
+
+function ProviderDisableButton() {
+  const [confirmText, setConfirmText] = useState("");
+  const [disabling, setDisabling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleDisable = async () => {
+    setDisabling(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account/disable", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = "/auth/login";
+      } else {
+        setError(data.error || "Failed to disable account.");
+      }
+    } catch {
+      setError("Could not reach the server. Please try again.");
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  if (!showConfirm) {
+    return (
+      <div>
+        <button
+          onClick={() => setShowConfirm(true)}
+          className="border border-red-300 text-red-600 hover:bg-red-50 px-5 py-2 rounded-lg text-sm font-medium transition"
+        >
+          Disable My Account
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+      <p className="text-red-800 text-sm font-semibold mb-1">Are you sure?</p>
+      <p className="text-red-700 text-sm mb-4">
+        Type <strong>DISABLE</strong> below to confirm. You will be logged out immediately.
+      </p>
+      <input
+        type="text"
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        placeholder="Type DISABLE to confirm"
+        className="w-full px-3 py-2 border border-red-200 rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-red-300"
+      />
+      <div className="flex gap-3">
+        <button
+          onClick={handleDisable}
+          disabled={confirmText !== "DISABLE" || disabling}
+          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {disabling ? "Disabling..." : "Confirm Disable"}
+        </button>
+        <button
+          onClick={() => { setShowConfirm(false); setConfirmText(""); setError(null); }}
+          className="text-gray-500 hover:text-gray-700 text-sm px-4 py-2"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
     </div>
   );
 }

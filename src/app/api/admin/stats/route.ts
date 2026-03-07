@@ -60,6 +60,7 @@ export async function GET() {
       lastLeadAt: (u as any).last_lead_at || null,
       yearlyEarnings: Number((u as any).yearly_earnings || 0),
       needs1099: Number((u as any).yearly_earnings || 0) >= 600,
+      disabledAt: u.disabled_at || null,
     }));
 
     // Twilio status from env vars
