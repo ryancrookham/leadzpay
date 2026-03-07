@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Checkout Session in setup mode to collect payment method
-    // Dynamic payment methods enabled in Stripe Dashboard - no hardcoded types
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "setup",
       customer: customerId,
+      payment_method_types: ["card", "us_bank_account"],
       success_url: `${APP_URL}/business?tab=settings&stripe=success`,
       cancel_url: `${APP_URL}/business?tab=settings&stripe=cancel`,
     });
