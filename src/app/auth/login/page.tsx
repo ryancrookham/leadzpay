@@ -181,14 +181,8 @@ function LoginContent() {
             Don&apos;t have an account?
           </p>
           <Link
-            href="/auth/register?role=provider"
-            className="block w-full py-3 px-4 border border-[#E8822A] bg-[#E8822A]/5 rounded-lg text-center font-medium transition hover:bg-[#E8822A]/10 text-[#E8822A]"
-          >
-            Sign up as Lead Provider
-          </Link>
-          <Link
             href="/auth/register?role=buyer"
-            className="block w-full py-3 px-4 border border-gray-200 rounded-lg text-center font-medium transition hover:bg-gray-50 text-gray-700 mt-3"
+            className="block w-full py-3 px-4 border border-[#E8822A] bg-[#E8822A]/5 rounded-lg text-center font-medium transition hover:bg-[#E8822A]/10 text-[#E8822A]"
           >
             Sign up as Business
           </Link>

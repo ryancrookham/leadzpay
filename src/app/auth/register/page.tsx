@@ -296,6 +296,16 @@ function RegisterContent() {
     );
   }
 
+  // Block provider self-registration without a valid invite token
+  if (requestedRole === "provider" && !inviteCodeParam) {
+    router.replace("/auth/login?error=invite-required");
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
+      </div>
+    );
+  }
+
   // Buyer registration flow
   if (requestedRole === "buyer") {
     return (
