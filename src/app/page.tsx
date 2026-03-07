@@ -213,6 +213,15 @@ export default function Home() {
               Privacy Policy
             </a>
           </div>
+          <div className="text-sm text-white/60">
+            Need help? Email us at{" "}
+            <a
+              href="mailto:womleads@outlook.com?subject=WOML Support Request"
+              className="text-white/80 hover:text-white underline underline-offset-2 transition"
+            >
+              womleads@outlook.com
+            </a>
+          </div>
           <div className="text-white/40 text-xs">© 2026 WOML LLC. All rights reserved.</div>
         </div>
       </footer>
