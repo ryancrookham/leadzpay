@@ -134,7 +134,7 @@ function ProviderOnboardingContent() {
 
   // Handle Stripe return
   useEffect(() => {
-    if (stripeParam === "success" && mode === "resume") {
+    if ((stripeParam === "success" || stripeParam === "pending") && mode === "resume") {
       const completeStripe = async () => {
         setAdvancing(true);
         try {

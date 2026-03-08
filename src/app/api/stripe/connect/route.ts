@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import { getUserById, updateUserStripeAccount, getProviderOnboardingState } from "@/lib/db";
+import { neon } from "@neondatabase/serverless";
+
+function getDb() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  return neon(url);
+}
 
 /**
  * POST /api/stripe/connect
@@ -120,21 +127,22 @@ export async function GET(request: NextRequest) {
 
     // Verify the account status
     const account = await stripe.accounts.retrieve(accountId);
-    const onboardingComplete = account.details_submitted === true;
 
-    // Update database
-    await updateUserStripeAccount(session.user.id, accountId, onboardingComplete);
+    // Mark stripe account in DB (preserve actual details_submitted value)
+    await updateUserStripeAccount(session.user.id, accountId, account.details_submitted === true);
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
-    const status = onboardingComplete ? "success" : "pending";
 
-    // If provider hasn't completed app onboarding, redirect back to onboarding flow
+    // If provider hasn't completed app onboarding, mark it complete now —
+    // they've gone through the full Stripe flow, that's sufficient
     const onboardingState = await getProviderOnboardingState(session.user.id);
     if (onboardingState && !onboardingState.complete) {
-      return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=${status}`);
+      const sql = getDb();
+      await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${session.user.id}`;
+      return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=success`);
     }
 
-    return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=${status}`);
+    return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=success`);
   } catch (error) {
     console.error("Stripe Connect callback error:", error);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
