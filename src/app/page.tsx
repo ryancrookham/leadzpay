@@ -222,6 +222,10 @@ export default function Home() {
               womleads@outlook.com
             </a>
           </div>
+          <div className="text-white/40 text-xs italic text-center">
+            &ldquo;So whether you eat or drink or whatever you do, do it all for the glory of God.&rdquo;
+            <span className="not-italic font-medium text-white/50 ml-1">— 1 Corinthians 10:31</span>
+          </div>
           <div className="text-white/40 text-xs">© 2026 WOML LLC. All rights reserved.</div>
         </div>
       </footer>
