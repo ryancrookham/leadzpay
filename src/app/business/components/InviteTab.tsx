@@ -91,6 +91,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
 
   // SMS panel state
   const [smsPhone, setSmsPhone] = useState("");
+  const [smsProviderName, setSmsProviderName] = useState("");
   const [smsTokenId, setSmsTokenId] = useState<string>("");
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [smsResult, setSmsResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -349,12 +350,14 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
           businessName,
           inviteToken: selectedToken?.token || null,
           ratePerLead: selectedToken?.rate_per_lead || null,
+          providerName: smsProviderName.trim() || null,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setSmsResult({ success: true, message: `Text sent to ${smsPhone}!` });
         setSmsPhone("");
+        setSmsProviderName("");
       } else {
         setSmsResult({ success: false, message: data.error || "Failed to send text" });
       }
@@ -799,7 +802,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
           <p className="text-gray-400 text-sm">Generate an active invite link above before sending a text.</p>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Provider's Phone Number</label>
                 <input
@@ -807,6 +810,16 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                   value={smsPhone}
                   onChange={e => setSmsPhone(e.target.value)}
                   placeholder="(555) 000-0000"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Provider's Name <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={smsProviderName}
+                  onChange={e => setSmsProviderName(e.target.value)}
+                  placeholder="e.g. Mike"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
                 />
               </div>

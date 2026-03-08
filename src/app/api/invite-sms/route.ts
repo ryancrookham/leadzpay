@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
+import { auth } from "@/lib/auth";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -7,8 +8,17 @@ const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth check — only authenticated buyers (businesses) can send SMS invites
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if ((session.user as any).role !== "buyer") {
+      return NextResponse.json({ success: false, error: "Only business accounts can send SMS invites" }, { status: 403 });
+    }
+
     const body = await request.json();
-    const { phoneNumber, businessName, inviteToken, ratePerLead } = body;
+    const { phoneNumber, businessName, inviteToken, ratePerLead, providerName } = body;
 
     if (!phoneNumber) {
       return NextResponse.json(
@@ -28,14 +38,15 @@ export async function POST(request: NextRequest) {
 
     const formattedPhone = cleaned.length === 10 ? `+1${cleaned}` : `+${cleaned}`;
     const senderName = businessName || "A business on WOMLeads";
+    const greeting = providerName ? `Hey ${providerName}! ` : "";
 
     // Build the signup URL — embed invite token if provided
     const signupUrl = inviteToken
       ? `https://www.womleads.com/provider-onboarding?token=${inviteToken}`
       : "https://www.womleads.com/provider-onboarding";
 
-    const earningLine = ratePerLead ? ` Earn $${ratePerLead}/lead.` : "";
-    const messageBody = `WOMLeads: ${senderName} invited you to join their provider network!${earningLine} Sign up here: ${signupUrl}`;
+    const earningLine = ratePerLead ? ` Earn $${ratePerLead} per lead.` : "";
+    const messageBody = `${greeting}${senderName} invited you to send leads on WOML.${earningLine} Sign up here: ${signupUrl}`;
 
     if (!accountSid || !authToken || !twilioPhone) {
       console.error("Twilio not configured - missing credentials");
