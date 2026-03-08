@@ -148,6 +148,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const freshUser = await getUserById(token.id as string);
         if (freshUser) {
           token.onboardingComplete = freshUser.onboarding_complete;
+          token.stripeAccountId = freshUser.stripe_account_id || undefined;
+          token.stripeOnboardingComplete = freshUser.stripe_onboarding_complete;
         }
       }
 

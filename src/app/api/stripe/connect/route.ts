@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
-import { getUserById, updateUserStripeAccount, getProviderOnboardingState } from "@/lib/db";
+import { getUserById, updateUserStripeAccount, getProviderOnboardingState, getProviderByStripeAccountId } from "@/lib/db";
 import { neon } from "@neondatabase/serverless";
 
 function getDb() {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     // Create the onboarding link
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: `${appUrl}/provider-dashboard?tab=settings&stripe=refresh`,
+      refresh_url: refreshUrl,
       return_url: `${appUrl}/api/stripe/connect?account_id=${account.id}`,
       type: "account_onboarding",
     });
@@ -113,32 +113,37 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
-      return NextResponse.redirect(`${appUrl}/auth/login`);
-    }
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
 
     const accountId = request.nextUrl.searchParams.get("account_id");
     if (!accountId) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
       return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=error`);
     }
 
-    // Verify the account status
+    // Resolve the user — prefer session, fall back to DB lookup by stripe_account_id
+    const session = await auth();
+    let userId = session?.user?.id ?? null;
+
+    if (!userId) {
+      const dbUser = await getProviderByStripeAccountId(accountId);
+      if (!dbUser) {
+        return NextResponse.redirect(`${appUrl}/auth/login`);
+      }
+      userId = dbUser.id;
+    }
+
+    // Verify the account status with Stripe
     const account = await stripe.accounts.retrieve(accountId);
 
     // Mark stripe account in DB (preserve actual details_submitted value)
-    await updateUserStripeAccount(session.user.id, accountId, account.details_submitted === true);
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
+    await updateUserStripeAccount(userId, accountId, account.details_submitted === true);
 
     // If provider hasn't completed app onboarding, mark it complete now —
     // they've gone through the full Stripe flow, that's sufficient
-    const onboardingState = await getProviderOnboardingState(session.user.id);
+    const onboardingState = await getProviderOnboardingState(userId);
     if (onboardingState && !onboardingState.complete) {
       const sql = getDb();
-      await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${session.user.id}`;
+      await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${userId}`;
       return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=success`);
     }
 

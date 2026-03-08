@@ -6,7 +6,9 @@ import {
   getBusinessCriteriaWithFields,
   completeProviderOnboarding,
   getUserById,
+  updateUserStripeAccount,
 } from '@/lib/db';
+import { stripe } from '@/lib/stripe';
 
 // GET — provider auth, returns onboarding state
 export async function GET() {
@@ -82,7 +84,18 @@ export async function POST(request: NextRequest) {
       }
       // Verify Stripe onboarding is actually complete
       const user = await getUserById(session.user.id);
-      if (!user?.stripe_onboarding_complete) {
+      let stripeComplete = user?.stripe_onboarding_complete ?? false;
+
+      // If DB flag is stale but user has a Stripe account, check Stripe directly
+      if (!stripeComplete && user?.stripe_account_id) {
+        const account = await stripe.accounts.retrieve(user.stripe_account_id);
+        if (account.details_submitted) {
+          await updateUserStripeAccount(user.id, user.stripe_account_id, true);
+          stripeComplete = true;
+        }
+      }
+
+      if (!stripeComplete) {
         return NextResponse.json({ error: 'Stripe onboarding not complete' }, { status: 400 });
       }
       await completeProviderOnboarding(session.user.id);
