@@ -259,7 +259,7 @@ export default function AdminPanel() {
       <div className="min-h-screen bg-[#152238] flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-200">
           <div className="text-center mb-6">
-            <Image src="/woml-alt-white.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
+            <Image src="/woml-alt-orange.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
           </div>
           {loginError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
