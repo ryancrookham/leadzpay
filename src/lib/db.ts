@@ -1853,7 +1853,7 @@ export async function hardDeleteUser(userId: string): Promise<void> {
   await sql`DELETE FROM lead_criteria_fields WHERE criteria_id IN (SELECT id FROM business_lead_criteria WHERE business_id = ${userId})`;
   await sql`DELETE FROM provider_criteria_acknowledgment WHERE provider_id = ${userId} OR business_id = ${userId}`;
   await sql`DELETE FROM provider_terms_acceptance WHERE provider_id = ${userId} OR business_id = ${userId}`;
-  await sql`DELETE FROM transactions WHERE from_account_id = ${userId} OR to_account_id = ${userId}`;
+  await sql`DELETE FROM transactions WHERE from_account_id = ${userId} OR to_account_id = ${userId} OR lead_id IN (SELECT id FROM leads WHERE provider_id = ${userId} OR buyer_id = ${userId})`;
   await sql`DELETE FROM leads WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
 
   // 2. Invite-related tables
