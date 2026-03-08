@@ -125,7 +125,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       // Initial sign in
       if (user) {
         token.id = user.id;
@@ -143,6 +143,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.onboardingStep = user.onboardingStep;
         token.onboardingComplete = user.onboardingComplete;
       }
+
+      if (trigger === "update") {
+        const freshUser = await getUserById(token.id as string);
+        if (freshUser) {
+          token.onboardingComplete = freshUser.onboarding_complete;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

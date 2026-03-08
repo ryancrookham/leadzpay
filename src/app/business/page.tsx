@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
 import { useLeads, type Provider } from "@/lib/leads-context";
@@ -85,6 +86,7 @@ function BusinessPortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
+  const { update: updateSession } = useSession();
   const currentBuyer = useCurrentBuyer();
 
   // Get initial tab from URL query param
@@ -218,8 +220,12 @@ function BusinessPortalContent() {
     const stripeParam = searchParams.get("stripe");
     if (stripeParam === "success") {
       setPaymentNotice("Bank account connected successfully!");
-      setStripeSetupComplete(true);
-      fetch("/api/stripe/mark-setup-complete", { method: "POST" }).catch(() => {});
+      fetch("/api/stripe/mark-setup-complete", { method: "POST" })
+        .then(() => {
+          setStripeSetupComplete(true);
+          updateSession();
+        })
+        .catch(() => {});
       setActiveTab("settings");
       const url = new URL(window.location.href);
       url.searchParams.delete("stripe");
