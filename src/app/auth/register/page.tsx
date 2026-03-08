@@ -287,8 +287,16 @@ function RegisterContent() {
     }
   };
 
+  // Block generic /auth/register (no role, no invite, no token) — redirect to homepage
+  const hasValidParam = requestedRole || inviteCodeParam || tokenParam;
+  useEffect(() => {
+    if (!isLoading && !hasValidParam) {
+      router.replace("/");
+    }
+  }, [isLoading, hasValidParam, router]);
+
   // Show spinner while redirecting token-based invites or loading auth
-  if (isLoading || tokenParam) {
+  if (isLoading || tokenParam || !hasValidParam) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>

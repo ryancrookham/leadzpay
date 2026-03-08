@@ -128,7 +128,7 @@ function ProviderOnboardingContent() {
           setMode("error");
         });
     } else if (status === "unauthenticated" && !tokenParam) {
-      router.push("/auth/register");
+      router.push("/auth/login");
     }
   }, [tokenParam, status, session, router]);
 
