@@ -1850,7 +1850,7 @@ export async function hardDeleteUser(userId: string): Promise<void> {
   const sql = getSql();
 
   // 1. Child tables that reference leads / connections / users
-  await sql`DELETE FROM lead_criteria_fields WHERE lead_id IN (SELECT id FROM leads WHERE provider_id = ${userId} OR buyer_id = ${userId})`;
+  await sql`DELETE FROM lead_criteria_fields WHERE criteria_id IN (SELECT id FROM business_lead_criteria WHERE buyer_id = ${userId})`;
   await sql`DELETE FROM provider_criteria_acknowledgment WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
   await sql`DELETE FROM provider_terms_acceptance WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
   await sql`DELETE FROM transactions WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
