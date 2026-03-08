@@ -218,6 +218,8 @@ function BusinessPortalContent() {
     const stripeParam = searchParams.get("stripe");
     if (stripeParam === "success") {
       setPaymentNotice("Bank account connected successfully!");
+      setStripeSetupComplete(true);
+      fetch("/api/stripe/mark-setup-complete", { method: "POST" }).catch(() => {});
       setActiveTab("settings");
       const url = new URL(window.location.href);
       url.searchParams.delete("stripe");
