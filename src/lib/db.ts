@@ -1837,3 +1837,54 @@ export async function enableAccount(userId: string): Promise<void> {
   await sql`UPDATE users SET disabled_at = NULL, updated_at = NOW() WHERE id = ${userId}`;
 }
 
+// ============================================
+// Hard Delete (permanent — admin only, pre-launch cleanup)
+// ============================================
+
+/**
+ * Permanently deletes a user and all associated records from the database.
+ * Must be called AFTER any external cleanup (e.g. Stripe account deletion).
+ * Cascade order respects FK constraints.
+ */
+export async function hardDeleteUser(userId: string): Promise<void> {
+  const sql = getSql();
+
+  // 1. Child tables that reference leads / connections / users
+  await sql`DELETE FROM lead_criteria_fields WHERE lead_id IN (SELECT id FROM leads WHERE provider_id = ${userId} OR buyer_id = ${userId})`;
+  await sql`DELETE FROM provider_criteria_acknowledgment WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
+  await sql`DELETE FROM provider_terms_acceptance WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
+  await sql`DELETE FROM transactions WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
+  await sql`DELETE FROM leads WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
+
+  // 2. Invite-related tables
+  await sql`DELETE FROM invite_token_uses WHERE provider_id = ${userId} OR inviter_id = ${userId}`;
+  await sql`DELETE FROM connections WHERE provider_id = ${userId} OR buyer_id = ${userId}`;
+  await sql`DELETE FROM business_lead_criteria WHERE buyer_id = ${userId}`;
+  await sql`DELETE FROM invite_tokens WHERE buyer_id = ${userId} OR provider_id = ${userId}`;
+  await sql`DELETE FROM invites WHERE buyer_id = ${userId} OR provider_id = ${userId}`;
+
+  // 3. Auth helpers
+  await sql`DELETE FROM password_reset_tokens WHERE user_id = ${userId}`;
+
+  // 4. Finally, the user row itself
+  await sql`DELETE FROM users WHERE id = ${userId}`;
+}
+
+/**
+ * Returns minimal user data needed for hard-delete (Stripe IDs, role, email).
+ */
+export async function getUserForDeletion(userId: string): Promise<{
+  id: string;
+  email: string;
+  role: string;
+  stripe_account_id: string | null;
+  stripe_customer_id: string | null;
+} | null> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT id, email, role, stripe_account_id, stripe_customer_id
+    FROM users WHERE id = ${userId} LIMIT 1
+  `;
+  return (rows[0] as { id: string; email: string; role: string; stripe_account_id: string | null; stripe_customer_id: string | null; } | undefined) ?? null;
+}
+

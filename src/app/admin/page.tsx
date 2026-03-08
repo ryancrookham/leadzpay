@@ -72,9 +72,20 @@ interface StripeStatus {
 
 type Tab = "users" | "data" | "platform";
 
+interface HardDeleteTarget {
+  id: string;
+  email: string;
+  role: string;
+}
+
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("users");
+
+  // Hard delete confirmation modal state
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<HardDeleteTarget | null>(null);
+  const [hardDeleteLoading, setHardDeleteLoading] = useState(false);
+  const [hardDeleteError, setHardDeleteError] = useState("");
 
   // Login state
   const [loginEmail, setLoginEmail] = useState("");
@@ -199,6 +210,37 @@ export default function AdminPanel() {
       }
     } catch (e) {
       console.error("Enable account failed:", e);
+    }
+  };
+
+  const handleHardDelete = async () => {
+    if (!hardDeleteTarget) return;
+    setHardDeleteLoading(true);
+    setHardDeleteError("");
+    try {
+      const res = await fetch("/api/admin/hard-delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: hardDeleteTarget.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setHardDeleteError(data.error || "Delete failed");
+        setHardDeleteLoading(false);
+        return;
+      }
+      // Remove from local state so the table updates instantly
+      setDetailedUsers(prev => prev.filter(u => u.id !== hardDeleteTarget.id));
+      if (data.stripeWarning) {
+        // Still close modal but surface the Stripe warning in the error banner
+        setError(`User deleted. Stripe warning: ${data.stripeWarning}`);
+      }
+      setHardDeleteTarget(null);
+    } catch (e) {
+      console.error("Hard delete failed:", e);
+      setHardDeleteError("An error occurred. Please try again.");
+    } finally {
+      setHardDeleteLoading(false);
     }
   };
 
@@ -423,6 +465,17 @@ export default function AdminPanel() {
                                       </button>
                                     </>
                                   )}
+                                  {/* Hard Delete — permanent, admin-only pre-launch cleanup */}
+                                  <button
+                                    onClick={() => {
+                                      setHardDeleteError("");
+                                      setHardDeleteTarget({ id: user.id, email: user.email, role: user.role });
+                                    }}
+                                    className="text-xs font-medium px-3 py-1 rounded transition border border-red-600/40 text-red-500 hover:bg-red-600/10"
+                                    title="Permanently delete this account and all associated data"
+                                  >
+                                    Delete
+                                  </button>
                                 </div>
                               )}
                             </td>
@@ -659,6 +712,61 @@ export default function AdminPanel() {
           </div>
         )}
       </main>
+
+      {/* ===== HARD DELETE CONFIRMATION MODAL ===== */}
+      {hardDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#1a2d45] border border-red-500/30 rounded-2xl p-6 max-w-md w-full shadow-xl">
+            <h2 className="text-white text-lg font-bold mb-1">Permanently Delete Account?</h2>
+            <p className="text-gray-400 text-sm mb-4">This cannot be undone.</p>
+
+            <div className="bg-black/30 rounded-lg p-3 mb-4 space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Email</span>
+                <span className="text-white font-mono">{hardDeleteTarget.email}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Role</span>
+                <span className="text-white capitalize">{hardDeleteTarget.role}</span>
+              </div>
+            </div>
+
+            <p className="text-red-400 text-xs mb-4">
+              ⚠️ Deletes all WOML records (leads, connections, invites) and their Stripe account/customer. No recovery possible.
+            </p>
+
+            {hardDeleteError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
+                {hardDeleteError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setHardDeleteTarget(null); setHardDeleteError(""); }}
+                disabled={hardDeleteLoading}
+                className="flex-1 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/5 transition text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleHardDelete}
+                disabled={hardDeleteLoading}
+                className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {hardDeleteLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Deleting…
+                  </>
+                ) : (
+                  "Yes, Delete Permanently"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
