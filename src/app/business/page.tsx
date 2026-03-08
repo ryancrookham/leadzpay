@@ -247,7 +247,7 @@ function BusinessPortalContent() {
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !currentUser)) {
       router.push("/auth/login?role=buyer");
-    } else if (!isLoading && currentUser && !isBuyer(currentUser)) {
+    } else if (!isLoading && currentUser && !isBuyer(currentUser) && !searchParams.get("stripe")) {
       router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
     }
   }, [isLoading, isAuthenticated, currentUser, router]);

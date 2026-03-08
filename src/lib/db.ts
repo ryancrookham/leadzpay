@@ -264,7 +264,14 @@ export async function createUser(user: {
     )
     RETURNING *
   `;
-  return first<DbUser>(result)!;
+  const newUser = first<DbUser>(result)!;
+
+  // Buyers don't have a multi-step onboarding flow — mark complete immediately
+  if (user.role === 'buyer') {
+    await sql`UPDATE users SET onboarding_complete = TRUE WHERE id = ${newUser.id}`;
+  }
+
+  return newUser;
 }
 
 export async function updateUser(id: string, updates: Partial<DbUser>): Promise<DbUser | null> {

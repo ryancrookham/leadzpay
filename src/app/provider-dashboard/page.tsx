@@ -126,7 +126,7 @@ export default function ProviderDashboard() {
       router.push("/auth/login?role=provider");
     } else if (!isLoading && currentUser && !isProvider(currentUser)) {
       router.push("/business");
-    } else if (!isLoading && currentUser && session?.user?.onboardingComplete === false) {
+    } else if (!isLoading && currentUser && isProvider(currentUser) && session?.user?.onboardingComplete === false) {
       router.push("/provider-onboarding");
     }
   }, [isLoading, isAuthenticated, currentUser, router, session]);
