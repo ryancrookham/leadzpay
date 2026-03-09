@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
-import { getLeadsByIds, getUserById, updateUserStripeCustomer, getPlatformSettings } from "@/lib/db";
+import {
+  getLeadsByIds,
+  getUserById,
+  updateUserStripeCustomer,
+  getPlatformSettings,
+  getProvidersByIds,
+} from "@/lib/db";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
 
 /**
  * POST /api/stripe/create-payment
- * Create a Stripe Checkout Session for a batch of leads.
+ * Create a Stripe Checkout Session using destination charges.
+ *
+ * With destination charges:
+ *   - Buyer pays the lead face value (no markup)
+ *   - Stripe routes payment directly to the provider's connected account
+ *   - WOML collects application_fee_amount (12.5% of lead value) automatically
+ *   - No settlement delay — provider is paid instantly when buyer pays
+ *
  * Body: { leadIds: string[] }
- * Returns: { url: string } — the Checkout URL to redirect the buyer to.
+ * Returns: { url: string }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -49,12 +62,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Some leads are already paid or processing" }, { status: 400 });
     }
 
-    // Calculate total from fee breakdown
+    // Destination charges require a single provider destination per checkout session.
+    // The business dashboard already groups leads by provider before calling this endpoint.
+    const providerIdSet = new Set(leads.map(l => l.provider_id));
+    if (providerIdSet.size > 1) {
+      return NextResponse.json(
+        { error: "All leads in a payment must be from the same provider. Please pay each provider group separately." },
+        { status: 400 }
+      );
+    }
+
+    const providerId = leads[0].provider_id;
+    const providers = await getProvidersByIds([providerId]);
+    const provider = providers[0];
+
+    if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
+      return NextResponse.json(
+        { error: "This provider has not completed Stripe Connect onboarding. They must set up their payout account before you can pay them." },
+        { status: 400 }
+      );
+    }
+
+    // Calculate amounts using current fee settings
     const platformFees = await getPlatformSettings();
-    let totalCents = 0;
+    let totalCents = 0;          // What the buyer pays (face value of leads)
+    let applicationFeeCents = 0; // WOML's cut (12.5%) — deducted from provider payout
+
     for (const lead of leads) {
       const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
       totalCents += Math.round(breakdown.buyerTotal * 100);
+      applicationFeeCents += Math.round(breakdown.totalPlatformFee * 100);
     }
 
     // Get or create Stripe Customer for the buyer
@@ -65,8 +102,7 @@ export async function POST(request: NextRequest) {
 
     let customerId = buyer.stripe_customer_id;
 
-    // If a customer ID exists but was created in test mode, it won't exist in live mode.
-    // Verify it's valid; if not, fall through to create a new one.
+    // Validate existing customer ID (test-mode IDs don't exist in live mode)
     if (customerId) {
       try {
         await stripe.customers.retrieve(customerId);
@@ -87,18 +123,26 @@ export async function POST(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
 
-    // Create Checkout Session
-    // Dynamic payment methods enabled in Stripe Dashboard - no hardcoded types
+    // Create Checkout Session using destination charges.
+    // application_fee_amount = WOML's cut, automatically collected by Stripe.
+    // transfer_data.destination = provider's connected Stripe account.
+    // Stripe routes the remainder directly to the provider — no manual transfer step needed.
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "payment",
+      payment_intent_data: {
+        application_fee_amount: applicationFeeCents,
+        transfer_data: {
+          destination: provider.stripe_account_id,
+        },
+      },
       line_items: [
         {
           price_data: {
             currency: "usd",
             product_data: {
               name: `WOML Lead Payment (${leads.length} lead${leads.length > 1 ? "s" : ""})`,
-              description: `Payment for ${leads.length} lead${leads.length > 1 ? "s" : ""} on WOML`,
+              description: `Payment for ${leads.length} lead${leads.length > 1 ? "s" : ""} submitted by ${provider.display_name || provider.username || "provider"}`,
             },
             unit_amount: totalCents,
           },
@@ -108,6 +152,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         lead_ids: leadIds.join(","),
         buyer_id: session.user.id,
+        provider_id: providerId,
         lead_count: String(leads.length),
       },
       success_url: `${appUrl}/business?tab=leads&payment=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -116,10 +161,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error: any) {
-    console.error("[create-payment] error type:", error?.type);
-    console.error("[create-payment] error code:", error?.code);
-    console.error("[create-payment] error detail:", error?.detail);
-    console.error("[create-payment] error message:", error?.message);
+    console.error("[create-payment] error:", error?.message);
     const message = error?.message || "Failed to create payment session";
     return NextResponse.json({ error: message }, { status: 500 });
   }

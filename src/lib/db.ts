@@ -1110,16 +1110,17 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
   const sql = getSql();
   const result = await sql`SELECT key, value FROM platform_settings WHERE key LIKE 'fee_%'`;
 
+  // Defaults: 12.5% of lead value, deducted from provider payout (buyer pays face value)
   const settings: PlatformSettings = {
     fee_total: 2.0,
-    fee_buyer: 1.0,
-    fee_provider: 1.0,
-    fee_type: 'flat',
-    fee_percent: 0,
-    fee_percent_buyer_share: 50,
+    fee_buyer: 0.0,
+    fee_provider: 0.0,
+    fee_type: 'percent',
+    fee_percent: 12.5,
+    fee_percent_buyer_share: 0,  // 0% from buyer — provider absorbs the full 12.5%
     fee_mixed_flat: 0,
     fee_mixed_percent: 0,
-    fee_mixed_buyer_share: 50,
+    fee_mixed_buyer_share: 0,
   };
 
   for (const row of result) {

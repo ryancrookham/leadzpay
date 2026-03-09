@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
 import {
   getLeadsByIds,
-  getProvidersByIds,
   batchUpdateLeadStripeTransfer,
   batchUpdateLeadPayoutStatus,
   createTransaction,
@@ -83,6 +82,7 @@ export async function POST(request: NextRequest) {
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const leadIdsStr = session.metadata?.lead_ids;
   const buyerId = session.metadata?.buyer_id;
+  const providerId = session.metadata?.provider_id;
 
   if (!leadIdsStr || !buyerId) {
     // Setup-mode sessions (bank account connection) have no lead metadata
@@ -110,170 +110,56 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // Skip leads already completed (verify-payment may have run before this webhook arrived)
-  const unprocessedLeads = leads.filter(l => l.payout_status !== 'completed');
+  const unprocessedLeads = leads.filter(l => l.payout_status !== 'completed' && !l.stripe_transfer_id);
   if (unprocessedLeads.length === 0) {
-    console.log(`[WEBHOOK] All leads already completed for checkout ${session.id} — skipping (verify-payment ran first)`);
+    console.log(`[WEBHOOK] All leads already completed for checkout ${session.id} — skipping`);
     return;
   }
 
-  // Get platform fee settings
   const platformFees = await getPlatformSettings();
+  const paymentIntentId = session.payment_intent as string;
 
-  // Group ONLY unprocessed leads by provider
-  const leadsByProvider = new Map<string, typeof leads>();
+  // With destination charges, Stripe already routed the money to the provider.
+  // We just need to mark leads as completed and record the transactions.
+  const leadIdList = unprocessedLeads.map(l => l.id);
+  await batchUpdateLeadStripeTransfer(leadIdList, paymentIntentId, "completed");
+
   for (const lead of unprocessedLeads) {
-    const existing = leadsByProvider.get(lead.provider_id) || [];
-    existing.push(lead);
-    leadsByProvider.set(lead.provider_id, existing);
+    const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+    const pid = lead.provider_id || providerId || null;
+
+    // Platform fee — WOML's cut
+    await createTransaction({
+      type: "platform_fee",
+      status: "completed",
+      amount: breakdown.totalPlatformFee,
+      fee_amount: 0,
+      net_amount: breakdown.totalPlatformFee,
+      from_account_id: buyerId,
+      to_account_id: null,
+      lead_id: lead.id,
+      connection_id: lead.connection_id || undefined,
+      stripe_payment_id: paymentIntentId,
+      description: `WOML platform fee (${(breakdown.totalPlatformFee / breakdown.ratePerLead * 100).toFixed(1)}% of $${breakdown.ratePerLead.toFixed(2)})`,
+    });
+
+    // Provider payout — recorded for earnings display
+    await createTransaction({
+      type: "lead_payout",
+      status: "completed",
+      amount: breakdown.providerNet,
+      fee_amount: breakdown.providerFee,
+      net_amount: breakdown.providerNet,
+      from_account_id: null,
+      to_account_id: pid,
+      lead_id: lead.id,
+      connection_id: lead.connection_id || undefined,
+      stripe_payment_id: paymentIntentId,
+      description: `Provider payout via Stripe (destination charge)`,
+    });
   }
 
-  // Get all provider details
-  const providerIds = Array.from(leadsByProvider.keys());
-  const providers = await getProvidersByIds(providerIds);
-  const providerMap = new Map(providers.map(p => [p.id, p]));
-
-  let failedProviders = 0;
-
-  // Process each provider group independently
-  for (const [providerId, providerLeads] of leadsByProvider) {
-    const provider = providerMap.get(providerId);
-    const providerLeadIds = providerLeads.map(l => l.id);
-
-    // Calculate total transfer amount for this provider
-    let transferCents = 0;
-    for (const lead of providerLeads) {
-      const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-      transferCents += Math.round(breakdown.providerNet * 100);
-    }
-
-    // Mark this provider's leads as processing
-    await batchUpdateLeadPayoutStatus(providerLeadIds, "processing");
-
-    if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
-      // Provider not connected to Stripe — leave as processing until they complete onboarding
-      console.log(`Provider ${providerId} not on Stripe Connect — leads stay processing`);
-
-      // Still create platform_fee transactions
-      for (const lead of providerLeads) {
-        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-        await createTransaction({
-          type: "platform_fee",
-          status: "completed",
-          amount: breakdown.totalPlatformFee,
-          fee_amount: 0,
-          net_amount: breakdown.totalPlatformFee,
-          from_account_id: buyerId,
-          to_account_id: null,
-          lead_id: lead.id,
-          connection_id: lead.connection_id || undefined,
-          stripe_payment_id: session.payment_intent as string || undefined,
-          description: `Platform fee for lead (buyer paid via Stripe)`,
-        });
-      }
-      continue;
-    }
-
-    try {
-      // Create Stripe Transfer to provider's Connect account
-      // Idempotency key prevents double transfers if webhook fires more than once
-      // or if verify-payment already created this transfer (Stripe returns the same transfer)
-      const transfer = await stripe.transfers.create({
-        amount: transferCents,
-        currency: "usd",
-        destination: provider.stripe_account_id,
-        transfer_group: session.id,
-        metadata: {
-          lead_ids: providerLeadIds.join(","),
-          provider_id: providerId,
-          buyer_id: buyerId,
-        },
-      }, {
-        idempotencyKey: `transfer-${session.id}-${providerId}`,
-      });
-
-      // Mark leads as completed with transfer ID
-      await batchUpdateLeadStripeTransfer(providerLeadIds, transfer.id, "completed");
-
-      // Create transaction records
-      for (const lead of providerLeads) {
-        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-
-        // Platform fee transaction
-        await createTransaction({
-          type: "platform_fee",
-          status: "completed",
-          amount: breakdown.totalPlatformFee,
-          fee_amount: 0,
-          net_amount: breakdown.totalPlatformFee,
-          from_account_id: buyerId,
-          to_account_id: null,
-          lead_id: lead.id,
-          connection_id: lead.connection_id || undefined,
-          stripe_payment_id: session.payment_intent as string || undefined,
-          description: `Platform fee for lead (Stripe)`,
-        });
-
-        // Provider payout transaction
-        await createTransaction({
-          type: "lead_payout",
-          status: "completed",
-          amount: breakdown.providerNet,
-          fee_amount: breakdown.providerFee,
-          net_amount: breakdown.providerNet,
-          from_account_id: null,
-          to_account_id: providerId,
-          lead_id: lead.id,
-          connection_id: lead.connection_id || undefined,
-          stripe_payment_id: transfer.id,
-          description: `Provider payout via Stripe Connect`,
-        });
-      }
-
-      console.log(`Transfer ${transfer.id} created for provider ${providerId}: $${(transferCents / 100).toFixed(2)}`);
-    } catch (error) {
-      console.error(`Transfer failed for provider ${providerId}:`, error);
-      failedProviders++;
-
-      // Mark this provider's leads as failed
-      await batchUpdateLeadStripeTransfer(providerLeadIds, "", "failed");
-
-      // Create a transfer_failed transaction record for each lead so the ledger reflects what happened
-      for (const lead of providerLeads) {
-        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-        await createTransaction({
-          type: "lead_payout",
-          status: "failed",
-          amount: breakdown.providerNet,
-          fee_amount: breakdown.providerFee,
-          net_amount: 0,
-          from_account_id: null,
-          to_account_id: providerId,
-          lead_id: lead.id,
-          connection_id: lead.connection_id || undefined,
-          description: `Provider payout failed — transfer to Stripe Connect rejected`,
-        });
-
-        // Platform fee still recorded (business was charged)
-        await createTransaction({
-          type: "platform_fee",
-          status: "completed",
-          amount: breakdown.totalPlatformFee,
-          fee_amount: 0,
-          net_amount: breakdown.totalPlatformFee,
-          from_account_id: buyerId,
-          to_account_id: null,
-          lead_id: lead.id,
-          connection_id: lead.connection_id || undefined,
-          stripe_payment_id: session.payment_intent as string || undefined,
-          description: `Platform fee for lead (transfer to provider failed)`,
-        });
-      }
-    }
-  }
-
-  if (failedProviders > 0) {
-    console.warn(`[WEBHOOK] ${failedProviders} provider transfer(s) failed for checkout ${session.id} — requires admin attention`);
-  }
+  console.log(`[WEBHOOK] checkout ${session.id} — ${unprocessedLeads.length} lead(s) marked paid, payment_intent ${paymentIntentId}`);
 }
 
 async function handleTransferReversed(transfer: Stripe.Transfer) {

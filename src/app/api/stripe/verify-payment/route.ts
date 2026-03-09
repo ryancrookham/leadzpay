@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { stripe } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe"; // still used to retrieve checkout session
 import {
   getLeadsByIds,
-  getProvidersByIds,
   batchUpdateLeadStripeTransfer,
-  batchUpdateLeadPayoutStatus,
   createTransaction,
   getPlatformSettings,
 } from "@/lib/db";
@@ -77,121 +75,52 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Payment confirmed — process the same logic as the webhook
+    // With destination charges, Stripe already routed the money to the provider.
+    // We just record the transactions and mark leads complete.
     const platformFees = await getPlatformSettings();
+    const paymentIntentId = checkoutSession.payment_intent as string;
+    const stillPendingIds = stillPending.map((l) => l.id);
 
-    // Group leads by provider
-    const leadsByProvider = new Map<string, typeof leads>();
+    await batchUpdateLeadStripeTransfer(stillPendingIds, paymentIntentId, "completed");
+
     for (const lead of stillPending) {
-      const existing = leadsByProvider.get(lead.provider_id) || [];
-      existing.push(lead);
-      leadsByProvider.set(lead.provider_id, existing);
+      const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+
+      await createTransaction({
+        type: "platform_fee",
+        status: "completed",
+        amount: breakdown.totalPlatformFee,
+        fee_amount: 0,
+        net_amount: breakdown.totalPlatformFee,
+        from_account_id: buyerId,
+        to_account_id: null,
+        lead_id: lead.id,
+        connection_id: lead.connection_id || undefined,
+        stripe_payment_id: paymentIntentId,
+        description: `WOML platform fee (${(breakdown.totalPlatformFee / breakdown.ratePerLead * 100).toFixed(1)}%)`,
+      });
+
+      await createTransaction({
+        type: "lead_payout",
+        status: "completed",
+        amount: breakdown.providerNet,
+        fee_amount: breakdown.providerFee,
+        net_amount: breakdown.providerNet,
+        from_account_id: null,
+        to_account_id: lead.provider_id,
+        lead_id: lead.id,
+        connection_id: lead.connection_id || undefined,
+        stripe_payment_id: paymentIntentId,
+        description: `Provider payout via Stripe (destination charge)`,
+      });
     }
 
-    const providerIds = Array.from(leadsByProvider.keys());
-    const providers = await getProvidersByIds(providerIds);
-    const providerMap = new Map(providers.map((p) => [p.id, p]));
-
-    let totalTransferred = 0;
-
-    for (const [providerId, providerLeads] of leadsByProvider) {
-      const provider = providerMap.get(providerId);
-      const providerLeadIds = providerLeads.map((l) => l.id);
-
-      let transferCents = 0;
-      for (const lead of providerLeads) {
-        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-        transferCents += Math.round(breakdown.providerNet * 100);
-      }
-
-      // Mark as processing first
-      await batchUpdateLeadPayoutStatus(providerLeadIds, "processing");
-
-      if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
-        // Provider not on Stripe Connect yet — create platform_fee records and leave as processing
-        for (const lead of providerLeads) {
-          const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-          await createTransaction({
-            type: "platform_fee",
-            status: "completed",
-            amount: breakdown.totalPlatformFee,
-            fee_amount: 0,
-            net_amount: breakdown.totalPlatformFee,
-            from_account_id: buyerId,
-            to_account_id: null,
-            lead_id: lead.id,
-            connection_id: lead.connection_id || undefined,
-            stripe_payment_id: checkoutSession.payment_intent as string || undefined,
-            description: `Platform fee for lead (buyer paid via Stripe — verify-payment)`,
-          });
-        }
-        continue;
-      }
-
-      try {
-        // Idempotency key: if the webhook also fires for this same payment,
-        // Stripe will return the same transfer object instead of creating a duplicate.
-        const transfer = await stripe.transfers.create({
-          amount: transferCents,
-          currency: "usd",
-          destination: provider.stripe_account_id,
-          transfer_group: checkoutSession.id,
-          metadata: {
-            lead_ids: providerLeadIds.join(","),
-            provider_id: providerId,
-            buyer_id: buyerId,
-            trigger: "verify_payment",
-          },
-        }, {
-          idempotencyKey: `transfer-${checkoutSession.id}-${providerId}`,
-        });
-
-        await batchUpdateLeadStripeTransfer(providerLeadIds, transfer.id, "completed");
-
-        for (const lead of providerLeads) {
-          const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
-
-          await createTransaction({
-            type: "platform_fee",
-            status: "completed",
-            amount: breakdown.totalPlatformFee,
-            fee_amount: 0,
-            net_amount: breakdown.totalPlatformFee,
-            from_account_id: buyerId,
-            to_account_id: null,
-            lead_id: lead.id,
-            connection_id: lead.connection_id || undefined,
-            stripe_payment_id: checkoutSession.payment_intent as string || undefined,
-            description: `Platform fee for lead (verify-payment)`,
-          });
-
-          await createTransaction({
-            type: "lead_payout",
-            status: "completed",
-            amount: breakdown.providerNet,
-            fee_amount: breakdown.providerFee,
-            net_amount: breakdown.providerNet,
-            from_account_id: null,
-            to_account_id: providerId,
-            lead_id: lead.id,
-            connection_id: lead.connection_id || undefined,
-            stripe_payment_id: transfer.id,
-            description: `Provider payout via Stripe Connect (verify-payment)`,
-          });
-        }
-
-        totalTransferred += transferCents;
-        console.log(`[VERIFY-PAYMENT] Transfer ${transfer.id} → provider ${providerId}: $${(transferCents / 100).toFixed(2)}`);
-      } catch (transferErr: any) {
-        console.error(`[VERIFY-PAYMENT] Transfer failed for provider ${providerId}:`, transferErr);
-        await batchUpdateLeadStripeTransfer(providerLeadIds, "", "failed");
-      }
-    }
+    console.log(`[VERIFY-PAYMENT] ${stillPending.length} lead(s) marked paid for checkout ${checkoutSession.id}`);
 
     return NextResponse.json({
       status: "processed",
       message: "Payment verified and leads updated",
-      totalTransferredCents: totalTransferred,
+      leadsUpdated: stillPending.length,
     });
   } catch (error) {
     console.error("[VERIFY-PAYMENT] error:", error);

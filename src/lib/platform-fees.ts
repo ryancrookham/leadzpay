@@ -1,4 +1,9 @@
 // Platform fee defaults (fallback if DB unavailable)
+// WOML charges 12.5% of lead value, deducted from provider payout
+export const PLATFORM_FEE_PERCENT = 12.5;
+export const PLATFORM_FEE_BUYER_SHARE = 0; // 0% from buyer (provider absorbs full fee)
+
+// Legacy flat fee constants (kept for reference, no longer used as defaults)
 export const PLATFORM_FEE_TOTAL = 2.0;
 export const PLATFORM_FEE_PROVIDER = 1.0;
 export const PLATFORM_FEE_BUYER = 1.0;
@@ -22,16 +27,16 @@ export function calculateFeeBreakdown(
   fees?: FeeSettings
 ) {
   const rate = Number(ratePerLead) || 0;
-  const feeType = fees?.fee_type ?? 'flat';
+  const feeType = fees?.fee_type ?? 'percent';  // Default to percent (12.5%)
 
   let totalFee: number;
   let buyerFee: number;
   let providerFee: number;
 
   if (feeType === 'percent') {
-    const pct = fees?.fee_percent ?? 0;
+    const pct = fees?.fee_percent ?? PLATFORM_FEE_PERCENT;
     totalFee = Math.round((rate * pct / 100) * 100) / 100;
-    const buyerShare = (fees?.fee_percent_buyer_share ?? 50) / 100;
+    const buyerShare = (fees?.fee_percent_buyer_share ?? PLATFORM_FEE_BUYER_SHARE) / 100;
     buyerFee = Math.round(totalFee * buyerShare * 100) / 100;
     providerFee = Math.round((totalFee - buyerFee) * 100) / 100;
   } else if (feeType === 'mixed') {
