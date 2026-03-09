@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
     if (onboardingState && !onboardingState.complete) {
       const sql = getDb();
       await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${userId}`;
-      return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=success`);
+      return NextResponse.redirect(`${appUrl}/provider-dashboard`);
     }
 
     return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=success`);

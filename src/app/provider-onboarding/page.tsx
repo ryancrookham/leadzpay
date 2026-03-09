@@ -130,6 +130,8 @@ function ProviderOnboardingContent() {
         });
     } else if (status === "unauthenticated" && !tokenParam && !stripeParam) {
       router.push("/auth/login");
+    } else if (status === "unauthenticated" && stripeParam) {
+      window.location.href = "/auth/login?stripe=complete";
     }
   }, [tokenParam, status, session, router]);
 
