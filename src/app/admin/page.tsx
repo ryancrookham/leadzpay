@@ -328,7 +328,7 @@ export default function AdminPanel() {
           </div>
         </div>
         <button
-          onClick={async () => { await logout(); window.location.href = "/auth/login"; }}
+          onClick={async () => { await logout(); window.location.href = "/"; }}
           className="text-gray-500 hover:text-[#E8822A] transition text-sm"
         >
           Sign Out
