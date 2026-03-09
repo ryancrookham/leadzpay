@@ -170,7 +170,7 @@ export default function ProviderDashboard() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace("/");
+    window.location.href = "/";
   };
 
   // Redirect admin users to their own dashboard
