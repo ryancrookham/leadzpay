@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import {
+  getLeadsByIds,
   getProcessingLeadsByProviderId,
   getProvidersByIds,
   batchUpdateLeadStripeTransfer,
+  batchUpdateLeadPayoutStatus,
   createTransaction,
   getPlatformSettings,
 } from "@/lib/db";
@@ -38,9 +40,127 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { providerId: specificProviderId } = body as { providerId?: string };
+    const { providerId: specificProviderId, checkoutSessionId } = body as {
+      providerId?: string;
+      checkoutSessionId?: string;
+    };
 
     const sql = getDb();
+
+    // If a checkout session ID is given, reprocess that specific Stripe payment
+    // (handles the case where the webhook never fired and leads are still "pending")
+    if (checkoutSessionId) {
+      const checkoutSession = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+      if (checkoutSession.payment_status !== "paid") {
+        return NextResponse.json({ error: "Checkout session has not been paid" }, { status: 400 });
+      }
+
+      const leadIdsStr = checkoutSession.metadata?.lead_ids;
+      const buyerId = checkoutSession.metadata?.buyer_id;
+      if (!leadIdsStr || !buyerId) {
+        return NextResponse.json({ error: "Session metadata missing lead_ids or buyer_id" }, { status: 400 });
+      }
+
+      const leadIds = leadIdsStr.split(",");
+      const leads = await getLeadsByIds(leadIds);
+      const platformFees = await getPlatformSettings();
+
+      const leadsByProvider = new Map<string, typeof leads>();
+      for (const lead of leads) {
+        const existing = leadsByProvider.get(lead.provider_id) || [];
+        existing.push(lead);
+        leadsByProvider.set(lead.provider_id, existing);
+      }
+
+      const pIds = Array.from(leadsByProvider.keys());
+      const providers = await getProvidersByIds(pIds);
+      const providerMap = new Map(providers.map((p: any) => [p.id, p]));
+
+      let transferred = 0;
+      let failed = 0;
+      const results: Array<{ providerId: string; status: string; amount?: number; error?: string }> = [];
+
+      for (const [providerId, providerLeads] of leadsByProvider) {
+        const provider = providerMap.get(providerId);
+        const providerLeadIds = providerLeads.map((l) => l.id);
+
+        // Mark as processing first
+        await batchUpdateLeadPayoutStatus(providerLeadIds, "processing");
+
+        if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
+          results.push({ providerId, status: "skipped", error: "Provider not on Stripe Connect" });
+          continue;
+        }
+
+        let transferCents = 0;
+        for (const lead of providerLeads) {
+          const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+          transferCents += Math.round(breakdown.providerNet * 100);
+        }
+
+        try {
+          const transfer = await stripe.transfers.create({
+            amount: transferCents,
+            currency: "usd",
+            destination: provider.stripe_account_id,
+            transfer_group: checkoutSessionId,
+            metadata: {
+              lead_ids: providerLeadIds.join(","),
+              provider_id: providerId,
+              buyer_id: buyerId,
+              trigger: "admin_session_retry",
+            },
+          });
+
+          await batchUpdateLeadStripeTransfer(providerLeadIds, transfer.id, "completed");
+
+          for (const lead of providerLeads) {
+            const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+            await createTransaction({
+              type: "platform_fee",
+              status: "completed",
+              amount: breakdown.totalPlatformFee,
+              fee_amount: 0,
+              net_amount: breakdown.totalPlatformFee,
+              from_account_id: buyerId,
+              to_account_id: null,
+              lead_id: lead.id,
+              connection_id: lead.connection_id || undefined,
+              stripe_payment_id: checkoutSession.payment_intent as string || undefined,
+              description: `Platform fee for lead (admin session retry)`,
+            });
+            await createTransaction({
+              type: "lead_payout",
+              status: "completed",
+              amount: breakdown.providerNet,
+              fee_amount: breakdown.providerFee,
+              net_amount: breakdown.providerNet,
+              from_account_id: null,
+              to_account_id: providerId,
+              lead_id: lead.id,
+              connection_id: lead.connection_id || undefined,
+              stripe_payment_id: transfer.id,
+              description: `Provider payout via Stripe Connect (admin session retry)`,
+            });
+          }
+
+          transferred++;
+          results.push({ providerId, status: "transferred", amount: transferCents / 100 });
+          console.log(`[ADMIN-RETRY] Session retry transfer ${transfer.id} → provider ${providerId}: $${(transferCents / 100).toFixed(2)}`);
+        } catch (err: any) {
+          failed++;
+          results.push({ providerId, status: "failed", error: err?.message });
+          console.error(`[ADMIN-RETRY] Session retry transfer failed for provider ${providerId}:`, err);
+        }
+      }
+
+      return NextResponse.json({
+        message: `Session retry complete: ${transferred} transferred, ${failed} failed`,
+        transferred,
+        failed,
+        results,
+      });
+    }
 
     // Find all providers who have processing leads (payment collected, transfer pending)
     let providerIds: string[];
