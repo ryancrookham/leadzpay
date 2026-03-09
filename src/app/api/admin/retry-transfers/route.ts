@@ -40,10 +40,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { providerId: specificProviderId, checkoutSessionId, forceProviderEmail } = body as {
+    const { providerId: specificProviderId, checkoutSessionId, forceProviderEmail, markPaidManual } = body as {
       providerId?: string;
       checkoutSessionId?: string;
       forceProviderEmail?: string;
+      markPaidManual?: boolean;
     };
 
     const sql = getDb();
@@ -160,6 +161,57 @@ export async function POST(request: NextRequest) {
         transferred,
         failed,
         results,
+      });
+    }
+
+    // Mark all unpaid leads for a provider as paid in DB without any Stripe transfer.
+    // Use when the money doesn't need to actually move (e.g. co-founder, test data, or
+    // funds already settled outside of Stripe).
+    if (markPaidManual && forceProviderEmail) {
+      const providerRows = await sql`SELECT * FROM users WHERE email = ${forceProviderEmail} AND role = 'provider' LIMIT 1`;
+      if (providerRows.length === 0) {
+        return NextResponse.json({ error: "Provider not found with that email" }, { status: 404 });
+      }
+      const provider = providerRows[0] as any;
+
+      const unpaidLeads = await sql`
+        SELECT * FROM leads
+        WHERE provider_id = ${provider.id}
+        AND payout_status IN ('pending', 'processing')
+        AND stripe_transfer_id IS NULL
+      `;
+      if (unpaidLeads.length === 0) {
+        return NextResponse.json({ message: "No unpaid leads found — already clean", cleared: 0 });
+      }
+
+      const platformFees = await getPlatformSettings();
+      const leadIds = (unpaidLeads as any[]).map((l) => l.id);
+      const syntheticId = `manual_admin_${Date.now()}`;
+
+      await batchUpdateLeadStripeTransfer(leadIds, syntheticId, "completed");
+
+      for (const lead of unpaidLeads as any[]) {
+        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+        await createTransaction({
+          type: "lead_payout",
+          status: "completed",
+          amount: breakdown.providerNet,
+          fee_amount: breakdown.providerFee,
+          net_amount: breakdown.providerNet,
+          from_account_id: null,
+          to_account_id: provider.id,
+          lead_id: lead.id,
+          connection_id: lead.connection_id || undefined,
+          stripe_payment_id: syntheticId,
+          description: `Provider payout — manually cleared by admin (no Stripe transfer)`,
+        });
+      }
+
+      return NextResponse.json({
+        message: `Manually marked ${leadIds.length} lead(s) as paid for ${forceProviderEmail} (no Stripe transfer)`,
+        cleared: leadIds.length,
+        leadIds,
+        syntheticId,
       });
     }
 
