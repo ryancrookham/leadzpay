@@ -44,7 +44,7 @@ const STEPS = [
 ];
 
 function ProviderOnboardingContent() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tokenParam = searchParams.get("token");
@@ -117,6 +117,7 @@ function ProviderOnboardingContent() {
         .then(r => r.json())
         .then(data => {
           if (data.complete) {
+            await update();
             router.push("/provider-dashboard");
             return;
           }
@@ -145,6 +146,7 @@ function ProviderOnboardingContent() {
           });
           const data = await res.json();
           if (data.complete) {
+            await update();
             router.push("/provider-dashboard");
           }
         } catch {

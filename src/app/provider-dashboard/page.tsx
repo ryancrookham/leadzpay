@@ -97,7 +97,7 @@ function checkLeadCaps(connection: ApiConnection): {
 
 export default function ProviderDashboard() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const { currentUser, isAuthenticated, isLoading, logout, updateUser } = useAuth();
   const currentProvider = useCurrentProvider();
   // Fetch leads from database API (not localStorage)
@@ -127,9 +127,23 @@ export default function ProviderDashboard() {
     } else if (!isLoading && currentUser && !isProvider(currentUser)) {
       router.push("/business");
     } else if (!isLoading && currentUser && isProvider(currentUser) && session?.user?.onboardingComplete === false) {
-      router.push("/provider-onboarding");
+      // Session may be stale — verify against DB before bouncing provider back to onboarding
+      fetch("/api/provider-onboarding")
+        .then(r => r.json())
+        .then(async data => {
+          if (data.complete) {
+            // DB says complete but session is stale — refresh JWT and stay on dashboard
+            await update();
+          } else {
+            router.push("/provider-onboarding");
+          }
+        })
+        .catch(() => {
+          // If API fails, fall back to session value
+          router.push("/provider-onboarding");
+        });
     }
-  }, [isLoading, isAuthenticated, currentUser, router, session]);
+  }, [isLoading, isAuthenticated, currentUser, router, session, update]);
 
   // Fetch leads from database API
   useEffect(() => {
