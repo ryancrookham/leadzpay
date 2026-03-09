@@ -118,7 +118,7 @@ function ProviderOnboardingContent() {
         .then(async data => {
           if (data.complete) {
             await update();
-            router.push("/provider-dashboard");
+            window.location.href = "/provider-dashboard";
             return;
           }
           setCurrentStep(data.step || 4);
@@ -128,7 +128,7 @@ function ProviderOnboardingContent() {
           setErrorMessage("Failed to load onboarding state.");
           setMode("error");
         });
-    } else if (status === "unauthenticated" && !tokenParam) {
+    } else if (status === "unauthenticated" && !tokenParam && !stripeParam) {
       router.push("/auth/login");
     }
   }, [tokenParam, status, session, router]);
@@ -147,7 +147,7 @@ function ProviderOnboardingContent() {
           const data = await res.json();
           if (data.complete) {
             await update();
-            router.push("/provider-dashboard");
+            window.location.href = "/provider-dashboard";
           }
         } catch {
           // Silent — user can retry

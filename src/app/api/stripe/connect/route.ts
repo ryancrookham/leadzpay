@@ -127,6 +127,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       const dbUser = await getProviderByStripeAccountId(accountId);
       if (!dbUser) {
+        console.error("[Stripe Connect] No user found for stripe_account_id:", accountId);
         return NextResponse.redirect(`${appUrl}/auth/login`);
       }
       userId = dbUser.id;
