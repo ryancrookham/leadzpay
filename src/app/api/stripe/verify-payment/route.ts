@@ -68,8 +68,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No leads found" }, { status: 404 });
     }
 
-    // If leads are already completed or processing, nothing to do
-    const stillPending = leads.filter((l) => l.payout_status === "pending");
+    // If all leads are already completed (webhook ran first), nothing to do
+    const stillPending = leads.filter((l) => l.payout_status !== "completed" && !l.stripe_transfer_id);
     if (stillPending.length === 0) {
       return NextResponse.json({
         status: "already_processed",
@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        // Idempotency key: if the webhook also fires for this same payment,
+        // Stripe will return the same transfer object instead of creating a duplicate.
         const transfer = await stripe.transfers.create({
           amount: transferCents,
           currency: "usd",
@@ -140,6 +142,8 @@ export async function POST(request: NextRequest) {
             buyer_id: buyerId,
             trigger: "verify_payment",
           },
+        }, {
+          idempotencyKey: `transfer-${checkoutSession.id}-${providerId}`,
         });
 
         await batchUpdateLeadStripeTransfer(providerLeadIds, transfer.id, "completed");

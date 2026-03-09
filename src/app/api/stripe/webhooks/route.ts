@@ -109,12 +109,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // Skip leads already completed (verify-payment may have run before this webhook arrived)
+  const unprocessedLeads = leads.filter(l => l.payout_status !== 'completed');
+  if (unprocessedLeads.length === 0) {
+    console.log(`[WEBHOOK] All leads already completed for checkout ${session.id} — skipping (verify-payment ran first)`);
+    return;
+  }
+
   // Get platform fee settings
   const platformFees = await getPlatformSettings();
 
-  // Group leads by provider
+  // Group ONLY unprocessed leads by provider
   const leadsByProvider = new Map<string, typeof leads>();
-  for (const lead of leads) {
+  for (const lead of unprocessedLeads) {
     const existing = leadsByProvider.get(lead.provider_id) || [];
     existing.push(lead);
     leadsByProvider.set(lead.provider_id, existing);
@@ -168,16 +175,20 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     try {
       // Create Stripe Transfer to provider's Connect account
+      // Idempotency key prevents double transfers if webhook fires more than once
+      // or if verify-payment already created this transfer (Stripe returns the same transfer)
       const transfer = await stripe.transfers.create({
         amount: transferCents,
         currency: "usd",
         destination: provider.stripe_account_id,
-        transfer_group: session.id, // Links multi-provider payments for reconciliation
+        transfer_group: session.id,
         metadata: {
           lead_ids: providerLeadIds.join(","),
           provider_id: providerId,
           buyer_id: buyerId,
         },
+      }, {
+        idempotencyKey: `transfer-${session.id}-${providerId}`,
       });
 
       // Mark leads as completed with transfer ID
