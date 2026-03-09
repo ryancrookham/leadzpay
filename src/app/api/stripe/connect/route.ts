@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import { getUserById, updateUserStripeAccount, getProviderOnboardingState, getProviderByStripeAccountId } from "@/lib/db";
 import { neon } from "@neondatabase/serverless";
+import { encode } from "@auth/core/jwt";
 
 function getDb() {
   const url = process.env.DATABASE_URL;
@@ -109,7 +110,9 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/stripe/connect?account_id=acct_xxx
- * Return URL after Stripe onboarding — verify the account and redirect.
+ * Return URL after Stripe onboarding — verify the account, create a fresh
+ * session cookie (so the provider lands on the dashboard already authenticated
+ * even if their original cookie was lost during the Stripe redirect), and redirect.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -145,10 +148,75 @@ export async function GET(request: NextRequest) {
     if (onboardingState && !onboardingState.complete) {
       const sql = getDb();
       await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${userId}`;
-      return NextResponse.redirect(`${appUrl}/provider-dashboard`);
     }
 
-    return NextResponse.redirect(`${appUrl}/provider-dashboard?tab=settings&stripe=success`);
+    // Fetch fresh user data to build the session token
+    const freshUser = await getUserById(userId);
+    if (!freshUser) {
+      console.error("[Stripe Connect] Could not load user after DB update, userId:", userId);
+      return NextResponse.redirect(`${appUrl}/auth/login`);
+    }
+
+    // Determine destination — settings tab if onboarding was already complete before this call
+    const wasAlreadyComplete = onboardingState?.complete ?? false;
+    const destination = wasAlreadyComplete
+      ? `${appUrl}/provider-dashboard?tab=settings&stripe=success`
+      : `${appUrl}/provider-dashboard`;
+
+    // Build a fresh NextAuth JWT and attach it as a session cookie on the redirect
+    // response. This ensures the provider is authenticated even if their original
+    // cookie was dropped during the cross-site Stripe → womleads.com redirect.
+    const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+    if (secret) {
+      try {
+        const isProduction = process.env.NODE_ENV === "production";
+        const cookieName = isProduction
+          ? "__Secure-authjs.session-token"
+          : "authjs.session-token";
+        const maxAge = 30 * 24 * 60 * 60; // 30 days
+
+        const sessionToken = await encode({
+          token: {
+            id: freshUser.id,
+            email: freshUser.email,
+            username: freshUser.username,
+            role: freshUser.role,
+            displayName: freshUser.display_name || undefined,
+            businessName: freshUser.business_name || undefined,
+            businessType: freshUser.business_type || undefined,
+            phone: freshUser.phone || undefined,
+            location: freshUser.location || undefined,
+            licensedStates: freshUser.licensed_states || undefined,
+            stripeAccountId: freshUser.stripe_account_id || undefined,
+            stripeOnboardingComplete: true,
+            onboardingStep: freshUser.onboarding_step,
+            onboardingComplete: true,
+          },
+          secret,
+          maxAge,
+          salt: cookieName,
+        });
+
+        const redirectResponse = NextResponse.redirect(destination);
+        redirectResponse.cookies.set(cookieName, sessionToken, {
+          httpOnly: true,
+          secure: isProduction,
+          sameSite: "lax",
+          path: "/",
+          maxAge,
+        });
+        console.log("[Stripe Connect] Fresh session cookie set for userId:", userId);
+        return redirectResponse;
+      } catch (encodeError) {
+        console.error("[Stripe Connect] Failed to encode session token:", encodeError);
+        // Fall through to plain redirect — provider will need to log in manually
+      }
+    } else {
+      console.error("[Stripe Connect] NEXTAUTH_SECRET not set — cannot create session cookie");
+    }
+
+    // Fallback: plain redirect (no fresh cookie)
+    return NextResponse.redirect(destination);
   } catch (error) {
     console.error("Stripe Connect callback error:", error);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://womleads.com";
