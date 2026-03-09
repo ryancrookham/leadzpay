@@ -477,6 +477,24 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                 </div>
               </div>
 
+              {/* Locked default fields — always collected */}
+              <div className="space-y-2 mb-3">
+                {["Name", "Email", "Phone"].map(label => (
+                  <div key={label} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg opacity-60">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Default</span>
+                    <span className="flex-1 text-sm text-gray-700">{label}</span>
+                    <span className="text-xs text-gray-400">Always required</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                ))}
+              </div>
+
+              {criteriaFields.length > 0 && (
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">Custom Fields</p>
+              )}
+
               {criteriaFields.length === 0 ? (
                 <p className="text-gray-400 text-sm italic">No custom fields yet. Add fields above to define what providers must submit.</p>
               ) : (
@@ -564,22 +582,30 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               </div>
             </div>
 
-            {savedFields.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Required Fields ({savedFields.length})</p>
-                <div className="space-y-2">
-                  {savedFields.map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg text-sm">
-                      {fieldTypeBadge(f.field_type)}
-                      <span className="text-gray-800">{f.label}</span>
-                      {f.field_type === "BINARY" && <span className="text-gray-500 text-xs">({f.option_a} / {f.option_b})</span>}
-                      {f.is_mandatory && <span className="text-red-500 text-xs font-medium">Required</span>}
-                      {!f.is_mandatory && <span className="text-gray-400 text-xs">Optional</span>}
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Required Fields ({3 + savedFields.length})</p>
+              <div className="space-y-2">
+                {["Name", "Email", "Phone"].map(label => (
+                  <div key={label} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg text-sm opacity-60">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Default</span>
+                    <span className="text-gray-800">{label}</span>
+                    <span className="text-gray-400 text-xs">Always required</span>
+                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                ))}
+                {savedFields.map(f => (
+                  <div key={f.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg text-sm">
+                    {fieldTypeBadge(f.field_type)}
+                    <span className="text-gray-800">{f.label}</span>
+                    {f.field_type === "BINARY" && <span className="text-gray-500 text-xs">({f.option_a} / {f.option_b})</span>}
+                    {f.is_mandatory && <span className="text-red-500 text-xs font-medium">Required</span>}
+                    {!f.is_mandatory && <span className="text-gray-400 text-xs">Optional</span>}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
 
             <div className="flex gap-3">
               <button

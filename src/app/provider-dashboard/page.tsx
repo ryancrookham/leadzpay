@@ -1107,12 +1107,15 @@ function ConnectionTab({
                 />
               </div>
 
-              {/* Dynamic Criteria Fields */}
-              {criteriaLoaded && criteriaFields.length > 0 && (
+              {/* Dynamic Criteria Fields (deduplicate fields already collected above) */}
+              {(() => {
+                const DEFAULT_LABELS = ["name", "customer name", "email", "phone", "phone number"];
+                const filtered = criteriaFields.filter(f => !DEFAULT_LABELS.includes(f.label.trim().toLowerCase()));
+                return criteriaLoaded && filtered.length > 0 && (
                 <div className="border-t border-gray-200 pt-4 mt-4">
                   <p className="text-sm font-semibold text-gray-700 mb-3">Additional Required Information</p>
                   <div className="space-y-4">
-                    {criteriaFields.map(field => (
+                    {filtered.map(field => (
                       <div key={field.id}>
                         <label className="block text-gray-700 text-sm font-medium mb-2">
                           {field.label} {field.is_mandatory && <span className="text-red-500">*</span>}
@@ -1189,7 +1192,8 @@ function ConnectionTab({
                     ))}
                   </div>
                 </div>
-              )}
+              );
+              })()}
 
               {/* Submit Button */}
               <button

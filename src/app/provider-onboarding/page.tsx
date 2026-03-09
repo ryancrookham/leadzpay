@@ -115,7 +115,7 @@ function ProviderOnboardingContent() {
       // Fetch onboarding state and resume at the right step
       fetch("/api/provider-onboarding")
         .then(r => r.json())
-        .then(data => {
+        .then(async data => {
           if (data.complete) {
             await update();
             router.push("/provider-dashboard");
