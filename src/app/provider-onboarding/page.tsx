@@ -344,12 +344,11 @@ function ProviderOnboardingContent() {
             <Image
               src="/woml-v3.png"
               alt="WOML"
-              width={200}
-              height={60}
-              className="mx-auto mb-4 h-14 w-auto object-contain"
+              width={320}
+              height={96}
+              className="mx-auto mb-3 h-24 w-auto object-contain"
             />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome to WOMLeads</h1>
           {tokenData && (
             <p className="text-gray-500 mt-1">
               Join <span className="font-semibold text-gray-700">{tokenData.businessName}</span>&apos;s provider network
@@ -482,42 +481,44 @@ function ProviderOnboardingContent() {
               <h2 className="text-xl font-bold text-gray-900 mb-2">What You Need to Submit</h2>
               <p className="text-gray-500 text-sm mb-6">Every lead you submit must include all Required fields.</p>
 
-              {tokenData.criteriaFields.length === 0 ? (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 text-center">
-                  <p className="text-gray-500 text-sm">No custom field requirements for this business.</p>
-                  <p className="text-gray-400 text-xs mt-1">Standard contact info will be collected with each lead.</p>
-                </div>
-              ) : (
-                <div className="space-y-3 mb-6">
-                  {tokenData.criteriaFields.map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      {f.field_type === "PHOTO" && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          </svg>
-                          PHOTO
-                        </span>
-                      )}
-                      {f.field_type === "TEXT" && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">TEXT</span>
-                      )}
-                      {f.field_type === "BINARY" && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">CHOICE</span>
-                      )}
-                      <span className="text-gray-800 text-sm flex-1">{f.label}</span>
-                      {f.field_type === "BINARY" && (
-                        <span className="text-gray-400 text-xs">({f.option_a} / {f.option_b})</span>
-                      )}
-                      {f.is_mandatory ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">Required</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Optional</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="space-y-3 mb-6">
+                {/* Default fields — always shown */}
+                {["Name", "Email", "Phone"].map(label => (
+                  <div key={label} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">DEFAULT</span>
+                    <span className="text-gray-800 text-sm flex-1">{label}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">Required</span>
+                  </div>
+                ))}
+                {/* Custom criteria fields */}
+                {tokenData.criteriaFields.map(f => (
+                  <div key={f.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    {f.field_type === "PHOTO" && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        </svg>
+                        PHOTO
+                      </span>
+                    )}
+                    {f.field_type === "TEXT" && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">TEXT</span>
+                    )}
+                    {f.field_type === "BINARY" && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">CHOICE</span>
+                    )}
+                    <span className="text-gray-800 text-sm flex-1">{f.label}</span>
+                    {f.field_type === "BINARY" && (
+                      <span className="text-gray-400 text-xs">({f.option_a} / {f.option_b})</span>
+                    )}
+                    {f.is_mandatory ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">Required</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Optional</span>
+                    )}
+                  </div>
+                ))}
+              </div>
 
               <label className="flex items-center gap-3 cursor-pointer mb-6">
                 <input
