@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { providerId: specificProviderId, checkoutSessionId } = body as {
+    const { providerId: specificProviderId, checkoutSessionId, forceProviderEmail } = body as {
       providerId?: string;
       checkoutSessionId?: string;
+      forceProviderEmail?: string;
     };
 
     const sql = getDb();
@@ -159,6 +160,76 @@ export async function POST(request: NextRequest) {
         transferred,
         failed,
         results,
+      });
+    }
+
+    // Force-transfer all unpaid leads for a provider identified by email (bypasses checkout session)
+    if (forceProviderEmail) {
+      const providerRows = await sql`SELECT * FROM users WHERE email = ${forceProviderEmail} AND role = 'provider' LIMIT 1`;
+      if (providerRows.length === 0) {
+        return NextResponse.json({ error: "Provider not found with that email" }, { status: 404 });
+      }
+      const provider = providerRows[0] as any;
+      if (!provider.stripe_account_id || !provider.stripe_onboarding_complete) {
+        return NextResponse.json({ error: "Provider has not completed Stripe Connect onboarding" }, { status: 400 });
+      }
+
+      // Get all pending/processing leads for this provider
+      const unpaidLeads = await sql`
+        SELECT * FROM leads
+        WHERE provider_id = ${provider.id}
+        AND payout_status IN ('pending', 'processing')
+      `;
+      if (unpaidLeads.length === 0) {
+        return NextResponse.json({ error: "No unpaid leads found for this provider" }, { status: 404 });
+      }
+
+      const platformFees = await getPlatformSettings();
+      let transferCents = 0;
+      for (const lead of unpaidLeads as any[]) {
+        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+        transferCents += Math.round(breakdown.providerNet * 100);
+      }
+
+      const leadIds = (unpaidLeads as any[]).map((l) => l.id);
+      await batchUpdateLeadPayoutStatus(leadIds, "processing");
+
+      const transfer = await stripe.transfers.create({
+        amount: transferCents,
+        currency: "usd",
+        destination: provider.stripe_account_id,
+        metadata: {
+          lead_ids: leadIds.join(","),
+          provider_id: provider.id,
+          trigger: "admin_force_transfer",
+        },
+      });
+
+      await batchUpdateLeadStripeTransfer(leadIds, transfer.id, "completed");
+
+      for (const lead of unpaidLeads as any[]) {
+        const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+        await createTransaction({
+          type: "lead_payout",
+          status: "completed",
+          amount: breakdown.providerNet,
+          fee_amount: breakdown.providerFee,
+          net_amount: breakdown.providerNet,
+          from_account_id: null,
+          to_account_id: provider.id,
+          lead_id: lead.id,
+          connection_id: lead.connection_id || undefined,
+          stripe_payment_id: transfer.id,
+          description: `Provider payout via Stripe Connect (admin force transfer)`,
+        });
+      }
+
+      return NextResponse.json({
+        message: `Force transfer complete: $${(transferCents / 100).toFixed(2)} sent to ${forceProviderEmail}`,
+        transferred: 1,
+        transferId: transfer.id,
+        amount: transferCents / 100,
+        leadCount: leadIds.length,
       });
     }
 
