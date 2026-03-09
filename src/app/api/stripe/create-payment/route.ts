@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         buyer_id: session.user.id,
         lead_count: String(leads.length),
       },
-      success_url: `${appUrl}/business?tab=leads&payment=success`,
+      success_url: `${appUrl}/business?tab=leads&payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/business?tab=leads&payment=cancelled`,
     });
 

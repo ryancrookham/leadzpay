@@ -200,11 +200,26 @@ function BusinessPortalContent() {
     if (payment === "success") {
       setPaymentNotice("Payment successful! Leads are being processed.");
       setActiveTab("leads");
-      // Re-fetch leads to get updated statuses
-      fetchLeads();
-      // Clear the query param
+
+      // Call verify-payment to process lead status + trigger provider transfer
+      // even if the Stripe webhook hasn't fired yet
+      const sessionId = searchParams.get("session_id");
+      if (sessionId) {
+        fetch("/api/stripe/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+          .then(() => fetchLeads())
+          .catch(() => fetchLeads());
+      } else {
+        fetchLeads();
+      }
+
+      // Clear the query params
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
+      url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
       setTimeout(() => setPaymentNotice(null), 8000);
     } else if (payment === "cancelled") {
