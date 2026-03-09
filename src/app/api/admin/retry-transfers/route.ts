@@ -271,8 +271,8 @@ export async function POST(request: NextRequest) {
       failed,
       results,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[ADMIN-RETRY-TRANSFERS] error:", error);
-    return NextResponse.json({ error: "Retry failed" }, { status: 500 });
+    return NextResponse.json({ error: "Retry failed", detail: error?.message || String(error) }, { status: 500 });
   }
 }
