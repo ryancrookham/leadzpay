@@ -260,7 +260,7 @@ function BusinessPortalContent() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace("/");
+    window.location.href = "/";
   };
 
   // Calculate CRM analytics from uploaded data
