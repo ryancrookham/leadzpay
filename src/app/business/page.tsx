@@ -85,7 +85,7 @@ class TabErrorBoundary extends React.Component<
 function BusinessPortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
+  const { currentUser, isAuthenticated, isLoading, isSigningOut, logout } = useAuth();
   const { update: updateSession } = useSession();
   const currentBuyer = useCurrentBuyer();
 
@@ -264,14 +264,16 @@ function BusinessPortalContent() {
   // Active connections (finalized, terms accepted)
   const activeConnections = myConnections.filter(c => c.status === "active");
 
-  // Redirect to login if not authenticated or not a buyer
+  // Redirect to login if not authenticated or not a buyer.
+  // Guard: skip entirely while signing out — NextAuth's callbackUrl redirect wins.
   useEffect(() => {
+    if (isSigningOut) return;
     if (!isLoading && (!isAuthenticated || !currentUser)) {
       router.push("/auth/login?role=buyer");
     } else if (!isLoading && currentUser && !isBuyer(currentUser) && !searchParams.get("stripe")) {
       router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
     }
-  }, [isLoading, isAuthenticated, currentUser, router]);
+  }, [isLoading, isAuthenticated, isSigningOut, currentUser, router]);
 
   const handleLogout = () => logout();
 

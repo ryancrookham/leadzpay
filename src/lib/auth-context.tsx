@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useState,
+  useRef,
   ReactNode,
   useCallback,
 } from "react";
@@ -25,6 +26,7 @@ interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isSigningOut: boolean;
   login: (
     email: string,
     password: string,
@@ -120,6 +122,10 @@ function sessionToUser(sessionUser: {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
   const [updateTrigger, setUpdateTrigger] = useState(0);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  // Ref mirrors state so the logout callback always sees the latest value
+  // without needing to be re-created.
+  const isSigningOutRef = useRef(false);
 
   const isLoading = status === "loading";
   const isAuthenticated = !!session?.user;
@@ -173,13 +179,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async (callbackUrl = "/") => {
+    // Set isSigningOut BEFORE signOut starts. This prevents any component
+    // useEffect or conditional render from flashing the login screen while
+    // the session is mid-clear. NextAuth's callbackUrl redirect then wins.
+    isSigningOutRef.current = true;
+    setIsSigningOut(true);
     try {
-      // Use callbackUrl so NextAuth owns the redirect — single clean full-page
-      // navigation, no race with component-level useEffect redirects.
       await signOut({ callbackUrl });
     } catch (error) {
       console.error("[AUTH] Logout error:", error);
-      window.location.href = callbackUrl; // fallback if signOut throws
+      window.location.href = callbackUrl;
     }
   }, []);
 
@@ -345,6 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentUser,
         isAuthenticated,
         isLoading,
+        isSigningOut,
         login,
         logout,
         registerBuyer,

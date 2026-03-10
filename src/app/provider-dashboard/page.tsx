@@ -98,7 +98,7 @@ function checkLeadCaps(connection: ApiConnection): {
 export default function ProviderDashboard() {
   const router = useRouter();
   const { data: session, update } = useSession();
-  const { currentUser, isAuthenticated, isLoading, logout, updateUser } = useAuth();
+  const { currentUser, isAuthenticated, isLoading, isSigningOut, logout, updateUser } = useAuth();
   const currentProvider = useCurrentProvider();
   // Fetch leads from database API (not localStorage)
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
@@ -120,8 +120,10 @@ export default function ProviderDashboard() {
   } = useConnections();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
-  // Redirect to login if not authenticated or not a provider
+  // Redirect to login if not authenticated or not a provider.
+  // Guard: skip entirely while signing out — NextAuth's callbackUrl redirect wins.
   useEffect(() => {
+    if (isSigningOut) return;
     if (!isLoading && (!isAuthenticated || !currentUser)) {
       router.push("/auth/login?role=provider");
     } else if (!isLoading && currentUser && !isProvider(currentUser)) {
@@ -143,7 +145,7 @@ export default function ProviderDashboard() {
           router.push("/provider-onboarding");
         });
     }
-  }, [isLoading, isAuthenticated, currentUser, router, session, update]);
+  }, [isLoading, isAuthenticated, isSigningOut, currentUser, router, session, update]);
 
   // Fetch leads from database API
   useEffect(() => {

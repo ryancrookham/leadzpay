@@ -79,7 +79,7 @@ interface HardDeleteTarget {
 }
 
 export default function AdminPanel() {
-  const { currentUser, isLoading: authLoading, isAuthenticated, login, logout } = useAuth();
+  const { currentUser, isLoading: authLoading, isAuthenticated, isSigningOut, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("users");
 
   // Hard delete confirmation modal state
@@ -244,8 +244,8 @@ export default function AdminPanel() {
     }
   };
 
-  // --- Loading ---
-  if (authLoading) {
+  // --- Loading / Signing Out ---
+  if (authLoading || isSigningOut) {
     return (
       <div className="min-h-screen bg-[#152238] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
