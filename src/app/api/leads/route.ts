@@ -191,11 +191,10 @@ export async function POST(request: NextRequest) {
           const client = twilio(accountSid, authToken);
           const providerUser = await getUserById(session.user.id);
           const providerName = providerUser?.display_name || providerUser?.username || "A provider";
-          const customerName = customerData?.name || customerData?.customerName || "a customer";
-          const vehiclePart = vehicleData?.year && vehicleData?.make
-            ? ` (${vehicleData.year} ${vehicleData.make}${vehicleData.model ? " " + vehicleData.model : ""})`
-            : "";
-          const messageBody = `🔔 New WOML lead from ${providerName}: ${customerName}${vehiclePart} is interested in insurance. Value: $${ratePerLead.toFixed(2)}. View at https://womleads.com/business`;
+          const customerName = customerData?.name || customerData?.customerName || "Unknown";
+          const customerPhone = customerData?.phone || "";
+          const phoneSegment = customerPhone ? `, call at ${customerPhone}` : "";
+          const messageBody = `WOML LEAD FROM ${providerName.toUpperCase()}: ${customerName}${phoneSegment}. View leads: https://womleads.com/business`;
           const phones = [smsSettings.smsAlertPhone1, smsSettings.smsAlertPhone2].filter(Boolean) as string[];
           for (const phone of phones) {
             await client.messages.create({ body: messageBody, from: twilioPhone, to: phone }).catch((err: any) => {
