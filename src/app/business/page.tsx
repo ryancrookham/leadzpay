@@ -3880,6 +3880,14 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
   const [stripeStatus, setStripeStatus] = useState<"not_connected" | "connected">("not_connected");
   const [stripeLoading, setStripeLoading] = useState(false);
 
+  // SMS Alert state
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [smsPhone1, setSmsPhone1] = useState("");
+  const [smsPhone2, setSmsPhone2] = useState("");
+  const [smsSaving, setSmsSaving] = useState(false);
+  const [smsSaved, setSmsSaved] = useState(false);
+  const [smsError, setSmsError] = useState("");
+
   // Fetch full profile on mount
   useEffect(() => {
     async function loadProfile() {
@@ -3895,7 +3903,23 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         console.error("Failed to load profile:", e);
       }
     }
+    async function loadSmsSettings() {
+      try {
+        const res = await fetch("/api/business/sms-alerts");
+        if (res.ok) {
+          const data = await res.json();
+          setSmsEnabled(data.smsAlertsEnabled ?? false);
+          // Display stored E.164 numbers in friendly format (strip +1)
+          const fmt = (p: string | null) => p ? p.replace(/^\+1/, "") : "";
+          setSmsPhone1(fmt(data.smsAlertPhone1));
+          setSmsPhone2(fmt(data.smsAlertPhone2));
+        }
+      } catch (e) {
+        console.error("Failed to load SMS settings:", e);
+      }
+    }
     loadProfile();
+    loadSmsSettings();
   }, []);
 
   const compressImage = (file: File): Promise<string> => {
@@ -3952,6 +3976,33 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleSmsSave = async () => {
+    setSmsError("");
+    setSmsSaving(true);
+    try {
+      const res = await fetch("/api/business/sms-alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smsAlertsEnabled: smsEnabled,
+          smsAlertPhone1: smsPhone1 || null,
+          smsAlertPhone2: smsPhone2 || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSmsError(data.error || "Failed to save SMS settings");
+      } else {
+        setSmsSaved(true);
+        setTimeout(() => setSmsSaved(false), 3000);
+      }
+    } catch {
+      setSmsError("Network error — please try again.");
+    } finally {
+      setSmsSaving(false);
+    }
   };
 
 
@@ -4097,6 +4148,79 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         >
           {saving ? "Saving..." : "Save Settings"}
         </button>
+
+        {/* ── SMS Lead Alerts ────────────────────────────────────────────── */}
+        <div className="border-t border-gray-200 pt-6 mt-2">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800">Lead Alert SMS</h4>
+              <p className="text-gray-500 text-xs mt-0.5">
+                Get a text the moment a provider submits a new lead. Up to 2 numbers.
+              </p>
+            </div>
+            {/* Toggle switch */}
+            <button
+              type="button"
+              onClick={() => setSmsEnabled(v => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                smsEnabled ? "bg-[#E8822A]" : "bg-gray-200"
+              }`}
+              aria-pressed={smsEnabled}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  smsEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {smsEnabled && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-gray-700 text-xs font-medium mb-1">Alert Number 1</label>
+                <input
+                  type="tel"
+                  placeholder="(215) 555-0100"
+                  value={smsPhone1}
+                  onChange={e => setSmsPhone1(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-xs font-medium mb-1">Alert Number 2 <span className="text-gray-400">(optional)</span></label>
+                <input
+                  type="tel"
+                  placeholder="(215) 555-0101"
+                  value={smsPhone2}
+                  onChange={e => setSmsPhone2(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {smsError && (
+            <p className="mt-2 text-red-600 text-xs">{smsError}</p>
+          )}
+
+          {smsSaved && (
+            <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              SMS alert settings saved!
+            </div>
+          )}
+
+          <button
+            onClick={handleSmsSave}
+            disabled={smsSaving}
+            className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          >
+            {smsSaving ? "Saving..." : "Save Alert Settings"}
+          </button>
+        </div>
 
         {/* ── Close Account ─────────────────────────────────────────────── */}
         <div className="border-t border-red-100 pt-6 mt-2">

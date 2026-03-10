@@ -14,9 +14,11 @@ import {
   ensureDuplicateCheckColumns,
   checkDuplicateLead,
   hashIdentifier,
+  getSmsAlertSettings,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
+import twilio from "twilio";
 
 /**
  * POST /api/leads - Provider submits a lead
@@ -177,6 +179,36 @@ export async function POST(request: NextRequest) {
       total_leads: Number(connection.total_leads || 0) + 1,
       total_paid: Number(connection.total_paid || 0) + ratePerLead,
     });
+
+    // 8. Fire SMS lead alert to business (non-blocking — never fails the lead submission)
+    try {
+      const smsSettings = await getSmsAlertSettings(buyer.id);
+      if (smsSettings.smsAlertsEnabled && (smsSettings.smsAlertPhone1 || smsSettings.smsAlertPhone2)) {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+        if (accountSid && authToken && twilioPhone) {
+          const client = twilio(accountSid, authToken);
+          const providerUser = await getUserById(session.user.id);
+          const providerName = providerUser?.display_name || providerUser?.username || "A provider";
+          const customerName = customerData?.name || customerData?.customerName || "a customer";
+          const vehiclePart = vehicleData?.year && vehicleData?.make
+            ? ` (${vehicleData.year} ${vehicleData.make}${vehicleData.model ? " " + vehicleData.model : ""})`
+            : "";
+          const messageBody = `🔔 New WOML lead from ${providerName}: ${customerName}${vehiclePart} is interested in insurance. Value: $${ratePerLead.toFixed(2)}. View at https://womleads.com/business`;
+          const phones = [smsSettings.smsAlertPhone1, smsSettings.smsAlertPhone2].filter(Boolean) as string[];
+          for (const phone of phones) {
+            await client.messages.create({ body: messageBody, from: twilioPhone, to: phone }).catch((err: any) => {
+              console.error(`[LEAD-SMS-ALERT] Failed to send to ${phone}:`, err?.message);
+            });
+          }
+          console.log(`[LEAD-SMS-ALERT] Alert sent for lead ${lead.id} to ${phones.length} number(s)`);
+        }
+      }
+    } catch (smsErr: any) {
+      // SMS failure should never block lead submission
+      console.error("[LEAD-SMS-ALERT] Non-blocking SMS error:", smsErr?.message);
+    }
 
     return NextResponse.json({
       success: true,

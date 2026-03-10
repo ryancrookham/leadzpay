@@ -49,6 +49,10 @@ export interface DbUser {
   buyer_stripe_setup_complete: boolean;
   business_agreement_accepted_at: string | null;
   disabled_at: string | null;
+  // SMS lead alert settings (buyer only)
+  sms_alerts_enabled: boolean;
+  sms_alert_phone1: string | null;
+  sms_alert_phone2: string | null;
 }
 
 export type ConnectionStatus =
@@ -634,6 +638,51 @@ export async function ensureDuplicateCheckColumns(): Promise<void> {
   const sql = getSql();
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_email_hash TEXT`;
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_phone_hash TEXT`;
+}
+
+// ── SMS alert columns ─────────────────────────────────────────────────────────
+// Idempotent migration: adds sms alert columns to users table if missing.
+
+export async function ensureSmsAlertColumns(): Promise<void> {
+  const sql = getSql();
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alerts_enabled BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alert_phone1 TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alert_phone2 TEXT`;
+}
+
+export async function getSmsAlertSettings(userId: string): Promise<{
+  smsAlertsEnabled: boolean;
+  smsAlertPhone1: string | null;
+  smsAlertPhone2: string | null;
+}> {
+  await ensureSmsAlertColumns();
+  const sql = getSql();
+  const result = await sql`
+    SELECT sms_alerts_enabled, sms_alert_phone1, sms_alert_phone2
+    FROM users WHERE id = ${userId} LIMIT 1
+  `;
+  const row = result[0] as any;
+  return {
+    smsAlertsEnabled: row?.sms_alerts_enabled ?? false,
+    smsAlertPhone1: row?.sms_alert_phone1 ?? null,
+    smsAlertPhone2: row?.sms_alert_phone2 ?? null,
+  };
+}
+
+export async function updateSmsAlertSettings(
+  userId: string,
+  settings: { smsAlertsEnabled: boolean; smsAlertPhone1: string | null; smsAlertPhone2: string | null }
+): Promise<void> {
+  await ensureSmsAlertColumns();
+  const sql = getSql();
+  await sql`
+    UPDATE users SET
+      sms_alerts_enabled = ${settings.smsAlertsEnabled},
+      sms_alert_phone1 = ${settings.smsAlertPhone1},
+      sms_alert_phone2 = ${settings.smsAlertPhone2},
+      updated_at = NOW()
+    WHERE id = ${userId}
+  `;
 }
 
 function normalise(value: string | undefined | null): string {
