@@ -168,10 +168,7 @@ export default function ProviderDashboard() {
     }).catch(() => {});
   }, [currentUser]);
 
-  const handleLogout = async () => {
-    await logout();
-    window.location.href = "/";
-  };
+  const handleLogout = () => logout();
 
   // Redirect admin users to their own dashboard
   useEffect(() => {

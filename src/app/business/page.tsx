@@ -273,10 +273,7 @@ function BusinessPortalContent() {
     }
   }, [isLoading, isAuthenticated, currentUser, router]);
 
-  const handleLogout = async () => {
-    await logout();
-    window.location.href = "/";
-  };
+  const handleLogout = () => logout();
 
   // Calculate CRM analytics from uploaded data
   const calculateCrmAnalytics = (data: UploadedRecord[]): AnalyticsData => {

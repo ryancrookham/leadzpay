@@ -30,7 +30,7 @@ interface AuthContextType {
     password: string,
     staySignedIn?: boolean
   ) => Promise<{ success: boolean; error?: string; role?: "buyer" | "provider" | "admin" }>;
-  logout: () => void;
+  logout: (callbackUrl?: string) => void;
   registerBuyer: (
     data: BuyerRegistrationData
   ) => Promise<{ success: boolean; error?: string }>;
@@ -172,11 +172,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (callbackUrl = "/") => {
     try {
-      await signOut({ redirect: false });
+      // Use callbackUrl so NextAuth owns the redirect — single clean full-page
+      // navigation, no race with component-level useEffect redirects.
+      await signOut({ callbackUrl });
     } catch (error) {
       console.error("[AUTH] Logout error:", error);
+      window.location.href = callbackUrl; // fallback if signOut throws
     }
   }, []);
 
