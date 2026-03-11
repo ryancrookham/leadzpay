@@ -96,6 +96,9 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [smsResult, setSmsResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Consent modal state
+  const [showConsentModal, setShowConsentModal] = useState(false);
+
   const fetchTokens = useCallback(async () => {
     setError(null);
     try {
@@ -333,11 +336,17 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
     }
   };
 
-  const handleSendSms = async () => {
+  const handleOpenConsentModal = () => {
     if (!smsPhone) {
       alert("Please enter a phone number");
       return;
     }
+    setSmsResult(null);
+    setShowConsentModal(true);
+  };
+
+  const handleSendSms = async () => {
+    setShowConsentModal(false);
     const selectedToken = tokens.find(t => t.id === smsTokenId);
     setIsSendingSms(true);
     setSmsResult(null);
@@ -866,7 +875,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
             </div>
 
             <button
-              onClick={handleSendSms}
+              onClick={handleOpenConsentModal}
               disabled={isSendingSms || !smsPhone}
               className="px-6 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition disabled:opacity-50"
             >
@@ -881,6 +890,63 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
           </div>
         )}
       </div>
+
+      {/* Consent Modal */}
+      {showConsentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-[#E8822A]/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Confirm SMS Invite</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Review the details before sending</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sending to</span>
+                <span className="font-medium text-gray-800">{smsPhone}</span>
+              </div>
+              {smsProviderName && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Provider name</span>
+                  <span className="font-medium text-gray-800">{smsProviderName}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">From</span>
+                <span className="font-medium text-gray-800">{businessName} via WOML</span>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm text-amber-900 leading-relaxed">
+                By clicking <strong>Send Invite</strong>, you confirm that this person has agreed to receive an SMS from WOML LLC with a link to join your lead channel. Message and data rates may apply.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConsentModal(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendSms}
+                className="flex-1 px-4 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition text-sm"
+              >
+                Send Invite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
