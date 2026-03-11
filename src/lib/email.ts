@@ -15,6 +15,7 @@ function getResend(): Resend {
 }
 
 const FROM_EMAIL = 'WOML <onboarding@resend.dev>';
+const REPLY_TO_EMAIL = 'support@womleads.com';
 
 interface SendEmailResult {
   success: boolean;
@@ -36,6 +37,7 @@ export async function sendPasswordResetEmail(
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
+      reply_to: REPLY_TO_EMAIL,
       subject: 'Reset Your WOML Password',
       html: `
         <!DOCTYPE html>
@@ -73,8 +75,11 @@ export async function sendPasswordResetEmail(
               </p>
 
               <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
-                <p style="color: #999; font-size: 12px; margin: 0;">
-                  Powered by WOMLeads
+                <p style="color: #999; font-size: 12px; margin: 0 0 4px 0;">
+                  WOML - Word of Mouth Leads
+                </p>
+                <p style="color: #bbb; font-size: 11px; margin: 0;">
+                  Questions? <a href="mailto:support@womleads.com" style="color: #E8822A;">support@womleads.com</a>
                 </p>
               </div>
             </div>
@@ -111,6 +116,7 @@ export async function sendInviteEmail(
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
+      reply_to: REPLY_TO_EMAIL,
       subject: `${businessName} has invited you to WOML`,
       html: `
         <!DOCTYPE html>
@@ -154,8 +160,11 @@ export async function sendInviteEmail(
               </p>
 
               <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
-                <p style="color: #999; font-size: 12px; margin: 0;">
-                  Powered by WOML - Word of Mouth Leads
+                <p style="color: #999; font-size: 12px; margin: 0 0 4px 0;">
+                  WOML - Word of Mouth Leads
+                </p>
+                <p style="color: #bbb; font-size: 11px; margin: 0;">
+                  Questions? <a href="mailto:support@womleads.com" style="color: #E8822A;">support@womleads.com</a>
                 </p>
               </div>
             </div>

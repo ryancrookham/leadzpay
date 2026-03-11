@@ -10,7 +10,7 @@ export const MASTER_OPERATOR = {
 
 // WOML Platform Configuration
 export const WOML_PLATFORM = {
-  email: "womleads@outlook.com",
+  email: "support@womleads.com",
   name: "WOML - Word of Mouth Leads",
 };
 

@@ -52,7 +52,7 @@ function LoginContent() {
           });
           const checkData = await checkRes.json();
           if (checkData.disabled) {
-            setError("This account has been disabled. Contact support to re-enable.");
+            setError("This account has been disabled. Contact support@womleads.com to re-enable.");
             setIsSubmitting(false);
             return;
           }

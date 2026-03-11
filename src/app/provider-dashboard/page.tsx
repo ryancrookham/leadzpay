@@ -1882,7 +1882,8 @@ function ProfileTab({
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mt-6">
         <h3 className="text-sm font-semibold text-red-700 mb-2">Danger Zone</h3>
         <p className="text-gray-500 text-sm mb-4">
-          Disabling your account prevents login and hides your profile. Your data is preserved and an admin can re-enable your account if you contact support.
+          Disabling your account prevents login and hides your profile. Your data is preserved and an admin can re-enable your account if you contact{' '}
+          <a href="mailto:support@womleads.com" className="text-[#E8822A] underline">support@womleads.com</a>.
         </p>
         <ProviderDisableButton />
       </div>
