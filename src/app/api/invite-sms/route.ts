@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import twilio from "twilio";
 import { auth } from "@/lib/auth";
-
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+import { sendSms, isSinchConfigured } from "@/lib/sinch";
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,51 +44,36 @@ export async function POST(request: NextRequest) {
     const earningLine = ratePerLead ? ` Earn $${ratePerLead} per lead.` : "";
     const messageBody = `${greeting}${senderName} invited you to send leads on WOML.${earningLine} Sign up here: ${signupUrl}`;
 
-    if (!accountSid || !authToken || !twilioPhone) {
-      console.error("Twilio not configured - missing credentials");
+    if (!isSinchConfigured()) {
+      console.error("Sinch not configured - missing credentials");
       return NextResponse.json(
-        { success: false, error: "SMS is not configured. Please set up Twilio credentials." },
+        { success: false, error: "SMS is not configured. Please set up Sinch credentials." },
         { status: 500 }
       );
     }
 
-    const client = twilio(accountSid, authToken);
+    const result = await sendSms(formattedPhone, messageBody);
 
-    const message = await client.messages.create({
-      body: messageBody,
-      from: twilioPhone,
-      to: formattedPhone,
-    });
+    if (!result.success) {
+      console.error("Sinch SMS invite failed:", result.error);
+      return NextResponse.json(
+        { success: false, error: result.error ?? "SMS failed. Try using the copy link button instead." },
+        { status: 500 }
+      );
+    }
 
-    console.log(`SMS invite sent to ${formattedPhone}, SID: ${message.sid}`);
+    console.log(`SMS invite sent to ${formattedPhone}, batch ID: ${result.batchId}`);
 
     return NextResponse.json({
       success: true,
-      messageSid: message.sid,
+      batchId: result.batchId,
       message: `Text invite sent to ${formattedPhone}`,
     });
   } catch (error: unknown) {
     console.error("Error sending SMS invite:", error);
-
-    // Parse Twilio error for a specific, actionable message
-    const twilioCode = (error as { code?: number })?.code;
-    const twilioMessage = error instanceof Error ? error.message : "";
-
-    let errorMessage: string;
-    if (twilioCode === 21608 || twilioCode === 21610 || twilioMessage.includes("unverified")) {
-      errorMessage = "SMS is temporarily unavailable — our toll-free number is pending verification. Please use the copy link button to share the invite URL directly.";
-    } else if (twilioCode === 21211 || twilioMessage.includes("is not a valid phone number")) {
-      errorMessage = "That phone number appears to be invalid. Please check and try again.";
-    } else if (twilioCode === 21606 || twilioMessage.includes("not a mobile number")) {
-      errorMessage = "That number cannot receive SMS. Please use a mobile number.";
-    } else if (twilioCode === 20003 || twilioMessage.includes("Authenticate")) {
-      errorMessage = "SMS service credentials are invalid. Please contact support.";
-    } else {
-      errorMessage = `SMS failed: ${twilioMessage || "Unknown error"}. Try using the copy link button instead.`;
-    }
-
+    const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { success: false, error: errorMessage },
+      { success: false, error: `SMS failed: ${msg}. Try using the copy link button instead.` },
       { status: 500 }
     );
   }

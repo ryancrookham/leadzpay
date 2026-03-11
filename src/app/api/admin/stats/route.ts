@@ -63,10 +63,10 @@ export async function GET() {
       disabledAt: u.disabled_at || null,
     }));
 
-    // Twilio status from env vars
+    // Sinch SMS status from env vars
     const twilioStatus = {
-      configured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
-      phoneNumber: process.env.TWILIO_PHONE_NUMBER || null,
+      configured: !!(process.env.SINCH_SERVICE_PLAN_ID && process.env.SINCH_API_TOKEN && process.env.SINCH_PHONE_NUMBER),
+      phoneNumber: process.env.SINCH_PHONE_NUMBER || null,
     };
 
     return NextResponse.json({

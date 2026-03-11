@@ -628,7 +628,7 @@ export default function AdminPanel() {
                   </div>
 
                   <div className="bg-white/10 rounded-xl border border-white/10 p-6">
-                    <h3 className="text-white font-semibold mb-4">Twilio SMS</h3>
+                    <h3 className="text-white font-semibold mb-4">Sinch SMS</h3>
                     {twilioStatus ? (
                       <div className="space-y-3">
                         <StatusRow label="Configured" ok={twilioStatus.configured} />
@@ -639,11 +639,11 @@ export default function AdminPanel() {
                           </div>
                         )}
                         <p className="text-gray-500 text-xs mt-2">
-                          Toll-free verification required for production SMS delivery
+                          Toll-free or 10DLC verification required for production SMS delivery
                         </p>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-sm">Unable to fetch Twilio status</p>
+                      <p className="text-gray-500 text-sm">Unable to fetch Sinch status</p>
                     )}
                   </div>
                 </div>

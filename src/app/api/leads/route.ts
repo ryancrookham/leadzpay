@@ -18,7 +18,7 @@ import {
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
-import twilio from "twilio";
+import { sendSms } from "@/lib/sinch";
 
 /**
  * POST /api/leads - Provider submits a lead
@@ -184,25 +184,20 @@ export async function POST(request: NextRequest) {
     try {
       const smsSettings = await getSmsAlertSettings(buyer.id);
       if (smsSettings.smsAlertsEnabled && (smsSettings.smsAlertPhone1 || smsSettings.smsAlertPhone2)) {
-        const accountSid = process.env.TWILIO_ACCOUNT_SID;
-        const authToken = process.env.TWILIO_AUTH_TOKEN;
-        const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
-        if (accountSid && authToken && twilioPhone) {
-          const client = twilio(accountSid, authToken);
-          const providerUser = await getUserById(session.user.id);
-          const providerName = providerUser?.display_name || providerUser?.username || "A provider";
-          const customerName = customerData?.name || customerData?.customerName || "Unknown";
-          const customerPhone = customerData?.phone || "";
-          const phoneSegment = customerPhone ? `, call at ${customerPhone}` : "";
-          const messageBody = `WOML LEAD FROM ${providerName.toUpperCase()}: ${customerName}${phoneSegment}. View leads: https://womleads.com/business`;
-          const phones = [smsSettings.smsAlertPhone1, smsSettings.smsAlertPhone2].filter(Boolean) as string[];
-          for (const phone of phones) {
-            await client.messages.create({ body: messageBody, from: twilioPhone, to: phone }).catch((err: any) => {
-              console.error(`[LEAD-SMS-ALERT] Failed to send to ${phone}:`, err?.message);
-            });
+        const providerUser = await getUserById(session.user.id);
+        const providerName = providerUser?.display_name || providerUser?.username || "A provider";
+        const customerName = customerData?.name || customerData?.customerName || "Unknown";
+        const customerPhone = customerData?.phone || "";
+        const phoneSegment = customerPhone ? `, call at ${customerPhone}` : "";
+        const messageBody = `WOML LEAD FROM ${providerName.toUpperCase()}: ${customerName}${phoneSegment}. View leads: https://womleads.com/business`;
+        const phones = [smsSettings.smsAlertPhone1, smsSettings.smsAlertPhone2].filter(Boolean) as string[];
+        for (const phone of phones) {
+          const result = await sendSms(phone, messageBody);
+          if (!result.success) {
+            console.error(`[LEAD-SMS-ALERT] Failed to send to ${phone}:`, result.error);
           }
-          console.log(`[LEAD-SMS-ALERT] Alert sent for lead ${lead.id} to ${phones.length} number(s)`);
         }
+        console.log(`[LEAD-SMS-ALERT] Alert sent for lead ${lead.id} to ${phones.length} number(s)`);
       }
     } catch (smsErr: any) {
       // SMS failure should never block lead submission
