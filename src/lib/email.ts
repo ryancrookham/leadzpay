@@ -37,7 +37,7 @@ export async function sendPasswordResetEmail(
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      reply_to: REPLY_TO_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
       subject: 'Reset Your WOML Password',
       html: `
         <!DOCTYPE html>
@@ -116,7 +116,7 @@ export async function sendInviteEmail(
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      reply_to: REPLY_TO_EMAIL,
+      replyTo: REPLY_TO_EMAIL,
       subject: `${businessName} has invited you to WOML`,
       html: `
         <!DOCTYPE html>
