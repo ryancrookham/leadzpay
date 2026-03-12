@@ -14,7 +14,7 @@ const tabs = [
 ];
 
 // Nav bar height in px — sidebar and overlay open below this line
-const NAV_H = 97;
+const NAV_H = 176;
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
