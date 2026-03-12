@@ -56,7 +56,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
-      <nav className="flex items-center px-8 py-8 bg-white border-b border-gray-100 relative z-[60]">
+      <nav className="flex items-center px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
         {/* Left: hamburger — flex-1 balances the right side */}
         <div className="flex-1 flex items-center">
           <Sidebar />
@@ -69,9 +69,9 @@ export default function Home() {
           <Image
             src="/woml-alt-orange.png"
             alt="WOML - Word of Mouth Leads"
-            width={960}
-            height={288}
-            className="h-72 w-auto object-contain"
+            width={360}
+            height={108}
+            className="h-10 w-auto object-contain"
           />
         </button>
         {/* Right: auth buttons — flex-1 keeps logo centered */}

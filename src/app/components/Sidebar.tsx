@@ -14,8 +14,8 @@ const tabs = [
   { label: "Legal", href: "/legal" },
 ];
 
-// Nav bar height in px — py-8 (64px) + h-72 logo (288px) = 352px
-const NAV_H = 352;
+// Nav bar height in px — py-4 (32px) + h-10 logo (40px) = 72px
+const NAV_H = 72;
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
