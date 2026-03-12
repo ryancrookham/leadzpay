@@ -17,7 +17,7 @@ export default function PricingPage() {
         </div>
         {/* Center: logo absolutely centered */}
         <div className="absolute left-1/2 -translate-x-1/2">
-          <Link href="/" className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E77500] transition">
+          <Link href="/" className="flex items-center">
             <Image src="/woml-alt-orange.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
           </Link>
         </div>

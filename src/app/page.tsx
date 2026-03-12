@@ -47,7 +47,7 @@ export default function Home() {
             alt="WOML - Word of Mouth Leads"
             width={360}
             height={108}
-            className="h-10 w-auto object-contain"
+            className="h-[60px] w-auto object-contain"
           />
         </button>
         {/* Right: auth buttons — flex-1 keeps logo centered */}

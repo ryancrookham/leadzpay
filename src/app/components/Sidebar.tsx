@@ -15,7 +15,7 @@ const tabs = [
 ];
 
 // Nav bar height in px — py-4 (32px) + h-10 logo (40px) = 72px
-const NAV_H = 72;
+const NAV_H = 92;
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
