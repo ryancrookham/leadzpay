@@ -98,6 +98,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
 
   // Consent modal state
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [smsConsentChecked, setSmsConsentChecked] = useState(false);
 
   const fetchTokens = useCallback(async () => {
     setError(null);
@@ -347,6 +348,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
 
   const handleSendSms = async () => {
     setShowConsentModal(false);
+    setSmsConsentChecked(false);
     const selectedToken = tokens.find(t => t.id === smsTokenId);
     setIsSendingSms(true);
     setSmsResult(null);
@@ -924,22 +926,29 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-sm text-amber-900 leading-relaxed">
-                By clicking <strong>Send Invite</strong>, you confirm that this person has agreed to receive an SMS from WOML LLC with a link to join your lead channel. Message and data rates may apply.
-              </p>
-            </div>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={smsConsentChecked}
+                onChange={e => setSmsConsentChecked(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 accent-[#E8822A] cursor-pointer flex-shrink-0"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                I confirm that {smsProviderName ? <strong>{smsProviderName}</strong> : "this person"} has given me prior express consent to receive this text message from WOML LLC. Message and data rates may apply.
+              </span>
+            </label>
 
             <div className="flex gap-3">
               <button
-                onClick={() => setShowConsentModal(false)}
+                onClick={() => { setShowConsentModal(false); setSmsConsentChecked(false); }}
                 className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSendSms}
-                className="flex-1 px-4 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition text-sm"
+                disabled={!smsConsentChecked}
+                className="flex-1 px-4 py-2.5 bg-[#E8822A] text-white rounded-lg font-medium hover:bg-[#d4751f] transition text-sm disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Send Invite
               </button>
