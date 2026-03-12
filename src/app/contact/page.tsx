@@ -10,18 +10,17 @@ export const metadata = {
 export default function ContactPage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <nav className="flex items-center justify-between px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
-        {/* Left: hamburger */}
-        <div className="flex items-center">
+      <nav className="flex items-center px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
+        {/* Left: hamburger — flex-1 balances the right side */}
+        <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
-        {/* Center: logo absolutely centered */}
-        <div className="absolute left-1/2 -translate-x-1/2">
-          <Link href="/" className="flex items-center">
-            <Image src="/woml-alt-orange.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
-          </Link>
-        </div>
-        <div className="flex gap-3 items-center">
+        {/* Center: logo in document flow so nav height expands naturally */}
+        <Link href="/">
+          <Image src="/woml-alt-orange.png" alt="WOML - Word of Mouth Leads" width={360} height={108} className="h-[120px] w-auto object-contain" />
+        </Link>
+        {/* Right: auth buttons — flex-1 keeps logo centered */}
+        <div className="flex-1 flex items-center justify-end gap-3">
           <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
