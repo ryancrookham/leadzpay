@@ -37,8 +37,8 @@ export default function Sidebar() {
         style={{
           top: NAV_H,
           transform: open ? "translateX(0)" : "translateX(-100%)",
-          boxShadow: "2px 0 12px rgba(0,0,0,0.10)",
-          borderRight: "1px solid #e5e7eb",
+          borderLeft: "2px solid #152238",
+          borderRight: "2px solid #152238",
         }}
       >
         <nav className="py-4">

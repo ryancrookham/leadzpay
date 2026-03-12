@@ -10,9 +10,13 @@ export const metadata = {
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white backdrop-blur-sm relative z-[60]">
-        <div className="flex items-center gap-2">
+      <nav className="flex items-center justify-between px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
+        {/* Left: hamburger */}
+        <div className="flex items-center">
           <Sidebar />
+        </div>
+        {/* Center: logo absolutely centered */}
+        <div className="absolute left-1/2 -translate-x-1/2">
           <Link href="/" className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E77500] transition">
             <Image src="/woml-alt-orange.png" alt="WOML" width={120} height={36} className="h-9 w-auto object-contain" />
           </Link>
