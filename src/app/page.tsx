@@ -56,28 +56,26 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
-        {/* Left: hamburger */}
-        <div className="flex items-center">
+      <nav className="flex items-center px-8 py-8 bg-white border-b border-gray-100 relative z-[60]">
+        {/* Left: hamburger — flex-1 balances the right side */}
+        <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
-        {/* Center: logo absolutely centered */}
-        <div className="absolute left-1/2 -translate-x-1/2">
-          <button
-            onClick={() => { window.location.href = "/admin"; }}
-            className="cursor-pointer"
-          >
-            <Image
-              src="/woml-alt-orange.png"
-              alt="WOML - Word of Mouth Leads"
-              width={960}
-              height={288}
-              className="h-72 w-auto object-contain"
-            />
-          </button>
-        </div>
-        {/* Right: auth buttons */}
-        <div className="flex gap-3 items-center">
+        {/* Center: logo in document flow so nav height expands naturally */}
+        <button
+          onClick={() => { window.location.href = "/admin"; }}
+          className="cursor-pointer"
+        >
+          <Image
+            src="/woml-alt-orange.png"
+            alt="WOML - Word of Mouth Leads"
+            width={960}
+            height={288}
+            className="h-72 w-auto object-contain"
+          />
+        </button>
+        {/* Right: auth buttons — flex-1 keeps logo centered */}
+        <div className="flex-1 flex items-center justify-end gap-3">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
               <Link
