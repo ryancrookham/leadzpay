@@ -45,9 +45,15 @@ interface ApiLead {
     value: string;
   }[] | null;
   quoteCompleted: boolean;
+  pipelineStatus: string;
+  contactType: string | null;
+  pipelineNotes: string | null;
+  contactedAt: string | null;
+  quotedAt: string | null;
+  soldAt: string | null;
 }
 
-type Tab = "dashboard" | "leads" | "connections" | "ledger" | "settings" | "invite";
+type Tab = "dashboard" | "connections" | "pipeline" | "records" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -92,9 +98,11 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "connections", "leads", "ledger", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "connections", "pipeline", "records", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [pipelineFilter, setPipelineFilter] = useState<string>("all");
+  const [pipelineNotesLocal, setPipelineNotesLocal] = useState<Record<string, string>>({});
 
   // Excel upload state for Dashboard analytics
   const [uploadedCrmData, setUploadedCrmData] = useState<UploadedRecord[]>([]);
@@ -200,7 +208,7 @@ function BusinessPortalContent() {
     const payment = searchParams.get("payment");
     if (payment === "success") {
       setPaymentNotice("Payment successful! Leads are being processed.");
-      setActiveTab("leads");
+      setActiveTab("records");
 
       // Call verify-payment to process lead status + trigger provider transfer
       // even if the Stripe webhook hasn't fired yet
@@ -225,7 +233,7 @@ function BusinessPortalContent() {
       setTimeout(() => setPaymentNotice(null), 8000);
     } else if (payment === "cancelled") {
       setPaymentNotice("Payment was cancelled. No charges were made.");
-      setActiveTab("leads");
+      setActiveTab("records");
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
       window.history.replaceState({}, "", url.toString());
@@ -629,6 +637,19 @@ function BusinessPortalContent() {
     if (quoted) await toggleQuote(quoted.id, false);
   };
 
+  const updateLeadField = async (leadId: string, fields: Record<string, unknown>) => {
+    try {
+      await fetch(`/api/business/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      await fetchDashboard();
+    } catch (err) {
+      console.error("Failed to update lead:", err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#E77500] relative">
       {/* Watermark Logo Background */}
@@ -674,7 +695,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "connections", "leads", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "connections", "pipeline", "records", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1245,7 +1266,7 @@ function BusinessPortalContent() {
         )}
 
         {/* Leads Tab — Grouped by Provider */}
-        {activeTab === "leads" && (() => {
+        {activeTab === "records" && (() => {
           // Group leads by provider
           const providerGroups = (() => {
             const groups = new Map<string, { providerId: string; providerName: string; leads: ApiLead[] }>();
@@ -1289,8 +1310,30 @@ function BusinessPortalContent() {
             }
           };
 
+          const paidOutLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
+          const totalPaidOut = paidOutLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const pendingLeads = dbLeads.filter(l => l.payoutStatus === "pending");
+          const amountPending = pendingLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const avgPayout = paidOutLeads.length > 0 ? totalPaidOut / paidOutLeads.length : 0;
+
           return (
           <div className="space-y-4">
+            {/* Financial Summary */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Total Paid Out</p>
+                <p className="text-2xl font-bold text-emerald-600">${totalPaidOut.toFixed(2)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Amount Pending</p>
+                <p className="text-2xl font-bold text-amber-600">${amountPending.toFixed(2)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Avg Payout Per Lead</p>
+                <p className="text-2xl font-bold text-[#E8822A]">${avgPayout.toFixed(2)}</p>
+              </div>
+            </div>
+
             {paymentNotice && (
               <div className={`rounded-xl border p-4 shadow-sm flex items-center gap-3 ${paymentNotice.includes("successful") ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
                 <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1556,12 +1599,170 @@ function BusinessPortalContent() {
           );
         })()}
 
-        {/* Ledger Tab */}
-        {activeTab === "ledger" && (
-          <TabErrorBoundary tabName="Ledger">
-            <LedgerTab dbLeads={dbLeads} feeSettings={feeSettings} />
-          </TabErrorBoundary>
-        )}
+        {/* Pipeline Tab */}
+        {activeTab === "pipeline" && (() => {
+          const now = new Date();
+          const thisMonth = now.getMonth();
+          const thisYear = now.getFullYear();
+          const monthLeads = dbLeads.filter(l => {
+            const d = new Date(l.submittedAt);
+            return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+          });
+          const newCount = monthLeads.filter(l => !l.pipelineStatus || l.pipelineStatus === "new").length;
+          const contactedCount = monthLeads.filter(l => l.pipelineStatus === "contacted").length;
+          const quotedCount = monthLeads.filter(l => l.pipelineStatus === "quoted").length;
+          const soldCount = monthLeads.filter(l => l.pipelineStatus === "sold").length;
+
+          const filtered = pipelineFilter === "all"
+            ? dbLeads
+            : dbLeads.filter(l => (l.pipelineStatus || "new") === pipelineFilter);
+
+          const stages = ["contacted", "quoted", "sold", "dead"] as const;
+          const stageColors: Record<string, string> = {
+            contacted: "bg-blue-100 text-blue-700 border-blue-300",
+            quoted: "bg-purple-100 text-purple-700 border-purple-300",
+            sold: "bg-emerald-100 text-emerald-700 border-emerald-300",
+            dead: "bg-gray-100 text-gray-500 border-gray-300",
+          };
+          const stageActive: Record<string, string> = {
+            contacted: "bg-blue-600 text-white border-blue-600",
+            quoted: "bg-purple-600 text-white border-purple-600",
+            sold: "bg-emerald-600 text-white border-emerald-600",
+            dead: "bg-gray-600 text-white border-gray-600",
+          };
+
+          return (
+          <div className="space-y-4">
+            {/* Summary Bar */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">New</p>
+                <p className="text-2xl font-bold text-[#E8822A]">{newCount}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Contacted</p>
+                <p className="text-2xl font-bold text-blue-600">{contactedCount}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Quoted</p>
+                <p className="text-2xl font-bold text-purple-600">{quotedCount}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Sold</p>
+                <p className="text-2xl font-bold text-emerald-600">{soldCount}</p>
+              </div>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { key: "all", label: "All" },
+                { key: "new", label: "New" },
+                { key: "contacted", label: "Contacted" },
+                { key: "quoted", label: "Quoted" },
+                { key: "sold", label: "Sold" },
+                { key: "dead", label: "Dead" },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setPipelineFilter(f.key)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    pipelineFilter === f.key
+                      ? "bg-white text-[#E77500] shadow-md"
+                      : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`}
+                >{f.label}</button>
+              ))}
+            </div>
+
+            {/* Lead Rows */}
+            <div className="space-y-3">
+              {filtered.length === 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 shadow-sm text-center text-gray-400">
+                  No leads match this filter
+                </div>
+              )}
+              {filtered.map(lead => {
+                const currentStatus = lead.pipelineStatus || "new";
+                const localNotes = pipelineNotesLocal[lead.id] ?? lead.pipelineNotes ?? "";
+
+                return (
+                <div key={lead.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Lead Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="font-semibold text-gray-800">{lead.customerName}</span>
+                        <span className="text-gray-400 text-xs">{new Date(lead.submittedAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex gap-4 text-sm text-gray-500">
+                        {lead.customerPhone && <span>{lead.customerPhone}</span>}
+                        {lead.customerEmail && <span>{lead.customerEmail}</span>}
+                        <span>via {lead.providerName || "Unknown"}</span>
+                      </div>
+                    </div>
+
+                    {/* Stage Buttons */}
+                    <div className="flex gap-1.5 shrink-0">
+                      {stages.map(stage => (
+                        <button
+                          key={stage}
+                          onClick={() => updateLeadField(lead.id, { pipeline_status: stage })}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                            currentStatus === stage ? stageActive[stage] : stageColors[stage]
+                          }`}
+                        >
+                          {stage.charAt(0).toUpperCase() + stage.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quoted: contact type toggle */}
+                  {currentStatus === "quoted" && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Type:</span>
+                      <button
+                        onClick={() => updateLeadField(lead.id, { contact_type: "quote" })}
+                        className={`px-3 py-1 rounded text-xs font-medium transition ${
+                          lead.contactType === "quote" || !lead.contactType
+                            ? "bg-purple-600 text-white"
+                            : "bg-purple-100 text-purple-700"
+                        }`}
+                      >Quote</button>
+                      <button
+                        onClick={() => updateLeadField(lead.id, { contact_type: "direct_sale" })}
+                        className={`px-3 py-1 rounded text-xs font-medium transition ${
+                          lead.contactType === "direct_sale"
+                            ? "bg-purple-600 text-white"
+                            : "bg-purple-100 text-purple-700"
+                        }`}
+                      >Direct Sale</button>
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      placeholder="Add notes..."
+                      value={localNotes}
+                      onChange={e => setPipelineNotesLocal(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                      onBlur={() => {
+                        if (localNotes !== (lead.pipelineNotes ?? "")) {
+                          updateLeadField(lead.id, { pipeline_notes: localNotes });
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A] focus:border-[#E8822A]"
+                    />
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          </div>
+          );
+        })()}
 
         {/* Settings Tab */}
         {activeTab === "settings" && (

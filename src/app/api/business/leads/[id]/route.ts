@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getLeadById, updateLeadQuoteCompleted } from "@/lib/db";
+import { getLeadById, updateLeadQuoteCompleted, updateLeadPipeline } from "@/lib/db";
+
+const VALID_PIPELINE_STATUSES = ["new", "contacted", "quoted", "sold", "dead"];
+const VALID_CONTACT_TYPES = ["quote", "direct_sale"];
 
 export async function PATCH(
   request: NextRequest,
@@ -17,18 +20,41 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { quote_completed } = body;
-
-    if (typeof quote_completed !== "boolean") {
-      return NextResponse.json({ error: "quote_completed must be a boolean" }, { status: 400 });
-    }
 
     const lead = await getLeadById(id);
     if (!lead || lead.buyer_id !== session.user.id) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    const updated = await updateLeadQuoteCompleted(id, quote_completed);
+    // Handle quote_completed
+    if (typeof body.quote_completed === "boolean") {
+      await updateLeadQuoteCompleted(id, body.quote_completed);
+    }
+
+    // Handle pipeline fields
+    const pipelineFields: { pipeline_status?: string; contact_type?: string; pipeline_notes?: string } = {};
+    if (body.pipeline_status !== undefined) {
+      if (!VALID_PIPELINE_STATUSES.includes(body.pipeline_status)) {
+        return NextResponse.json({ error: "Invalid pipeline_status" }, { status: 400 });
+      }
+      pipelineFields.pipeline_status = body.pipeline_status;
+    }
+    if (body.contact_type !== undefined) {
+      if (body.contact_type !== null && !VALID_CONTACT_TYPES.includes(body.contact_type)) {
+        return NextResponse.json({ error: "Invalid contact_type" }, { status: 400 });
+      }
+      pipelineFields.contact_type = body.contact_type;
+    }
+    if (body.pipeline_notes !== undefined) {
+      pipelineFields.pipeline_notes = body.pipeline_notes;
+    }
+
+    if (Object.keys(pipelineFields).length > 0) {
+      await updateLeadPipeline(id, pipelineFields);
+    }
+
+    // Return fresh lead
+    const updated = await getLeadById(id);
     return NextResponse.json({ success: true, lead: updated });
   } catch (error) {
     console.error("[BUSINESS-LEADS] PATCH error:", error);

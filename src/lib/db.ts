@@ -126,6 +126,12 @@ export interface DbLead {
   payout_completed_at: string | null;
   criteria_fields_data: Record<string, unknown>[] | null;
   quote_completed: boolean;
+  pipeline_status: string | null;
+  contact_type: string | null;
+  pipeline_notes: string | null;
+  contacted_at: string | null;
+  quoted_at: string | null;
+  sold_at: string | null;
   // Joined fields (from user table JOINs)
   provider_name?: string | null;
   provider_venmo?: string | null;
@@ -834,6 +840,41 @@ export async function updateLeadQuoteCompleted(
     WHERE id = ${id}
     RETURNING *
   `;
+  return first<DbLead>(result);
+}
+
+export async function updateLeadPipeline(
+  id: string,
+  fields: { pipeline_status?: string; contact_type?: string; pipeline_notes?: string }
+): Promise<DbLead | null> {
+  const sql = getSql();
+
+  // Apply pipeline_status with auto-timestamps
+  if (fields.pipeline_status !== undefined) {
+    const status = fields.pipeline_status;
+    if (status === 'contacted') {
+      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = COALESCE(contacted_at, NOW()) WHERE id = ${id}`;
+    } else if (status === 'quoted') {
+      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = COALESCE(contacted_at, NOW()), quoted_at = COALESCE(quoted_at, NOW()) WHERE id = ${id}`;
+    } else if (status === 'sold') {
+      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = COALESCE(contacted_at, NOW()), quoted_at = COALESCE(quoted_at, NOW()), sold_at = COALESCE(sold_at, NOW()) WHERE id = ${id}`;
+    } else if (status === 'new') {
+      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = NULL, quoted_at = NULL, sold_at = NULL WHERE id = ${id}`;
+    } else {
+      await sql`UPDATE leads SET pipeline_status = ${status} WHERE id = ${id}`;
+    }
+  }
+
+  if (fields.contact_type !== undefined) {
+    await sql`UPDATE leads SET contact_type = ${fields.contact_type} WHERE id = ${id}`;
+  }
+
+  if (fields.pipeline_notes !== undefined) {
+    await sql`UPDATE leads SET pipeline_notes = ${fields.pipeline_notes} WHERE id = ${id}`;
+  }
+
+  // Return the updated lead
+  const result = await sql`SELECT * FROM leads WHERE id = ${id}`;
   return first<DbLead>(result);
 }
 

@@ -9,12 +9,18 @@ import {
 import { decrypt } from "@/lib/encryption";
 import { neon } from "@neondatabase/serverless";
 
-// One-time migration: add quote_completed column if missing
+// One-time migration: add new columns if missing
 let migrationRan = false;
-async function ensureQuoteColumn() {
+async function ensureMigrations() {
   if (migrationRan) return;
   const sql = neon(process.env.DATABASE_URL!);
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS quote_completed BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS pipeline_status TEXT DEFAULT 'new'`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_type TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS pipeline_notes TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS contacted_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS quoted_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS sold_at TIMESTAMPTZ`;
   migrationRan = true;
 }
 
@@ -34,7 +40,7 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    await ensureQuoteColumn();
+    await ensureMigrations();
 
     // Run all DB queries in parallel
     const [rawLeads, platformSettings, inviteTokens, criteriaResult] = await Promise.all([
@@ -88,6 +94,12 @@ export async function GET() {
         buyerBusinessName: lead.buyer_business_name || null,
         criteriaFieldsData: lead.criteria_fields_data,
         quoteCompleted: lead.quote_completed ?? false,
+        pipelineStatus: lead.pipeline_status ?? 'new',
+        contactType: lead.contact_type ?? null,
+        pipelineNotes: lead.pipeline_notes ?? null,
+        contactedAt: lead.contacted_at ?? null,
+        quotedAt: lead.quoted_at ?? null,
+        soldAt: lead.sold_at ?? null,
       };
     }));
 
