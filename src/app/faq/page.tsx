@@ -28,7 +28,11 @@ const faqs = [
   },
   {
     q: "What happens if a payment fails?",
-    a: "Lead submissions are atomic — if the financial transaction fails, the lead is not marked as complete. Both parties are notified and the lead remains in a pending state until resolved.",
+    a: "Lead submissions are automatic — if the financial transaction fails, the lead is not marked as complete. Both parties are notified and the lead remains in a pending state until resolved.",
+  },
+  {
+    q: "How can my employees take advantage of this lead platform?",
+    a: "Businesses can set up SMS alerts sent to assigned numbers so your team is notified the moment a lead comes in — taking full advantage of every opportunity as it happens.",
   },
   {
     q: "How do I get support?",
