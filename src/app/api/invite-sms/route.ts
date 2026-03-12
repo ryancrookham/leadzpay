@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       : "https://www.womleads.com/provider-onboarding";
 
     const earningLine = ratePerLead ? ` Earn $${ratePerLead} per lead.` : "";
-    const messageBody = `${greeting}${senderName} invited you to send leads on WOML.${earningLine} Sign up here: ${signupUrl}`;
+    const messageBody = `${greeting}${senderName} invited you to send leads on WOML.${earningLine} Sign up here: ${signupUrl} Reply STOP to opt out.`;
 
     if (!isSinchConfigured()) {
       console.error("Sinch not configured - missing credentials");
