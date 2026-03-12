@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
@@ -8,31 +7,8 @@ import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
-  const [activeDoc, setActiveDoc] = useState<'business' | 'provider' | 'privacy'>('business');
-
   // Get dashboard URL based on user role
   const dashboardUrl = currentUser?.role === "admin" ? "/admin" : currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
-
-  const docs = [
-    {
-      id: 'business',
-      label: 'Business Agreement',
-      description: 'Terms governing business accounts, lead channels, and payout structures.',
-      url: '/WOML_Business_Agreement.pdf',
-    },
-    {
-      id: 'provider',
-      label: 'Provider Agreement',
-      description: 'Terms for lead providers — submissions, earnings, and platform conduct.',
-      url: '/WOML_Provider_Agreement.pdf',
-    },
-    {
-      id: 'privacy',
-      label: 'Privacy Policy',
-      description: 'How WOML collects, uses, protects, and in limited cases commercializes data.',
-      url: '/WOML_Privacy_Policy.pdf',
-    },
-  ] as const;
 
   // Show minimal loading state only while checking auth
   if (isLoading) {
@@ -138,62 +114,6 @@ export default function Home() {
           />
         </div>
       </main>
-
-      {/* Legal Documents Section */}
-      <section className="border-t border-gray-200 py-16 px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-[#152238] font-bold text-2xl mb-2">Legal Documents</h2>
-            <p className="text-gray-500 text-sm">
-              All WOML platform agreements and policies are publicly available below.
-              Documents are updated here whenever changes are made.
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            {docs.map((doc) => (
-              <button
-                key={doc.id}
-                onClick={() => setActiveDoc(doc.id)}
-                className={`px-5 py-2.5 rounded-lg text-sm font-medium transition border ${
-                  activeDoc === doc.id
-                    ? 'bg-[#E77500] text-white border-[#E77500]'
-                    : 'bg-white text-[#152238] border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {doc.label}
-              </button>
-            ))}
-          </div>
-          <p className="text-center text-gray-500 text-xs mb-4">
-            {docs.find((d) => d.id === activeDoc)?.description}
-          </p>
-          <div className="rounded-xl border border-gray-200 shadow-xl bg-[#F5F5F5] p-8 text-center">
-            <h3 className="text-[#152238] font-bold text-xl mb-2">
-              {docs.find((d) => d.id === activeDoc)?.label}
-            </h3>
-            <p className="text-gray-500 text-sm mb-6">
-              {docs.find((d) => d.id === activeDoc)?.description}
-            </p>
-            <div className="flex justify-center gap-3">
-              <a
-                href={docs.find((d) => d.id === activeDoc)?.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-[#E77500] hover:bg-[#D47526] text-white px-6 py-2.5 rounded-lg font-medium transition"
-              >
-                View PDF
-              </a>
-              <a
-                href={docs.find((d) => d.id === activeDoc)?.url}
-                download
-                className="bg-[#E77500] hover:bg-[#D47526] text-white px-6 py-2.5 rounded-lg font-medium transition"
-              >
-                Download
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
