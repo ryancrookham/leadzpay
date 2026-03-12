@@ -54,35 +54,6 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <div className="flex items-start gap-4 py-5">
-            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-[#E77500]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#152238] mb-1">Website</p>
-              <a
-                href="https://womleads.com"
-                className="text-sm text-[#E77500] hover:underline"
-              >
-                womleads.com
-              </a>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-4 py-5">
-            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-[#E77500]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#152238] mb-1">Location</p>
-              <p className="text-sm text-gray-500">Pennsylvania, United States</p>
-            </div>
-          </div>
         </div>
 
         <p className="text-xs text-gray-400">

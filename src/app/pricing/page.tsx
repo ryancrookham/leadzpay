@@ -33,20 +33,20 @@ export default function PricingPage() {
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
         <h1 className="text-3xl font-bold text-[#152238] mb-4">Pricing</h1>
         <p className="text-gray-500 text-sm mb-10">
-          WOML uses a transparent spread model. The agency sets the payout rate for providers — WOML charges a small platform fee on top of each accepted lead.
+          WOML uses a transparent spread model. The business sets the payout rate for providers — WOML charges a small platform fee on top of each accepted lead.
         </p>
 
         <div className="divide-y divide-gray-200 border-t border-b border-gray-200 mb-10">
           <div className="flex items-start justify-between py-5">
             <div>
-              <h2 className="text-sm font-semibold text-[#152238] mb-1">Agency</h2>
+              <h2 className="text-sm font-semibold text-[#152238] mb-1">Business</h2>
               <p className="text-gray-500 text-sm">Charged per accepted lead. You set the lead value — WOML&apos;s platform fee is added transparently on top.</p>
             </div>
           </div>
           <div className="flex items-start justify-between py-5">
             <div>
               <h2 className="text-sm font-semibold text-[#152238] mb-1">Provider</h2>
-              <p className="text-gray-500 text-sm">Paid per accepted lead. You earn the payout rate set by the agency — no deductions from your side.</p>
+              <p className="text-gray-500 text-sm">Paid per accepted lead. You earn the payout rate set by the business — no deductions from your side.</p>
             </div>
           </div>
           <div className="flex items-start justify-between py-5">

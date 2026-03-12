@@ -12,15 +12,15 @@ const faqs = [
   },
   {
     q: "How do providers get paid?",
-    a: "Providers connect their bank account through Stripe during onboarding. When a lead is accepted by the agency, payment is automatically transferred to their bank account. No invoicing required.",
+    a: "Providers connect their bank account through Stripe during onboarding. When a lead is accepted by the business, payment is automatically transferred to their bank account. No invoicing required.",
   },
   {
     q: "Can a provider see other businesses on the platform?",
-    a: "No. Every business channel is completely isolated. A provider can only see and interact with the business that invited them. Even if a provider is invited by multiple agencies, each channel is entirely separate.",
+    a: "No. Every business channel is completely isolated. A provider can only see and interact with the business that invited them. Even if a provider is invited by multiple businesses, each channel is entirely separate.",
   },
   {
     q: "What information is required on a lead?",
-    a: "Each agency configures their own lead criteria — required fields may include the customer's name, phone number, vehicle info, and a scanned driver's license. The agency defines what's mandatory vs. optional.",
+    a: "Each business configures their own lead criteria — required fields may include the customer's name, phone number, vehicle info, and a scanned driver's license. The business defines what's mandatory vs. optional.",
   },
   {
     q: "Is WOML legally compliant for paying referral fees?",
