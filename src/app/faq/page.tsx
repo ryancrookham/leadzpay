@@ -41,7 +41,7 @@ export default function FAQPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white backdrop-blur-sm relative z-[60]">
         <div className="flex items-center gap-2">
           <Sidebar />
           <Link href="/" className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E77500] transition">

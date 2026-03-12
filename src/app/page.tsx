@@ -56,7 +56,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
+      <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white backdrop-blur-sm relative z-[60]">
         <div className="flex items-center gap-2">
           <Sidebar />
           <button
