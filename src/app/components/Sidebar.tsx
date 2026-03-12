@@ -22,10 +22,10 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Overlay — starts below the nav, never dims the top row */}
+      {/* Invisible click-away — no dimming, no shade */}
       {open && (
         <div
-          className="fixed inset-x-0 bottom-0 bg-black/20 z-40"
+          className="fixed inset-x-0 bottom-0 z-40"
           style={{ top: NAV_H }}
           onClick={() => setOpen(false)}
         />
@@ -33,21 +33,24 @@ export default function Sidebar() {
 
       {/* Sidebar panel — slides out below the nav */}
       <div
-        className={`fixed inset-x-0 bottom-0 left-0 w-48 bg-white border-r border-gray-200 z-50 transition-transform duration-200 ease-in-out ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-        style={{ top: NAV_H }}
+        className={`fixed left-0 bottom-0 w-52 bg-white z-50 transition-transform duration-200 ease-in-out`}
+        style={{
+          top: NAV_H,
+          transform: open ? "translateX(0)" : "translateX(-100%)",
+          boxShadow: "2px 0 12px rgba(0,0,0,0.10)",
+          borderRight: "1px solid #e5e7eb",
+        }}
       >
-        <nav className="py-2">
+        <nav className="py-4">
           {tabs.map((tab) => (
             <Link
               key={tab.href}
               href={tab.href}
               onClick={() => setOpen(false)}
-              className={`block px-6 py-[13px] text-sm font-medium transition-colors ${
+              className={`flex items-center justify-center py-5 text-sm font-semibold tracking-wide transition-colors ${
                 pathname === tab.href
-                  ? "text-[#E77500] font-semibold"
-                  : "text-[#E77500]/70 hover:text-[#E77500]"
+                  ? "text-[#E77500]"
+                  : "text-[#E77500]/60 hover:text-[#E77500]"
               }`}
             >
               {tab.label}
