@@ -47,7 +47,7 @@ interface ApiLead {
   quoteCompleted: boolean;
 }
 
-type Tab = "dashboard" | "leads" | "requests" | "connections" | "ledger" | "settings" | "invite";
+type Tab = "dashboard" | "leads" | "connections" | "ledger" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -92,7 +92,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "leads", "requests", "connections", "ledger", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "connections", "leads", "ledger", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
@@ -257,10 +257,6 @@ function BusinessPortalContent() {
     }
   }, [searchParams]);
 
-  // Get connection requests for this buyer (pending_buyer_review = awaiting business to set terms)
-  const pendingRequests = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_buyer_review") : [];
-  // Connections awaiting provider response (terms sent, waiting for accept/decline)
-  const awaitingResponse = currentUser ? getRequestsForBuyer(currentUser.id).filter(r => r.status === "pending_provider_accept") : [];
   const myConnections = currentUser ? getConnectionsForBuyer(currentUser.id) : [];
   // Active connections (finalized, terms accepted)
   const activeConnections = myConnections.filter(c => c.status === "active");
@@ -678,7 +674,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "connections", "leads", "requests", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "connections", "leads", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -689,11 +685,6 @@ function BusinessPortalContent() {
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {tab === "requests" && pendingRequests.length > 0 && (
-                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {pendingRequests.length}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -1239,21 +1230,15 @@ function BusinessPortalContent() {
           </div>
         )}
 
-        {/* Requests Tab */}
-        {activeTab === "requests" && (
-          <TabErrorBoundary tabName="Requests">
-            <RequestsTab
+        {/* Connections Tab */}
+        {activeTab === "connections" && (
+          <TabErrorBoundary tabName="Connections">
+            <ConnectionsTab
               buyerId={currentUser.id}
               buyerBusinessName={currentBuyer?.businessName || ""}
-              pendingRequests={pendingRequests}
-              awaitingResponse={awaitingResponse}
               myConnections={myConnections}
-              setTermsForRequest={setTermsForRequest}
-              rejectRequest={rejectRequest}
               updateConnectionTerms={updateConnectionTerms}
               terminateConnection={terminateConnection}
-              sendInvitationToProvider={sendInvitationToProvider}
-              licensedStates={currentBuyer?.licensedStates || []}
               feeSettings={feeSettings}
             />
           </TabErrorBoundary>
@@ -1575,13 +1560,6 @@ function BusinessPortalContent() {
         {activeTab === "ledger" && (
           <TabErrorBoundary tabName="Ledger">
             <LedgerTab dbLeads={dbLeads} feeSettings={feeSettings} />
-          </TabErrorBoundary>
-        )}
-
-        {/* Connections Tab */}
-        {activeTab === "connections" && (
-          <TabErrorBoundary tabName="Connections">
-            <ConnectionsTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} savedFields={savedFields} />
           </TabErrorBoundary>
         )}
 
@@ -2308,7 +2286,7 @@ function ProvidersTab({
                   return (
                     <div className="bg-orange-50 rounded-lg p-4 border border-orange-200 text-center">
                       <p className="text-orange-700 font-medium">This provider requested a connection</p>
-                      <p className="text-orange-600 text-sm mt-1">Go to the Requests tab to review and set terms.</p>
+                      <p className="text-orange-600 text-sm mt-1">View in the Connections tab.</p>
                     </div>
                   );
                 }
@@ -2814,332 +2792,6 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
   );
 }
 
-
-// Connections Tab - View connected lead providers with full sender info + terms
-function ConnectionsTab({
-  providers,
-  dbLeads,
-  currentBuyer,
-  activeConnections,
-  feeSettings,
-  savedFields,
-}: {
-  providers: Provider[];
-  dbLeads: ApiLead[];
-  currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
-  activeConnections: ApiConnection[];
-  feeSettings?: FeeSettings;
-  savedFields: SavedField[];
-}) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "leads" | "rate">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  // Build required fields list from live Lead Criteria (Invite tab)
-  // Always-required defaults + configured fields
-  const DEFAULT_FIELDS = ["Name", "Email", "Phone"];
-  const configuredFields = savedFields
-    .slice()
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map(f => {
-      if (f.field_type === "BINARY" && f.option_a && f.option_b) {
-        return `${f.label} (${f.option_a}/${f.option_b})`;
-      }
-      return f.label;
-    });
-  const ALL_FIELDS = [...DEFAULT_FIELDS, ...configuredFields];
-
-  // Build a unified list: prefer ApiConnection records (DB), supplement with Provider (local)
-  // Map provider leads for stats
-  const providerLeadMap: Record<string, ApiLead[]> = {};
-  dbLeads.forEach(l => {
-    if (!providerLeadMap[l.providerId]) providerLeadMap[l.providerId] = [];
-    providerLeadMap[l.providerId].push(l);
-  });
-
-  // Combine: activeConnections (authoritative) + any providers not already in connections
-  const connectionProviderIds = new Set(activeConnections.map(c => c.provider_id));
-  const standaloneProviders = providers.filter(p => !connectionProviderIds.has(p.id));
-
-  // Unified type for display
-  type DisplayRow = {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    rate: number;
-    totalLeads: number;
-    totalPaid: number;
-    weeklyLeadCap: number | null;
-    monthlyLeadCap: number | null;
-    status: string;
-    source: "connection" | "provider";
-  };
-
-  const connectionRows: DisplayRow[] = activeConnections.map(c => ({
-    id: c.id,
-    name: c.providerName || "—",
-    email: c.providerEmail || "—",
-    phone: "—",
-    rate: Number(c.rate_per_lead) || 0,
-    totalLeads: Number(c.total_leads) || 0,
-    totalPaid: Number(c.total_paid) || 0,
-    weeklyLeadCap: c.weekly_lead_cap != null ? Number(c.weekly_lead_cap) : null,
-    monthlyLeadCap: c.monthly_lead_cap != null ? Number(c.monthly_lead_cap) : null,
-    status: c.status || "active",
-    source: "connection" as const,
-  }));
-
-  const providerRows: DisplayRow[] = standaloneProviders.map(p => {
-    const pLeads = providerLeadMap[p.id] || [];
-    return {
-      id: p.id,
-      name: p.name || "—",
-      email: p.email || "—",
-      phone: p.phone || "—",
-      rate: Number(p.payoutRate) || 0,
-      totalLeads: pLeads.length,
-      totalPaid: pLeads.reduce((sum, l) => sum + (Number(l.payoutAmount) || 0), 0),
-      weeklyLeadCap: null,
-      monthlyLeadCap: null,
-      status: p.status || "active",
-      source: "provider" as const,
-    };
-  });
-
-  const allRows = [...connectionRows, ...providerRows];
-
-  // Filter
-  const filtered = allRows.filter(r =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Sort
-  const sorted = [...filtered].sort((a, b) => {
-    let cmp = 0;
-    if (sortBy === "name") cmp = a.name.localeCompare(b.name);
-    else if (sortBy === "leads") cmp = a.totalLeads - b.totalLeads;
-    else if (sortBy === "rate") cmp = a.rate - b.rate;
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
-  // Export to CSV
-  const exportToCSV = () => {
-    const headers = [
-      "Name", "Email", "Phone", "Address",
-      "Price Per Lead ($)", "Cap / Day", "Cap / Week", "Cap / Month",
-      "Total Leads", "Total Paid ($)", "Status",
-      "Lead Fields",
-    ];
-    const rows = sorted.map(r => [
-      r.name,
-      r.email,
-      r.phone,
-      "—",
-      r.rate.toFixed(2),
-      "—",
-      r.weeklyLeadCap !== null ? String(r.weeklyLeadCap) : "—",
-      r.monthlyLeadCap !== null ? String(r.monthlyLeadCap) : "—",
-      String(r.totalLeads),
-      r.totalPaid.toFixed(2),
-      r.status,
-      ALL_FIELDS.join("; "),
-    ]);
-    const csv = [headers, ...rows]
-      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "woml-connections.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const toggleSort = (col: "name" | "leads" | "rate") => {
-    if (sortBy === col) {
-      setSortDir(d => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col);
-      setSortDir("asc");
-    }
-  };
-
-  const SortBtn = ({ col, label }: { col: "name" | "leads" | "rate"; label: string }) => (
-    <button
-      onClick={() => toggleSort(col)}
-      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-        sortBy === col
-          ? "bg-white text-[#E8822A] shadow-sm border border-gray-200"
-          : "text-white/70 hover:text-white hover:bg-white/10"
-      }`}
-    >
-      {label}
-      <span className="text-xs opacity-60">
-        {sortBy === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-      </span>
-    </button>
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        {/* Sort controls */}
-        <div className="flex items-center gap-1 bg-white/10 rounded-xl px-2 py-1">
-          <span className="text-white/50 text-xs mr-1 pl-1">Sort:</span>
-          <SortBtn col="name" label="Name" />
-          <SortBtn col="leads" label="Leads" />
-          <SortBtn col="rate" label="Rate" />
-        </div>
-
-        {/* Search + Export */}
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search connections..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-56 pl-9 pr-4 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-[#E8822A] text-sm transition"
-            />
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <button
-            onClick={exportToCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-[#152238] rounded-lg font-medium text-sm hover:bg-gray-50 transition shadow-sm border border-gray-200 whitespace-nowrap"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export CSV
-          </button>
-        </div>
-      </div>
-
-      {/* Connection Cards */}
-      <div className="grid sm:grid-cols-2 gap-5">
-        {sorted.map((row) => (
-          <div
-            key={row.id}
-            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#E8822A]/30 transition"
-          >
-            {/* Card Header */}
-            <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] px-5 py-4 text-white">
-              <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                  <span className="text-lg font-bold">{(row.name || "?").charAt(0).toUpperCase()}</span>
-                </div>
-                <div className="min-w-0">
-                  <h4 className="font-semibold truncate">{row.name}</h4>
-                  <span className={`text-xs px-2 py-0.5 rounded-full mt-0.5 inline-block ${
-                    row.status === "active"
-                      ? "bg-white/20 text-white"
-                      : "bg-red-500/30 text-red-100"
-                  }`}>
-                    {row.status}
-                  </span>
-                </div>
-                <div className="ml-auto text-right shrink-0">
-                  <p className="text-2xl font-bold">{row.totalLeads}</p>
-                  <p className="text-white/60 text-xs uppercase tracking-wide">leads</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Card Body */}
-            <div className="px-5 py-4 space-y-4">
-
-              {/* Sender Info */}
-              <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sender Info</p>
-                <div className="space-y-1.5">
-                  {[
-                    { label: "Phone", value: row.phone },
-                    { label: "Email", value: row.email },
-                    { label: "Address", value: "—" },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-start gap-2 text-sm">
-                      <span className="text-gray-400 w-16 shrink-0">{label}</span>
-                      <span className={`font-medium break-all ${value === "—" ? "text-gray-300" : "text-[#152238]"}`}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Lead Purchase Terms */}
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Lead Purchase Terms</p>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  {[
-                    { label: "$/Lead", value: `$${row.rate.toFixed(2)}`, accent: true },
-                    { label: "Cap/Day", value: "—" },
-                    { label: "Cap/Wk", value: row.weeklyLeadCap !== null ? String(row.weeklyLeadCap) : "—" },
-                    { label: "Cap/Mo", value: row.monthlyLeadCap !== null ? String(row.monthlyLeadCap) : "—" },
-                  ].map(({ label, value, accent }) => (
-                    <div key={label} className="bg-gray-50 rounded-lg py-2 px-1">
-                      <p className={`text-sm font-bold ${accent ? "text-[#E8822A]" : value === "—" ? "text-gray-300" : "text-[#152238]"}`}>{value}</p>
-                      <p className="text-gray-400 text-[10px] mt-0.5">{label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Required Lead Fields — pulled from Invite tab Lead Criteria */}
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                  Lead Fields <span className="normal-case font-normal">({ALL_FIELDS.length})</span>
-                </p>
-                {ALL_FIELDS.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {ALL_FIELDS.map(field => (
-                      <span
-                        key={field}
-                        className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full leading-relaxed"
-                      >
-                        {field}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-300 italic">No criteria configured yet — set up in Invite tab</p>
-                )}
-              </div>
-
-              {/* Stats Footer */}
-              <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400">Total Paid</p>
-                  <p className="font-bold text-emerald-600">${row.totalPaid.toFixed(2)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-400">Source</p>
-                  <p className="text-xs font-medium text-gray-500">{row.source === "connection" ? "Connected" : "Provider"}</p>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {sorted.length === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-          <p className="text-gray-400">
-            {searchQuery ? "No connections match your search" : "No connections yet — invite providers from the Invite tab"}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // Provider Detail Modal - Full baseball card view
 function ProviderDetailModal({
@@ -4609,46 +4261,24 @@ function DisableAccountButton() {
   );
 }
 
-// Requests Tab - Manage connection requests from providers
-function RequestsTab({
+// Connections Tab - View and manage active provider connections
+function ConnectionsTab({
   buyerId,
   buyerBusinessName,
-  pendingRequests,
-  awaitingResponse,
   myConnections,
-  setTermsForRequest,
-  rejectRequest,
   updateConnectionTerms,
   terminateConnection,
-  sendInvitationToProvider,
-  licensedStates,
   feeSettings,
 }: {
   buyerId: string;
   buyerBusinessName: string;
-  pendingRequests: ApiConnection[];
-  awaitingResponse: ApiConnection[];
   myConnections: ApiConnection[];
-  setTermsForRequest: (requestId: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }) => Promise<boolean>;
-  rejectRequest: (requestId: string) => Promise<boolean>;
   updateConnectionTerms: (connectionId: string, terms: { ratePerLead?: number; paymentTiming?: string; weeklyLeadCap?: number | null; monthlyLeadCap?: number | null; terminationNoticeDays?: number }) => Promise<boolean>;
   terminateConnection: (connectionId: string) => Promise<boolean>;
-  sendInvitationToProvider: (providerEmail: string, terms: { ratePerLead: number; paymentTiming?: string; weeklyLeadCap?: number; monthlyLeadCap?: number; terminationNoticeDays?: number }, message?: string) => Promise<ApiConnection | null>;
-  licensedStates: string[];
   feeSettings?: FeeSettings;
 }) {
-  const [selectedRequest, setSelectedRequest] = useState<ApiConnection | null>(null);
-  const [showTermsModal, setShowTermsModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<ApiConnection | null>(null);
   const [showEditTermsModal, setShowEditTermsModal] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-
-  // Invite form state
-  const [inviteProviderEmail, setInviteProviderEmail] = useState("");
-  const [inviteProviderName, setInviteProviderName] = useState("");
-  const [inviteMessage, setInviteMessage] = useState("");
-  const [invitePhoneNumber, setInvitePhoneNumber] = useState("");
-  const [isSendingText, setIsSendingText] = useState(false);
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
@@ -4658,58 +4288,10 @@ function RequestsTab({
   const [exclusivity, setExclusivity] = useState(false);
   const [terminationDays, setTerminationDays] = useState(7);
   const [notes, setNotes] = useState("");
-
-  // Lead cap state - buyer protection
   const [enableLeadCaps, setEnableLeadCaps] = useState(false);
   const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
   const [pauseWhenCapReached, setPauseWhenCapReached] = useState(true);
-
-  const openTermsModal = (request: ApiConnection) => {
-    setSelectedRequest(request);
-    // Reset form to defaults
-    setRatePerLead(50);
-    setPaymentTiming("per_lead");
-    setMinimumPayout(undefined);
-    setLeadTypes(["auto"]);
-    setExclusivity(false);
-    setTerminationDays(7);
-    setNotes("");
-    // Reset lead caps
-    setEnableLeadCaps(false);
-    setWeeklyLeadCap(undefined);
-    setMonthlyLeadCap(undefined);
-    setPauseWhenCapReached(true);
-    setShowTermsModal(true);
-  };
-
-  const handleSetTerms = async () => {
-    if (!selectedRequest) return;
-
-    // Simplified terms for API
-    const terms = {
-      ratePerLead,
-      paymentTiming,
-      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : undefined,
-      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : undefined,
-      terminationNoticeDays: terminationDays,
-    };
-
-    const success = await setTermsForRequest(selectedRequest.id, terms);
-    if (success) {
-      alert(`Terms sent to provider! They will review and accept to finalize the connection.`);
-    } else {
-      alert("Failed to send terms. Please try again.");
-    }
-    setShowTermsModal(false);
-    setSelectedRequest(null);
-  };
-
-  const handleReject = (requestId: string) => {
-    if (confirm("Are you sure you want to reject this connection request?")) {
-      rejectRequest(requestId);
-    }
-  };
 
   const openEditTermsModal = (connection: ApiConnection) => {
     setSelectedConnection(connection);
@@ -4720,7 +4302,6 @@ function RequestsTab({
     setExclusivity(false);
     setTerminationDays(connection.termination_notice_days);
     setNotes("");
-    // Load lead caps
     setEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
     setWeeklyLeadCap(connection.weekly_lead_cap || undefined);
     setMonthlyLeadCap(connection.monthly_lead_cap || undefined);
@@ -4730,8 +4311,6 @@ function RequestsTab({
 
   const handleUpdateTerms = () => {
     if (!selectedConnection) return;
-
-    // Simplified terms for API
     const terms = {
       ratePerLead,
       paymentTiming,
@@ -4739,7 +4318,6 @@ function RequestsTab({
       monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : null,
       terminationNoticeDays: terminationDays,
     };
-
     updateConnectionTerms(selectedConnection.id, terms);
     setShowEditTermsModal(false);
     setSelectedConnection(null);
@@ -4751,167 +4329,11 @@ function RequestsTab({
     }
   };
 
-  const openInviteModal = () => {
-    // Reset form
-    setInviteProviderEmail("");
-    setInviteProviderName("");
-    setInviteMessage("");
-    setInvitePhoneNumber("");
-    setIsSendingText(false);
-    setRatePerLead(50);
-    setPaymentTiming("per_lead");
-    setMinimumPayout(undefined);
-    setLeadTypes(["auto"]);
-    setExclusivity(false);
-    setTerminationDays(7);
-    setNotes("");
-    setEnableLeadCaps(false);
-    setWeeklyLeadCap(undefined);
-    setMonthlyLeadCap(undefined);
-    setPauseWhenCapReached(true);
-    setShowInviteModal(true);
-  };
-
-  const handleSendInvitation = async () => {
-    if (!inviteProviderEmail || !inviteProviderName) {
-      alert("Please enter the provider's name and email");
-      return;
-    }
-
-    // Simplified terms for API
-    const terms = {
-      ratePerLead,
-      paymentTiming,
-      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : undefined,
-      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : undefined,
-      terminationNoticeDays: terminationDays,
-    };
-
-    const result = await sendInvitationToProvider(
-      inviteProviderEmail,
-      terms,
-      inviteMessage || undefined
-    );
-
-    setShowInviteModal(false);
-    if (result) {
-      alert(`Invitation sent to ${inviteProviderName}! They will see your offer when they sign in.`);
-    } else {
-      alert("Failed to send invitation. Provider may not be registered.");
-    }
-  };
-
-  const handleSendTextInvite = async () => {
-    if (!invitePhoneNumber) {
-      alert("Please enter a phone number");
-      return;
-    }
-    setIsSendingText(true);
-    try {
-      const response = await fetch("/api/invite-sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: invitePhoneNumber,
-          businessName: buyerBusinessName,
-        }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert(`Text invite sent to ${invitePhoneNumber}!`);
-        setInvitePhoneNumber("");
-      } else {
-        alert(data.error || "Failed to send text invite");
-      }
-    } catch {
-      alert("Failed to send text invite. Please try again.");
-    } finally {
-      setIsSendingText(false);
-    }
-  };
-
   const activeConnections = myConnections.filter(c => c.status === "active");
   const terminatedConnections = myConnections.filter(c => c.status === "terminated");
 
   return (
     <div className="space-y-6">
-      {/* Pending Requests */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <h3 className="text-lg font-semibold text-[#E8822A]">Pending Requests</h3>
-          {(pendingRequests.length + awaitingResponse.length) > 0 && (
-            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-              {pendingRequests.length + awaitingResponse.length} pending
-            </span>
-          )}
-        </div>
-
-        {(pendingRequests.length + awaitingResponse.length) > 0 ? (
-          <div className="space-y-4">
-            {[...pendingRequests, ...awaitingResponse]
-              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-              .map((item) => (
-              <div key={item.id} className={`border rounded-xl p-4 ${item.status === "pending_provider_accept" ? "border-amber-100 bg-amber-50/30" : "border-gray-200 hover:border-[#E8822A]/30"} transition`}>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${item.status === "pending_provider_accept" ? "bg-amber-100" : "bg-[#E8822A]"}`}>
-                      <span className={`text-xl font-bold ${item.status === "pending_provider_accept" ? "text-amber-600" : "text-white"}`}>{(item.providerName || "?").charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">{item.providerName}</p>
-                      <p className="text-gray-500 text-sm">{item.providerEmail}</p>
-                      {item.status === "pending_buyer_review" ? (
-                        <p className="text-gray-400 text-xs mt-1">
-                          Requested {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "N/A"}
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-amber-700 font-medium">${Number(item.rate_per_lead || 0).toFixed(2)}/lead</span>
-                          <span className="text-gray-400">•</span>
-                          <span className="text-gray-500 text-sm">Terms sent {(item.terms_updated_at || item.created_at) ? new Date(item.terms_updated_at || item.created_at).toLocaleDateString() : "N/A"}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    {item.status === "pending_buyer_review" ? (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openTermsModal(item)}
-                          className="bg-[#E8822A] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition text-sm"
-                        >
-                          Set Terms
-                        </button>
-                        <button
-                          onClick={() => handleReject(item.id)}
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition text-sm"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-sm font-medium">
-                        <svg className="w-4 h-4 mr-1.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Awaiting Response
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {item.status === "pending_buyer_review" && item.message && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-gray-600 text-sm italic">&quot;{item.message}&quot;</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-center text-gray-400 py-8">No pending requests</p>
-        )}
-      </div>
-
       {/* Active Connections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Active Connections ({activeConnections.length})</h3>
@@ -4930,7 +4352,7 @@ function RequestsTab({
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-[#E8822A] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
-                        <span className="text-gray-400 text-xs">(incl. $1 fee)</span>
+                        <span className="text-gray-400 text-xs">(incl. platform fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>
@@ -4970,11 +4392,11 @@ function RequestsTab({
             ))}
           </div>
         ) : (
-          <p className="text-center text-gray-400 py-8">No active connections yet</p>
+          <p className="text-center text-gray-400 py-8">No active connections yet — invite providers from the Invite tab</p>
         )}
       </div>
 
-      {/* Terminated Connections */}
+      {/* Past Connections */}
       {terminatedConnections.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-gray-500 mb-6">Past Connections</h3>
@@ -4990,38 +4412,6 @@ function RequestsTab({
             ))}
           </div>
         </div>
-      )}
-
-      {/* Set Terms Modal */}
-      {showTermsModal && selectedRequest && (
-        <TermsModal
-          title={`Set Terms for ${selectedRequest.providerName}`}
-          ratePerLead={ratePerLead}
-          setRatePerLead={setRatePerLead}
-          paymentTiming={paymentTiming}
-          setPaymentTiming={setPaymentTiming}
-          minimumPayout={minimumPayout}
-          setMinimumPayout={setMinimumPayout}
-          leadTypes={leadTypes}
-          setLeadTypes={setLeadTypes}
-          exclusivity={exclusivity}
-          setExclusivity={setExclusivity}
-          terminationDays={terminationDays}
-          setTerminationDays={setTerminationDays}
-          notes={notes}
-          setNotes={setNotes}
-          enableLeadCaps={enableLeadCaps}
-          setEnableLeadCaps={setEnableLeadCaps}
-          weeklyLeadCap={weeklyLeadCap}
-          setWeeklyLeadCap={setWeeklyLeadCap}
-          monthlyLeadCap={monthlyLeadCap}
-          setMonthlyLeadCap={setMonthlyLeadCap}
-          pauseWhenCapReached={pauseWhenCapReached}
-          setPauseWhenCapReached={setPauseWhenCapReached}
-          onSave={handleSetTerms}
-          onCancel={() => { setShowTermsModal(false); setSelectedRequest(null); }}
-          saveButtonText="Send Terms to Provider"
-        />
       )}
 
       {/* Edit Terms Modal */}
