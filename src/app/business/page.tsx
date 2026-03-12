@@ -1581,7 +1581,7 @@ function BusinessPortalContent() {
         {/* Connections Tab */}
         {activeTab === "connections" && (
           <TabErrorBoundary tabName="Connections">
-            <ConnectionsTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} />
+            <ConnectionsTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} savedFields={savedFields} />
           </TabErrorBoundary>
         )}
 
@@ -2822,30 +2822,32 @@ function ConnectionsTab({
   currentBuyer,
   activeConnections,
   feeSettings,
+  savedFields,
 }: {
   providers: Provider[];
   dbLeads: ApiLead[];
   currentBuyer: import("@/lib/auth-types").LeadBuyer | null;
   activeConnections: ApiConnection[];
   feeSettings?: FeeSettings;
+  savedFields: SavedField[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "leads" | "rate">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // Required lead fields per WOML standard
-  const REQUIRED_FIELDS = [
-    "Full Name",
-    "Address",
-    "Phone #",
-    "Email",
-    "Driver's License #",
-    "Date of Birth",
-    "VIN",
-    "Current Insurance? (Y/N)",
-    "Married or Single? (Y/N)",
-    "Own or Rent? (Y/N)",
-  ];
+  // Build required fields list from live Lead Criteria (Invite tab)
+  // Always-required defaults + configured fields
+  const DEFAULT_FIELDS = ["Name", "Email", "Phone"];
+  const configuredFields = savedFields
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map(f => {
+      if (f.field_type === "BINARY" && f.option_a && f.option_b) {
+        return `${f.label} (${f.option_a}/${f.option_b})`;
+      }
+      return f.label;
+    });
+  const ALL_FIELDS = [...DEFAULT_FIELDS, ...configuredFields];
 
   // Build a unified list: prefer ApiConnection records (DB), supplement with Provider (local)
   // Map provider leads for stats
@@ -2925,15 +2927,15 @@ function ConnectionsTab({
   // Export to CSV
   const exportToCSV = () => {
     const headers = [
-      "Name", "Email", "Phone", "Address", "Venmo Handle",
+      "Name", "Email", "Phone", "Address",
       "Price Per Lead ($)", "Cap / Day", "Cap / Week", "Cap / Month",
       "Total Leads", "Total Paid ($)", "Status",
+      "Lead Fields",
     ];
     const rows = sorted.map(r => [
       r.name,
       r.email,
       r.phone,
-      "—",
       "—",
       r.rate.toFixed(2),
       "—",
@@ -2942,6 +2944,7 @@ function ConnectionsTab({
       String(r.totalLeads),
       r.totalPaid.toFixed(2),
       r.status,
+      ALL_FIELDS.join("; "),
     ]);
     const csv = [headers, ...rows]
       .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -3059,7 +3062,6 @@ function ConnectionsTab({
                     { label: "Phone", value: row.phone },
                     { label: "Email", value: row.email },
                     { label: "Address", value: "—" },
-                    { label: "Venmo", value: "—" },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-start gap-2 text-sm">
                       <span className="text-gray-400 w-16 shrink-0">{label}</span>
@@ -3087,21 +3089,25 @@ function ConnectionsTab({
                 </div>
               </div>
 
-              {/* Required Lead Fields */}
+              {/* Required Lead Fields — pulled from Invite tab Lead Criteria */}
               <div className="border-t border-gray-100 pt-3">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                  Required Lead Fields <span className="normal-case font-normal">({REQUIRED_FIELDS.length})</span>
+                  Lead Fields <span className="normal-case font-normal">({ALL_FIELDS.length})</span>
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {REQUIRED_FIELDS.map(field => (
-                    <span
-                      key={field}
-                      className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full leading-relaxed"
-                    >
-                      {field}
-                    </span>
-                  ))}
-                </div>
+                {ALL_FIELDS.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {ALL_FIELDS.map(field => (
+                      <span
+                        key={field}
+                        className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full leading-relaxed"
+                      >
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-300 italic">No criteria configured yet — set up in Invite tab</p>
+                )}
               </div>
 
               {/* Stats Footer */}
