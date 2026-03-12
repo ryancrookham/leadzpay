@@ -64,7 +64,7 @@ export async function GET() {
     }));
 
     // Sinch SMS status from env vars
-    const twilioStatus = {
+    const sinchStatus = {
       configured: !!(process.env.SINCH_SERVICE_PLAN_ID && process.env.SINCH_API_TOKEN && process.env.SINCH_PHONE_NUMBER),
       phoneNumber: process.env.SINCH_PHONE_NUMBER || null,
     };
@@ -76,7 +76,7 @@ export async function GET() {
       leadsThisMonth,
       platformFees,
       detailedUsers,
-      twilioStatus,
+      sinchStatus,
     });
   } catch (error) {
     console.error("Admin stats error:", error);

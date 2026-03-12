@@ -58,7 +58,7 @@ interface PlatformFees {
   fee_mixed_buyer_share: number;
 }
 
-interface TwilioStatus {
+interface SinchStatus {
   configured: boolean;
   phoneNumber: string | null;
 }
@@ -123,7 +123,7 @@ export default function AdminPanel() {
   const [leadsThisMonth, setLeadsThisMonth] = useState(0);
   const [detailedUsers, setDetailedUsers] = useState<DetailedUser[]>([]);
   const [platformFees, setPlatformFees] = useState<PlatformFees | null>(null);
-  const [twilioStatus, setTwilioStatus] = useState<TwilioStatus | null>(null);
+  const [sinchStatus, setSinchStatus] = useState<SinchStatus | null>(null);
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -144,7 +144,7 @@ export default function AdminPanel() {
           setLeadsThisMonth(statsData.leadsThisMonth ?? 0);
           setDetailedUsers(statsData.detailedUsers || []);
           setPlatformFees(statsData.platformFees || null);
-          setTwilioStatus(statsData.twilioStatus || null);
+          setSinchStatus(statsData.sinchStatus || null);
         } else {
           setError(statsData.error || "Failed to load stats");
         }
@@ -172,7 +172,7 @@ export default function AdminPanel() {
         setLeadsThisMonth(data.leadsThisMonth ?? 0);
         setDetailedUsers(data.detailedUsers || []);
         setPlatformFees(data.platformFees || null);
-        setTwilioStatus(data.twilioStatus || null);
+        setSinchStatus(data.sinchStatus || null);
       }
     } catch (e) {
       console.error("Refresh failed:", e);
@@ -593,7 +593,7 @@ export default function AdminPanel() {
             {/* ===== PLATFORM TAB ===== */}
             {activeTab === "platform" && (
               <div className="space-y-6">
-                {/* Stripe + Twilio Status */}
+                {/* Stripe + Sinch Status */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white/10 rounded-xl border border-white/10 p-6">
                     <h3 className="text-white font-semibold mb-4">Stripe Connect</h3>
@@ -629,13 +629,13 @@ export default function AdminPanel() {
 
                   <div className="bg-white/10 rounded-xl border border-white/10 p-6">
                     <h3 className="text-white font-semibold mb-4">Sinch SMS</h3>
-                    {twilioStatus ? (
+                    {sinchStatus ? (
                       <div className="space-y-3">
-                        <StatusRow label="Configured" ok={twilioStatus.configured} />
-                        {twilioStatus.phoneNumber && (
+                        <StatusRow label="Configured" ok={sinchStatus.configured} />
+                        {sinchStatus.phoneNumber && (
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Phone</span>
-                            <span className="text-white">{twilioStatus.phoneNumber}</span>
+                            <span className="text-white">{sinchStatus.phoneNumber}</span>
                           </div>
                         )}
                         <p className="text-gray-500 text-xs mt-2">
