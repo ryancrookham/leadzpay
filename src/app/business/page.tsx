@@ -2806,10 +2806,7 @@ function RolodexTab({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-[#E8822A]">Your Rolodex</h3>
-          <p className="text-gray-500 text-sm">View and manage your connected lead providers</p>
-        </div>
+        <div></div>
         <div className="relative w-full sm:w-auto">
           <input
             type="text"
