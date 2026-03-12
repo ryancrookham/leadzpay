@@ -124,31 +124,6 @@ export default function Home() {
             height={36}
             className="h-9 w-auto object-contain"
           />
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer"
-              className="text-white/60 hover:text-white text-xs transition">
-              Business Agreement
-            </a>
-            <span className="text-white/40 text-xs">·</span>
-            <a href="/WOML_Provider_Agreement.pdf" target="_blank" rel="noopener noreferrer"
-              className="text-white/60 hover:text-white text-xs transition">
-              Provider Agreement
-            </a>
-            <span className="text-white/40 text-xs">·</span>
-            <a href="/WOML_Privacy_Policy.pdf" target="_blank" rel="noopener noreferrer"
-              className="text-white/60 hover:text-white text-xs transition">
-              Privacy Policy
-            </a>
-          </div>
-          <div className="text-sm text-white/60">
-            Need help? Email us at{" "}
-            <a
-              href="mailto:support@womleads.com?subject=WOML Support Request"
-              className="text-white/80 hover:text-white underline underline-offset-2 transition"
-            >
-              support@womleads.com
-            </a>
-          </div>
           <div className="text-white/40 text-xs italic text-center">
             &ldquo;So whether you eat or drink or whatever you do, do it all for the glory of God.&rdquo;
             <span className="not-italic font-medium text-white/50 ml-1">— 1 Corinthians 10:31</span>

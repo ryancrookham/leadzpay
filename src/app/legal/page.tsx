@@ -87,8 +87,18 @@ export default function LegalPage() {
       </main>
 
       <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
-        <div className="max-w-6xl mx-auto flex flex-col items-center gap-3">
-          <Image src="/woml-alt-white.png" alt="WOML" width={100} height={30} className="h-8 w-auto object-contain" />
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
+          <Image
+            src="/woml-alt-white.png"
+            alt="WOML - Word of Mouth Leads"
+            width={120}
+            height={36}
+            className="h-9 w-auto object-contain"
+          />
+          <div className="text-white/40 text-xs italic text-center">
+            &ldquo;So whether you eat or drink or whatever you do, do it all for the glory of God.&rdquo;
+            <span className="not-italic font-medium text-white/50 ml-1">— 1 Corinthians 10:31</span>
+          </div>
           <div className="text-white/40 text-xs">© 2026 WOML LLC. All rights reserved.</div>
         </div>
       </footer>
