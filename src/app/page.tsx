@@ -70,9 +70,9 @@ export default function Home() {
             <Image
               src="/woml-alt-orange.png"
               alt="WOML - Word of Mouth Leads"
-              width={480}
-              height={144}
-              className="h-36 w-auto object-contain"
+              width={960}
+              height={288}
+              className="h-72 w-auto object-contain"
             />
           </button>
         </div>
