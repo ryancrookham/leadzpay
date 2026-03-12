@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
@@ -56,7 +57,9 @@ export default function Home() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Navigation */}
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
-        <button
+        <div className="flex items-center gap-2">
+          <Sidebar />
+          <button
           onClick={() => { window.location.href = "/admin"; }}
           className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E77500] transition cursor-pointer"
         >
@@ -68,6 +71,7 @@ export default function Home() {
             className="h-12 w-auto object-contain"
           />
         </button>
+        </div>
         <div className="flex gap-3 items-center">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
