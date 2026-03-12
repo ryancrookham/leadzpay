@@ -8,7 +8,7 @@ import Sidebar from "@/app/components/Sidebar";
 const faqs = [
   {
     q: "Who can use WOML?",
-    a: "WOML is built for two parties: auto insurance agencies (businesses) and the car salesmen they work with (providers). Agencies sign up directly. Providers are invited by the agency — they cannot sign up on their own.",
+    a: "WOML is built for two parties: businesses (buyers) and the trusted people in their network who generate leads (providers). Businesses sign up directly. Providers are invited by the business — they cannot sign up on their own.",
   },
   {
     q: "How do providers get paid?",
@@ -23,8 +23,8 @@ const faqs = [
     a: "Each agency configures their own lead criteria — required fields may include the customer's name, phone number, vehicle info, and a scanned driver's license. The agency defines what's mandatory vs. optional.",
   },
   {
-    q: "Is WOML compliant with Pennsylvania insurance referral laws?",
-    a: "WOML is currently undergoing a referral fee compliance review for PA insurance law. All platform agreements reflect applicable legal requirements and are updated as the review progresses.",
+    q: "Is WOML legally compliant for paying referral fees?",
+    a: "WOML is currently undergoing a referral fee compliance review. All platform agreements reflect applicable legal requirements and are updated as the review progresses. If you have specific compliance questions for your industry, contact us directly.",
   },
   {
     q: "What happens if a payment fails?",

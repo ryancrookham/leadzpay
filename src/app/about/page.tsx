@@ -4,7 +4,7 @@ import Sidebar from "@/app/components/Sidebar";
 
 export const metadata = {
   title: "About — WOML",
-  description: "WOML connects auto insurance agencies with car salesmen through a private lead generation platform.",
+  description: "WOML connects businesses with trusted lead providers through a private, automated lead generation platform.",
 };
 
 export default function AboutPage() {
@@ -33,31 +33,31 @@ export default function AboutPage() {
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
         <h1 className="text-3xl font-bold text-[#152238] mb-4">About WOML</h1>
         <p className="text-gray-600 leading-relaxed mb-6">
-          WOML — Word of Mouth Leads — is a private lead generation platform built specifically for the auto insurance industry. We connect insurance agencies directly with the car salesmen they already trust, creating a streamlined, private channel for qualified lead flow and automatic payouts.
+          WOML — Word of Mouth Leads — is a private lead generation platform built for businesses that run on relationships. We connect businesses directly with the trusted people in their network who can generate qualified leads, creating a streamlined, private channel for lead flow and automatic payouts.
         </p>
         <p className="text-gray-600 leading-relaxed mb-6">
-          Unlike open lead marketplaces, every WOML channel is completely private. An insurance agency creates their account, sets their lead criteria and payout rate, and personally invites their own network of car salesmen. Providers can only see and interact with the businesses that have invited them — nothing else on the platform is visible to them.
+          Unlike open lead marketplaces, every WOML channel is completely private. A business creates their account, sets their lead criteria and payout rate, and personally invites their own network of providers. Providers can only see and interact with the businesses that have invited them — nothing else on the platform is visible to them.
         </p>
 
         <h2 className="text-xl font-semibold text-[#152238] mt-10 mb-4">Who It&apos;s For</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
           <div className="border border-gray-200 rounded-xl p-6">
-            <h3 className="font-semibold text-[#152238] mb-2">Insurance Agencies</h3>
+            <h3 className="font-semibold text-[#152238] mb-2">Businesses</h3>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Set your lead criteria, invite trusted car salesmen, and receive qualified leads with automatic billing — no chasing, no invoicing.
+              Set your lead criteria, invite trusted providers from your existing network, and receive qualified leads with automatic billing — no chasing, no invoicing.
             </p>
           </div>
           <div className="border border-gray-200 rounded-xl p-6">
-            <h3 className="font-semibold text-[#152238] mb-2">Car Salesmen</h3>
+            <h3 className="font-semibold text-[#152238] mb-2">Lead Providers</h3>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Submit leads from customers you&apos;ve already spoken with and get paid automatically to your bank account the moment the lead is accepted.
+              Submit leads from people you&apos;ve already spoken with and get paid automatically to your bank account the moment the lead is accepted.
             </p>
           </div>
         </div>
 
         <h2 className="text-xl font-semibold text-[#152238] mb-4">Our Mission</h2>
         <p className="text-gray-600 leading-relaxed">
-          Word of mouth has always been the most valuable source of leads in the insurance business. WOML gives that process a formal structure — making it faster, more reliable, and fully compliant — without losing the personal relationships that make it work.
+          Word of mouth has always been the most valuable source of leads in any business. WOML gives that process a formal structure — making it faster, more reliable, and fully transparent — without losing the personal relationships that make it work.
         </p>
       </main>
 

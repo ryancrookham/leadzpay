@@ -4,29 +4,29 @@ import Sidebar from "@/app/components/Sidebar";
 
 export const metadata = {
   title: "How It Works — WOML",
-  description: "Learn how WOML connects insurance agencies with lead providers.",
+  description: "Learn how WOML connects businesses with trusted lead providers.",
 };
 
 const steps = [
   {
     num: "1",
-    title: "Agency Creates a Channel",
-    body: "The insurance agency signs up, sets their lead criteria (what information they need on each lead), and configures a payout rate per accepted lead.",
+    title: "Business Creates a Channel",
+    body: "The business signs up, sets their lead criteria (what information they need on each lead), and configures a payout rate per accepted lead.",
   },
   {
     num: "2",
     title: "Providers Are Invited",
-    body: "The agency invites car salesmen via a unique link or branded SMS. Each provider signs up through that link and is scoped exclusively to that agency's private channel.",
+    body: "The business invites trusted people from their network via a unique link or branded SMS. Each provider signs up through that link and is scoped exclusively to that business's private channel.",
   },
   {
     num: "3",
     title: "Leads Are Submitted",
-    body: "Providers submit leads from their personal network — customers who have recently purchased a vehicle and may need auto insurance.",
+    body: "Providers submit leads from their personal network — contacts they've already spoken with who are a strong match for what the business offers.",
   },
   {
     num: "4",
     title: "Payouts Fire Automatically",
-    body: "When a lead is accepted, the agency is charged via Stripe, WOML takes a small platform fee, and the provider is paid directly to their bank account — no invoicing, no waiting.",
+    body: "When a lead is accepted, the business is charged via Stripe, WOML takes a small platform fee, and the provider is paid directly to their bank account — no invoicing, no waiting.",
   },
 ];
 
