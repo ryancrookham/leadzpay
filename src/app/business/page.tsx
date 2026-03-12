@@ -47,7 +47,7 @@ interface ApiLead {
   quoteCompleted: boolean;
 }
 
-type Tab = "dashboard" | "leads" | "requests" | "rolodex" | "ledger" | "settings" | "invite";
+type Tab = "dashboard" | "leads" | "requests" | "connections" | "ledger" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -92,7 +92,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "leads", "requests", "rolodex", "ledger", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "leads", "requests", "connections", "ledger", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
@@ -678,7 +678,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "requests", "leads", "rolodex", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "connections", "leads", "requests", "ledger", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1578,10 +1578,10 @@ function BusinessPortalContent() {
           </TabErrorBoundary>
         )}
 
-        {/* Rolodex Tab */}
-        {activeTab === "rolodex" && (
-          <TabErrorBoundary tabName="Rolodex">
-            <RolodexTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} />
+        {/* Connections Tab */}
+        {activeTab === "connections" && (
+          <TabErrorBoundary tabName="Connections">
+            <ConnectionsTab providers={providers} dbLeads={dbLeads} currentBuyer={currentBuyer} activeConnections={activeConnections} feeSettings={feeSettings} />
           </TabErrorBoundary>
         )}
 
@@ -2815,8 +2815,8 @@ function LedgerTab({ dbLeads, feeSettings }: { dbLeads: ApiLead[]; feeSettings?:
 }
 
 
-// Rolodex Tab - View connected providers as baseball cards
-function RolodexTab({
+// Connections Tab - View connected lead providers with full sender info + terms
+function ConnectionsTab({
   providers,
   dbLeads,
   currentBuyer,
@@ -2829,173 +2829,307 @@ function RolodexTab({
   activeConnections: ApiConnection[];
   feeSettings?: FeeSettings;
 }) {
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "leads" | "rate">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // Filter providers based on search
-  const filteredProviders = providers.filter(p =>
-    (p.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.email || "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Required lead fields per WOML standard
+  const REQUIRED_FIELDS = [
+    "Full Name",
+    "Address",
+    "Phone #",
+    "Email",
+    "Driver's License #",
+    "Date of Birth",
+    "VIN",
+    "Current Insurance? (Y/N)",
+    "Married or Single? (Y/N)",
+    "Own or Rent? (Y/N)",
+  ];
 
-  // Filter active connections based on search
-  const filteredConnections = activeConnections.filter(c =>
-    (c.providerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.providerEmail || "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Build a unified list: prefer ApiConnection records (DB), supplement with Provider (local)
+  // Map provider leads for stats
+  const providerLeadMap: Record<string, ApiLead[]> = {};
+  dbLeads.forEach(l => {
+    if (!providerLeadMap[l.providerId]) providerLeadMap[l.providerId] = [];
+    providerLeadMap[l.providerId].push(l);
+  });
 
-  // Calculate stats for each provider from DB leads
-  const providersWithStats = filteredProviders.map(provider => {
-    const providerLeads = dbLeads.filter(l => l.providerId === provider.id);
-    const paidLeads = providerLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
+  // Combine: activeConnections (authoritative) + any providers not already in connections
+  const connectionProviderIds = new Set(activeConnections.map(c => c.provider_id));
+  const standaloneProviders = providers.filter(p => !connectionProviderIds.has(p.id));
+
+  // Unified type for display
+  type DisplayRow = {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    rate: number;
+    totalLeads: number;
+    totalPaid: number;
+    weeklyLeadCap: number | null;
+    monthlyLeadCap: number | null;
+    status: string;
+    source: "connection" | "provider";
+  };
+
+  const connectionRows: DisplayRow[] = activeConnections.map(c => ({
+    id: c.id,
+    name: c.providerName || "—",
+    email: c.providerEmail || "—",
+    phone: "—",
+    rate: c.rate_per_lead || 0,
+    totalLeads: c.total_leads || 0,
+    totalPaid: c.total_paid || 0,
+    weeklyLeadCap: c.weekly_lead_cap ?? null,
+    monthlyLeadCap: c.monthly_lead_cap ?? null,
+    status: c.status || "active",
+    source: "connection" as const,
+  }));
+
+  const providerRows: DisplayRow[] = standaloneProviders.map(p => {
+    const pLeads = providerLeadMap[p.id] || [];
     return {
-      ...provider,
-      totalLeads: providerLeads.length,
-      totalEarnings: providerLeads.reduce((sum, l) => sum + l.payoutAmount, 0),
-      conversionRate: providerLeads.length > 0
-        ? Math.round((paidLeads.length / providerLeads.length) * 100)
-        : 0,
-      lastLeadDate: providerLeads.length > 0
-        ? new Date(providerLeads[0].submittedAt).toLocaleDateString()
-        : "Never",
+      id: p.id,
+      name: p.name || "—",
+      email: p.email || "—",
+      phone: p.phone || "—",
+      rate: p.payoutRate || 0,
+      totalLeads: pLeads.length,
+      totalPaid: pLeads.reduce((sum, l) => sum + l.payoutAmount, 0),
+      weeklyLeadCap: null,
+      monthlyLeadCap: null,
+      status: p.status || "active",
+      source: "provider" as const,
     };
   });
 
+  const allRows = [...connectionRows, ...providerRows];
+
+  // Filter
+  const filtered = allRows.filter(r =>
+    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    r.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === "name") cmp = a.name.localeCompare(b.name);
+    else if (sortBy === "leads") cmp = a.totalLeads - b.totalLeads;
+    else if (sortBy === "rate") cmp = a.rate - b.rate;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  // Export to CSV
+  const exportToCSV = () => {
+    const headers = [
+      "Name", "Email", "Phone", "Address", "Venmo Handle",
+      "Price Per Lead ($)", "Cap / Day", "Cap / Week", "Cap / Month",
+      "Total Leads", "Total Paid ($)", "Status",
+    ];
+    const rows = sorted.map(r => [
+      r.name,
+      r.email,
+      r.phone,
+      "—",
+      "—",
+      r.rate.toFixed(2),
+      "—",
+      r.weeklyLeadCap !== null ? String(r.weeklyLeadCap) : "—",
+      r.monthlyLeadCap !== null ? String(r.monthlyLeadCap) : "—",
+      String(r.totalLeads),
+      r.totalPaid.toFixed(2),
+      r.status,
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "woml-connections.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleSort = (col: "name" | "leads" | "rate") => {
+    if (sortBy === col) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  };
+
+  const SortBtn = ({ col, label }: { col: "name" | "leads" | "rate"; label: string }) => (
+    <button
+      onClick={() => toggleSort(col)}
+      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+        sortBy === col
+          ? "bg-white text-[#E8822A] shadow-sm border border-gray-200"
+          : "text-white/70 hover:text-white hover:bg-white/10"
+      }`}
+    >
+      {label}
+      <span className="text-xs opacity-60">
+        {sortBy === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </button>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div></div>
-        <div className="relative w-full sm:w-auto">
-          <input
-            type="text"
-            placeholder="Search providers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#E8822A] transition"
-          />
-          <svg className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        {/* Sort controls */}
+        <div className="flex items-center gap-1 bg-white/10 rounded-xl px-2 py-1">
+          <span className="text-white/50 text-xs mr-1 pl-1">Sort:</span>
+          <SortBtn col="name" label="Name" />
+          <SortBtn col="leads" label="Leads" />
+          <SortBtn col="rate" label="Rate" />
+        </div>
+
+        {/* Search + Export */}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search connections..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full sm:w-56 pl-9 pr-4 py-2 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-[#E8822A] text-sm transition"
+            />
+            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-[#152238] rounded-lg font-medium text-sm hover:bg-gray-50 transition shadow-sm border border-gray-200 whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export CSV
+          </button>
         </div>
       </div>
 
-      {/* Provider Cards Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {providersWithStats.map((provider) => (
+      {/* Connection Cards */}
+      <div className="grid sm:grid-cols-2 gap-5">
+        {sorted.map((row) => (
           <div
-            key={provider.id}
-            onClick={() => setSelectedProvider(provider)}
-            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#E8822A]/30 transition cursor-pointer group"
+            key={row.id}
+            className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:border-[#E8822A]/30 transition"
           >
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] p-4 text-white">
+            <div className="bg-gradient-to-r from-[#E8822A] to-[#D47526] px-5 py-4 text-white">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl font-bold">{(provider.name || "?").charAt(0)}</span>
+                <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                  <span className="text-lg font-bold">{(row.name || "?").charAt(0).toUpperCase()}</span>
                 </div>
+                <div className="min-w-0">
+                  <h4 className="font-semibold truncate">{row.name}</h4>
+                  <span className={`text-xs px-2 py-0.5 rounded-full mt-0.5 inline-block ${
+                    row.status === "active"
+                      ? "bg-white/20 text-white"
+                      : "bg-red-500/30 text-red-100"
+                  }`}>
+                    {row.status}
+                  </span>
+                </div>
+                <div className="ml-auto text-right shrink-0">
+                  <p className="text-2xl font-bold">{row.totalLeads}</p>
+                  <p className="text-white/60 text-xs uppercase tracking-wide">leads</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card Body */}
+            <div className="px-5 py-4 space-y-4">
+
+              {/* Sender Info */}
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sender Info</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: "Phone", value: row.phone },
+                    { label: "Email", value: row.email },
+                    { label: "Address", value: "—" },
+                    { label: "Venmo", value: "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-start gap-2 text-sm">
+                      <span className="text-gray-400 w-16 shrink-0">{label}</span>
+                      <span className={`font-medium break-all ${value === "—" ? "text-gray-300" : "text-[#152238]"}`}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lead Purchase Terms */}
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Lead Purchase Terms</p>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    { label: "$/Lead", value: `$${row.rate.toFixed(2)}`, accent: true },
+                    { label: "Cap/Day", value: "—" },
+                    { label: "Cap/Wk", value: row.weeklyLeadCap !== null ? String(row.weeklyLeadCap) : "—" },
+                    { label: "Cap/Mo", value: row.monthlyLeadCap !== null ? String(row.monthlyLeadCap) : "—" },
+                  ].map(({ label, value, accent }) => (
+                    <div key={label} className="bg-gray-50 rounded-lg py-2 px-1">
+                      <p className={`text-sm font-bold ${accent ? "text-[#E8822A]" : value === "—" ? "text-gray-300" : "text-[#152238]"}`}>{value}</p>
+                      <p className="text-gray-400 text-[10px] mt-0.5">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Required Lead Fields */}
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                  Required Lead Fields <span className="normal-case font-normal">({REQUIRED_FIELDS.length})</span>
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {REQUIRED_FIELDS.map(field => (
+                    <span
+                      key={field}
+                      className="text-[11px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full leading-relaxed"
+                    >
+                      {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stats Footer */}
+              <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold">{provider.name || "Provider"}</h4>
-                  <p className="text-white/70 text-sm">@{(provider.email || "").split("@")[0]}</p>
+                  <p className="text-xs text-gray-400">Total Paid</p>
+                  <p className="font-bold text-emerald-600">${row.totalPaid.toFixed(2)}</p>
                 </div>
-              </div>
-            </div>
-
-            {/* Stats Section */}
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-[#E8822A]">{provider.totalLeads}</p>
-                  <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">${Number(provider.totalEarnings || 0).toFixed(2)}</p>
-                  <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">Source</p>
+                  <p className="text-xs font-medium text-gray-500">{row.source === "connection" ? "Connected" : "Provider"}</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
-                <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-[#E8822A]">${Number(provider.payoutRate || 0).toFixed(2)}</span>
-                  <span>/lead</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-xs ${
-                  provider.status === "active"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-500"
-                }`}>
-                  {provider.status}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* Active Connections Cards */}
-        {filteredConnections.map((connection) => (
-          <div
-            key={connection.id}
-            className="bg-white rounded-2xl border border-emerald-200 overflow-hidden shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer group"
-          >
-            {/* Card Header - Green gradient for connections */}
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 text-white">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl font-bold">{(connection.providerName || "?").charAt(0)}</span>
-                </div>
-                <div>
-                  <h4 className="font-semibold">{connection.providerName}</h4>
-                  <p className="text-white/70 text-sm">@{(connection.providerEmail || "").split("@")[0]}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Section */}
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-[#E8822A]">{connection.total_leads}</p>
-                  <p className="text-gray-500 text-xs uppercase tracking-wide">Leads</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">${Number(connection.total_paid || 0).toFixed(2)}</p>
-                  <p className="text-gray-500 text-xs uppercase tracking-wide">Paid</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
-                <div className="flex items-center gap-1 text-gray-500">
-                  <span className="font-medium text-emerald-600">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}</span>
-                  <span>/lead</span>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
-                  Connected
-                </span>
-              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {filteredProviders.length === 0 && filteredConnections.length === 0 && (
+      {sorted.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           <p className="text-gray-400">
-            {searchQuery ? "No providers match your search" : "No providers in your rolodex yet"}
+            {searchQuery ? "No connections match your search" : "No connections yet — invite providers from the Invite tab"}
           </p>
         </div>
-      )}
-
-      {/* Provider Detail Modal */}
-      {selectedProvider && (
-        <ProviderDetailModal
-          provider={selectedProvider}
-          dbLeads={dbLeads.filter(l => l.providerId === selectedProvider.id)}
-          onClose={() => setSelectedProvider(null)}
-          feeSettings={feeSettings}
-        />
       )}
     </div>
   );
