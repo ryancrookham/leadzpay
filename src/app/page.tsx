@@ -65,14 +65,14 @@ export default function Home() {
         <div className="absolute left-1/2 -translate-x-1/2">
           <button
             onClick={() => { window.location.href = "/admin"; }}
-            className="flex items-center border-2 border-gray-200 rounded-lg px-3 py-2 hover:border-[#E77500] transition cursor-pointer"
+            className="cursor-pointer"
           >
             <Image
               src="/woml-alt-orange.png"
               alt="WOML - Word of Mouth Leads"
-              width={160}
-              height={48}
-              className="h-12 w-auto object-contain"
+              width={320}
+              height={96}
+              className="h-24 w-auto object-contain"
             />
           </button>
         </div>
