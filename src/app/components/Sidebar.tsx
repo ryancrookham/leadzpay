@@ -29,22 +29,16 @@ export default function Sidebar() {
 
       {/* Sidebar panel */}
       <div
-        className={`fixed top-0 left-0 h-full w-60 bg-white border-r border-gray-200 z-50 transition-transform duration-200 ease-in-out ${
+        className={`fixed top-0 left-0 h-full w-60 z-50 transition-transform duration-200 ease-in-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ background: "#152238" }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-gray-200">
-          <Link
-            href="/"
-            onClick={() => setOpen(false)}
-            className="font-bold text-[#152238] text-base tracking-widest"
-          >
-            WOML
-          </Link>
+        {/* Close button only — no WOML text */}
+        <div className="flex items-center justify-end px-5 py-5">
           <button
             onClick={() => setOpen(false)}
-            className="text-gray-400 hover:text-gray-700 text-lg leading-none"
+            className="text-white/50 hover:text-white text-lg leading-none"
             aria-label="Close menu"
           >
             ✕
@@ -60,8 +54,8 @@ export default function Sidebar() {
               onClick={() => setOpen(false)}
               className={`block px-6 py-[14px] text-sm font-medium transition-colors ${
                 pathname === tab.href
-                  ? "text-[#E77500] bg-orange-50"
-                  : "text-[#152238] hover:bg-gray-50"
+                  ? "text-[#E77500]"
+                  : "text-white/80 hover:text-white"
               }`}
             >
               {tab.label}
