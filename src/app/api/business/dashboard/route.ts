@@ -7,6 +7,16 @@ import {
   getBusinessCriteriaWithFields,
 } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
+import { neon } from "@neondatabase/serverless";
+
+// One-time migration: add quote_completed column if missing
+let migrationRan = false;
+async function ensureQuoteColumn() {
+  if (migrationRan) return;
+  const sql = neon(process.env.DATABASE_URL!);
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS quote_completed BOOLEAN DEFAULT FALSE`;
+  migrationRan = true;
+}
 
 // GET /api/business/dashboard — unified dashboard data (buyer auth)
 // Runs all queries in parallel to avoid multiple cold starts
@@ -23,6 +33,8 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+
+    await ensureQuoteColumn();
 
     // Run all DB queries in parallel
     const [rawLeads, platformSettings, inviteTokens, criteriaResult] = await Promise.all([
@@ -75,6 +87,7 @@ export async function GET() {
         buyerName: lead.buyer_name || null,
         buyerBusinessName: lead.buyer_business_name || null,
         criteriaFieldsData: lead.criteria_fields_data,
+        quoteCompleted: lead.quote_completed ?? false,
       };
     }));
 

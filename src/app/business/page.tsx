@@ -44,6 +44,7 @@ interface ApiLead {
     label: string;
     value: string;
   }[] | null;
+  quoteCompleted: boolean;
 }
 
 type Tab = "dashboard" | "leads" | "requests" | "rolodex" | "ledger" | "settings" | "invite";
@@ -579,10 +580,17 @@ function BusinessPortalContent() {
   }
 
   // Calculate stats from DB leads
-  const totalLeads = dbLeads.length;
-  const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing").length;
-  const totalPayouts = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-  const avgLeadValue = totalLeads > 0 ? totalPayouts / totalLeads : 0;
+  const today = new Date().toISOString().split('T')[0];
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const leadsToday = dbLeads.filter(l => l.submittedAt.startsWith(today));
+  const quotesToday = leadsToday.filter(l => l.quoteCompleted).length;
+  const leadsThisMonth = dbLeads.filter(l => {
+    const d = new Date(l.submittedAt);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  const quotesThisMonth = leadsThisMonth.filter(l => l.quoteCompleted).length;
 
   // Get leads by provider for chart
   const leadsByProvider = (() => {
@@ -597,21 +605,33 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
-  // Compute spending by day for revenue chart (all leads, grouped by submission date)
-  const spendingByDay = (() => {
-    const dayMap = new Map<string, { revenue: number; txCount: number }>();
-    dbLeads.forEach(lead => {
-      const day = lead.submittedAt.split('T')[0];
-      const cost = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal;
-      const existing = dayMap.get(day) || { revenue: 0, txCount: 0 };
-      existing.revenue += cost;
-      existing.txCount++;
-      dayMap.set(day, existing);
-    });
-    return Array.from(dayMap.entries()).map(([day, data]) => ({
-      day, revenue: data.revenue, txCount: data.txCount,
-    }));
-  })();
+  // Toggle quote_completed on a lead
+  const toggleQuote = async (leadId: string, value: boolean) => {
+    try {
+      await fetch(`/api/business/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quote_completed: value }),
+      });
+      await fetchDashboard();
+    } catch (err) {
+      console.error("Failed to toggle quote:", err);
+    }
+  };
+
+  // +/- handlers for stat card quote buttons
+  const handleQuotePlus = async (period: "today" | "month") => {
+    const pool = period === "today" ? leadsToday : leadsThisMonth;
+    // Find oldest unquoted lead
+    const unquoted = [...pool].reverse().find(l => !l.quoteCompleted);
+    if (unquoted) await toggleQuote(unquoted.id, true);
+  };
+  const handleQuoteMinus = async (period: "today" | "month") => {
+    const pool = period === "today" ? leadsToday : leadsThisMonth;
+    // Find newest quoted lead
+    const quoted = pool.find(l => l.quoteCompleted);
+    if (quoted) await toggleQuote(quoted.id, false);
+  };
 
   return (
     <div className="min-h-screen bg-[#E77500] relative">
@@ -683,16 +703,99 @@ function BusinessPortalContent() {
           <div className="space-y-8">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard title="Total Leads" value={totalLeads.toString()} color="navy" />
-              <StatCard title="Leads Paid" value={paidLeads.toString()} color="emerald" />
-              <StatCard title="Total Payouts" value={`$${totalPayouts.toFixed(2)}`} color="blue" />
-              <StatCard title="Avg Lead Value" value={`$${avgLeadValue.toFixed(2)}`} color="amber" />
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-500 text-sm mb-1">Leads Received Today</p>
+                <p className="text-3xl font-bold text-[#E8822A]">{leadsToday.length}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-500 text-sm mb-1">Quotes Completed Today</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-3xl font-bold text-emerald-600">{quotesToday}</p>
+                  <div className="flex flex-col gap-1 ml-auto">
+                    <button
+                      onClick={() => handleQuotePlus("today")}
+                      className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 flex items-center justify-center text-lg font-bold transition"
+                    >+</button>
+                    <button
+                      onClick={() => handleQuoteMinus("today")}
+                      className="w-7 h-7 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-lg font-bold transition"
+                    >&minus;</button>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-500 text-sm mb-1">Leads Received This Month</p>
+                <p className="text-3xl font-bold text-orange-600">{leadsThisMonth.length}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <p className="text-gray-500 text-sm mb-1">Quotes Completed This Month</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-3xl font-bold text-amber-600">{quotesThisMonth}</p>
+                  <div className="flex flex-col gap-1 ml-auto">
+                    <button
+                      onClick={() => handleQuotePlus("month")}
+                      className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 flex items-center justify-center text-lg font-bold transition"
+                    >+</button>
+                    <button
+                      onClick={() => handleQuoteMinus("month")}
+                      className="w-7 h-7 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-lg font-bold transition"
+                    >&minus;</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Lead Spending Chart (30-day) */}
+            {/* Recent Leads */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Lead Spending (Last 30 Days)</h3>
-              <BusinessRevenueChart spendingByDay={spendingByDay} />
+              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Recent Leads</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-200">
+                      <th className="pb-3 font-medium">Customer</th>
+                      <th className="pb-3 font-medium">Vehicle</th>
+                      <th className="pb-3 font-medium">Provider</th>
+                      <th className="pb-3 font-medium">Quote</th>
+                      <th className="pb-3 font-medium">Status</th>
+                      <th className="pb-3 font-medium">Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbLeads.slice(0, 5).map((lead) => (
+                      <tr key={lead.id} className="border-b border-gray-100">
+                        <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
+                        <td className="py-4 text-gray-600">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
+                        <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
+                        <td className="py-4">
+                          {lead.quoteCompleted ? (
+                            <span className="text-emerald-600 font-bold text-lg">&#10003;</span>
+                          ) : (
+                            <button
+                              onClick={() => toggleQuote(lead.id, true)}
+                              className="px-2 py-1 text-xs font-medium text-[#E8822A] bg-orange-50 border border-[#E8822A]/30 rounded hover:bg-orange-100 transition"
+                            >+ Quote</button>
+                          )}
+                        </td>
+                        <td className="py-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                            lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
+                            "bg-amber-100 text-amber-700"
+                          }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
+                        </td>
+                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    {dbLeads.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center text-gray-400 py-8">
+                          No leads yet
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Top Providers */}
@@ -719,50 +822,6 @@ function BusinessPortalContent() {
                 {leadsByProvider.length === 0 && (
                   <p className="text-gray-400 text-center py-8">No providers yet</p>
                 )}
-              </div>
-            </div>
-
-            {/* Recent Leads */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Recent Leads</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-gray-500 border-b border-gray-200">
-                      <th className="pb-3 font-medium">Customer</th>
-                      <th className="pb-3 font-medium">Vehicle</th>
-                      <th className="pb-3 font-medium">Provider</th>
-                      <th className="pb-3 font-medium">Quote</th>
-                      <th className="pb-3 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Payout</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dbLeads.slice(0, 5).map((lead) => (
-                      <tr key={lead.id} className="border-b border-gray-100">
-                        <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                        <td className="py-4 text-gray-600">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
-                        <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
-                        <td className="py-4 text-[#E8822A] font-medium">-</td>
-                        <td className="py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                            lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
-                            "bg-amber-100 text-amber-700"
-                          }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
-                        </td>
-                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                    {dbLeads.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="text-center text-gray-400 py-8">
-                          No leads yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
               </div>
             </div>
 

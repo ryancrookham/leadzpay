@@ -125,6 +125,7 @@ export interface DbLead {
   claimed_at: string | null;
   payout_completed_at: string | null;
   criteria_fields_data: Record<string, unknown>[] | null;
+  quote_completed: boolean;
   // Joined fields (from user table JOINs)
   provider_name?: string | null;
   provider_venmo?: string | null;
@@ -817,6 +818,19 @@ export async function updateLeadPayoutStatus(
     UPDATE leads SET
       payout_status = ${status},
       payout_completed_at = CASE WHEN ${status === 'completed'} THEN NOW() ELSE payout_completed_at END
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbLead>(result);
+}
+
+export async function updateLeadQuoteCompleted(
+  id: string,
+  quoteCompleted: boolean
+): Promise<DbLead | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET quote_completed = ${quoteCompleted}
     WHERE id = ${id}
     RETURNING *
   `;
