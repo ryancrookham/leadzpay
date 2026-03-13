@@ -21,6 +21,29 @@ async function ensureMigrations() {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS contacted_at TIMESTAMPTZ`;
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS quoted_at TIMESTAMPTZ`;
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS sold_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS dead_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS contacted_sub_status TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS dead_reason TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_to TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS follow_up_date DATE`;
+  await sql`CREATE TABLE IF NOT EXISTS lead_activity_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    business_id UUID NOT NULL,
+    actor_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    from_value TEXT,
+    to_value TEXT,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_activity_lead_id ON lead_activity_log(lead_id)`;
+  await sql`CREATE TABLE IF NOT EXISTS business_settings (
+    business_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    dead_lead_window_days INTEGER DEFAULT 30,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
   migrationRan = true;
 }
 
@@ -100,6 +123,11 @@ export async function GET() {
         contactedAt: lead.contacted_at ?? null,
         quotedAt: lead.quoted_at ?? null,
         soldAt: lead.sold_at ?? null,
+        deadAt: lead.dead_at ?? null,
+        contactedSubStatus: lead.contacted_sub_status ?? null,
+        deadReason: lead.dead_reason ?? null,
+        assignedTo: lead.assigned_to ?? null,
+        followUpDate: lead.follow_up_date ?? null,
       };
     }));
 

@@ -132,6 +132,11 @@ export interface DbLead {
   contacted_at: string | null;
   quoted_at: string | null;
   sold_at: string | null;
+  dead_at: string | null;
+  contacted_sub_status: string | null;
+  dead_reason: string | null;
+  assigned_to: string | null;
+  follow_up_date: string | null;
   // Joined fields (from user table JOINs)
   provider_name?: string | null;
   provider_venmo?: string | null;
@@ -845,7 +850,15 @@ export async function updateLeadQuoteCompleted(
 
 export async function updateLeadPipeline(
   id: string,
-  fields: { pipeline_status?: string; contact_type?: string; pipeline_notes?: string }
+  fields: {
+    pipeline_status?: string;
+    contact_type?: string;
+    pipeline_notes?: string;
+    contacted_sub_status?: string | null;
+    dead_reason?: string | null;
+    assigned_to?: string | null;
+    follow_up_date?: string | null;
+  }
 ): Promise<DbLead | null> {
   const sql = getSql();
 
@@ -858,8 +871,10 @@ export async function updateLeadPipeline(
       await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = COALESCE(contacted_at, NOW()), quoted_at = COALESCE(quoted_at, NOW()) WHERE id = ${id}`;
     } else if (status === 'sold') {
       await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = COALESCE(contacted_at, NOW()), quoted_at = COALESCE(quoted_at, NOW()), sold_at = COALESCE(sold_at, NOW()) WHERE id = ${id}`;
+    } else if (status === 'dead') {
+      await sql`UPDATE leads SET pipeline_status = ${status}, dead_at = COALESCE(dead_at, NOW()) WHERE id = ${id}`;
     } else if (status === 'new') {
-      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = NULL, quoted_at = NULL, sold_at = NULL WHERE id = ${id}`;
+      await sql`UPDATE leads SET pipeline_status = ${status}, contacted_at = NULL, quoted_at = NULL, sold_at = NULL, dead_at = NULL WHERE id = ${id}`;
     } else {
       await sql`UPDATE leads SET pipeline_status = ${status} WHERE id = ${id}`;
     }
@@ -873,9 +888,108 @@ export async function updateLeadPipeline(
     await sql`UPDATE leads SET pipeline_notes = ${fields.pipeline_notes} WHERE id = ${id}`;
   }
 
+  if (fields.contacted_sub_status !== undefined) {
+    await sql`UPDATE leads SET contacted_sub_status = ${fields.contacted_sub_status} WHERE id = ${id}`;
+  }
+
+  if (fields.dead_reason !== undefined) {
+    await sql`UPDATE leads SET dead_reason = ${fields.dead_reason} WHERE id = ${id}`;
+  }
+
+  if (fields.assigned_to !== undefined) {
+    await sql`UPDATE leads SET assigned_to = ${fields.assigned_to} WHERE id = ${id}`;
+  }
+
+  if (fields.follow_up_date !== undefined) {
+    await sql`UPDATE leads SET follow_up_date = ${fields.follow_up_date} WHERE id = ${id}`;
+  }
+
   // Return the updated lead
   const result = await sql`SELECT * FROM leads WHERE id = ${id}`;
   return first<DbLead>(result);
+}
+
+// ============================================
+// Activity Log functions
+// ============================================
+
+export interface ActivityLogEntry {
+  id: string;
+  lead_id: string;
+  business_id: string;
+  actor_name: string;
+  action: string;
+  from_value: string | null;
+  to_value: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export async function insertActivityLog(entry: {
+  lead_id: string;
+  business_id: string;
+  actor_name: string;
+  action: string;
+  from_value?: string | null;
+  to_value?: string | null;
+  note?: string | null;
+}): Promise<void> {
+  const sql = getSql();
+  await sql`
+    INSERT INTO lead_activity_log (lead_id, business_id, actor_name, action, from_value, to_value, note)
+    VALUES (${entry.lead_id}, ${entry.business_id}, ${entry.actor_name}, ${entry.action}, ${entry.from_value ?? null}, ${entry.to_value ?? null}, ${entry.note ?? null})
+  `;
+}
+
+export async function getActivityLog(leadId: string): Promise<ActivityLogEntry[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM lead_activity_log WHERE lead_id = ${leadId} ORDER BY created_at DESC
+  `;
+  return result as unknown as ActivityLogEntry[];
+}
+
+// ============================================
+// Business Settings functions
+// ============================================
+
+export interface BusinessSettings {
+  business_id: string;
+  dead_lead_window_days: number;
+}
+
+export async function getBusinessSettings(businessId: string): Promise<BusinessSettings> {
+  const sql = getSql();
+  const result = await sql`SELECT * FROM business_settings WHERE business_id = ${businessId}`;
+  const row = first<BusinessSettings>(result);
+  return row || { business_id: businessId, dead_lead_window_days: 30 };
+}
+
+export async function upsertBusinessSettings(
+  businessId: string,
+  settings: { dead_lead_window_days: number }
+): Promise<void> {
+  const sql = getSql();
+  await sql`
+    INSERT INTO business_settings (business_id, dead_lead_window_days, updated_at)
+    VALUES (${businessId}, ${settings.dead_lead_window_days}, NOW())
+    ON CONFLICT (business_id) DO UPDATE SET
+      dead_lead_window_days = ${settings.dead_lead_window_days},
+      updated_at = NOW()
+  `;
+}
+
+export async function sweepDeadLeads(businessId: string, windowDays: number): Promise<string[]> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads
+    SET pipeline_status = 'dead', dead_at = NOW()
+    WHERE buyer_id = ${businessId}
+      AND pipeline_status IN ('new', 'contacted', 'quoted')
+      AND submitted_at < NOW() - (${windowDays} || ' days')::interval
+    RETURNING id
+  `;
+  return (result as unknown as { id: string }[]).map(r => r.id);
 }
 
 // ============================================

@@ -11,8 +11,10 @@ import { useConnections, type ApiConnection, type DiscoveryUser } from "@/lib/co
 import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
-import BusinessRevenueChart from "./components/BusinessRevenueChart";
+import dynamic from "next/dynamic";
 import InviteTab, { type InviteToken, type SavedCriteria, type SavedField } from "./components/InviteTab";
+
+const DashboardChart = dynamic(() => import("./components/DashboardChart"), { ssr: false });
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -51,6 +53,11 @@ interface ApiLead {
   contactedAt: string | null;
   quotedAt: string | null;
   soldAt: string | null;
+  deadAt: string | null;
+  contactedSubStatus: string | null;
+  deadReason: string | null;
+  assignedTo: string | null;
+  followUpDate: string | null;
 }
 
 type Tab = "dashboard" | "connections" | "pipeline" | "records" | "settings" | "invite";
@@ -103,14 +110,13 @@ function BusinessPortalContent() {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
   const [pipelineNotesLocal, setPipelineNotesLocal] = useState<Record<string, string>>({});
+  const [pipelineSearch, setPipelineSearch] = useState("");
+  const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest" | "followup" | "assigned">("newest");
+  const [activityDrawer, setActivityDrawer] = useState<string | null>(null);
+  const [activityCache, setActivityCache] = useState<Record<string, { actor_name: string; action: string; from_value: string | null; to_value: string | null; note: string | null; created_at: string }[]>>({});
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Excel upload state for Dashboard analytics
-  const [uploadedCrmData, setUploadedCrmData] = useState<UploadedRecord[]>([]);
-  const [crmAnalytics, setCrmAnalytics] = useState<AnalyticsData | null>(null);
-  const [isUploadingCrm, setIsUploadingCrm] = useState(false);
-  const [crmUploadError, setCrmUploadError] = useState<string | null>(null);
-  const [crmFileName, setCrmFileName] = useState<string | null>(null);
-  const [isDraggingCrm, setIsDraggingCrm] = useState(false);
 
   const { providers, updateProvider, addProvider } = useLeads();
   const {
@@ -174,7 +180,10 @@ function BusinessPortalContent() {
 
   useEffect(() => {
     if (!currentUser) return;
-    fetchDashboard();
+    fetchDashboard().then(() => {
+      // Non-blocking auto-dead sweep
+      fetch("/api/business/pipeline/auto-dead", { method: "POST" }).catch(() => {});
+    });
   }, [currentUser, fetchDashboard]);
 
   // Check Stripe setup status for buyer
@@ -282,224 +291,6 @@ function BusinessPortalContent() {
 
   const handleLogout = () => logout();
 
-  // Calculate CRM analytics from uploaded data
-  const calculateCrmAnalytics = (data: UploadedRecord[]): AnalyticsData => {
-    const totalLeads = data.length;
-    const totalContacted = data.filter(r => r.contactMade).length;
-    const totalSold = data.filter(r => r.sold).length;
-    const totalPaid = data.filter(r => r.paidGenerator).length;
-
-    const overallContactRate = totalLeads > 0 ? (totalContacted / totalLeads) * 100 : 0;
-    const overallConversionRate = totalLeads > 0 ? (totalSold / totalLeads) * 100 : 0;
-    const overallPaymentRate = totalLeads > 0 ? (totalPaid / totalLeads) * 100 : 0;
-
-    // Group by individual sender
-    const providerMap = new Map<string, {
-      businessName: string;
-      totalLeads: number;
-      contactedLeads: number;
-      soldLeads: number;
-      paidLeads: number;
-    }>();
-
-    data.forEach(record => {
-      const key = record.individualSender || record.providerName || "Unknown";
-      const existing = providerMap.get(key) || {
-        businessName: record.businessSender || "",
-        totalLeads: 0,
-        contactedLeads: 0,
-        soldLeads: 0,
-        paidLeads: 0
-      };
-      existing.totalLeads++;
-      if (record.contactMade) existing.contactedLeads++;
-      if (record.sold) existing.soldLeads++;
-      if (record.paidGenerator) existing.paidLeads++;
-      providerMap.set(key, existing);
-    });
-
-    const providerStats: ProviderPerformance[] = Array.from(providerMap.entries())
-      .map(([name, stats]) => ({
-        name,
-        businessName: stats.businessName,
-        totalLeads: stats.totalLeads,
-        contactedLeads: stats.contactedLeads,
-        soldLeads: stats.soldLeads,
-        paidLeads: stats.paidLeads,
-        contactRate: stats.totalLeads > 0 ? (stats.contactedLeads / stats.totalLeads) * 100 : 0,
-        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
-        paymentRate: stats.totalLeads > 0 ? (stats.paidLeads / stats.totalLeads) * 100 : 0,
-        unpaidAmount: stats.totalLeads - stats.paidLeads,
-      }))
-      .sort((a, b) => b.totalLeads - a.totalLeads);
-
-    // Group by business
-    const businessMap = new Map<string, { totalLeads: number; soldLeads: number }>();
-    data.forEach(record => {
-      const key = record.businessSender || "Unknown";
-      const existing = businessMap.get(key) || { totalLeads: 0, soldLeads: 0 };
-      existing.totalLeads++;
-      if (record.sold) existing.soldLeads++;
-      businessMap.set(key, existing);
-    });
-
-    const businessStats = Array.from(businessMap.entries())
-      .map(([name, stats]) => ({
-        name,
-        totalLeads: stats.totalLeads,
-        soldLeads: stats.soldLeads,
-        conversionRate: stats.totalLeads > 0 ? (stats.soldLeads / stats.totalLeads) * 100 : 0,
-      }))
-      .sort((a, b) => b.totalLeads - a.totalLeads);
-
-    return {
-      totalLeads,
-      totalContacted,
-      totalSold,
-      totalPaid,
-      overallContactRate,
-      overallConversionRate,
-      overallPaymentRate,
-      providerStats,
-      businessStats,
-    };
-  };
-
-  // Parse Excel/CSV file for CRM data
-  const parseCrmFile = async (file: File) => {
-    setIsUploadingCrm(true);
-    setCrmUploadError(null);
-    setCrmFileName(file.name);
-
-    try {
-      const XLSX = await import("xlsx");
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
-
-      // Helper to find column value with flexible matching (handles whitespace, case variations)
-      const getColumn = (row: Record<string, unknown>, ...possibleNames: string[]): unknown => {
-        // First try exact matches
-        for (const name of possibleNames) {
-          if (row[name] !== undefined) return row[name];
-        }
-        // Then try case-insensitive matching with trimmed keys
-        const rowKeys = Object.keys(row);
-        for (const name of possibleNames) {
-          const normalizedName = name.toLowerCase().trim();
-          for (const key of rowKeys) {
-            if (key.toLowerCase().trim() === normalizedName) {
-              return row[key];
-            }
-          }
-        }
-        // Try partial matching for common patterns
-        for (const name of possibleNames) {
-          const normalizedName = name.toLowerCase().replace(/[^a-z]/g, "");
-          for (const key of rowKeys) {
-            const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
-            if (normalizedKey.includes(normalizedName) || normalizedName.includes(normalizedKey)) {
-              return row[key];
-            }
-          }
-        }
-        return undefined;
-      };
-
-      // Helper to parse Y/N values - handles text, boolean, and numeric
-      const parseYesNo = (value: unknown): boolean => {
-        if (value === undefined || value === null || value === "") return false;
-        if (typeof value === "boolean") return value;
-        if (typeof value === "number") return value === 1 || value > 0;
-        const str = String(value).toLowerCase().trim();
-        return str === "y" || str === "yes" || str === "true" || str === "1";
-      };
-
-      // Debug: log first row to see actual column names
-      if (jsonData.length > 0) {
-        console.log("[CRM Parser] Column names found:", Object.keys(jsonData[0]));
-        console.log("[CRM Parser] First row values:", jsonData[0]);
-      }
-
-      const records: UploadedRecord[] = jsonData.map((row, index) => {
-        const customerName = String(
-          getColumn(row, "Name of Person", "Customer Name", "Customer", "Name") || "Unknown"
-        );
-
-        const businessSender = String(
-          getColumn(row, "Business Sender", "Company", "Dealership", "Business") || ""
-        );
-
-        const individualSender = String(
-          getColumn(row, "Individual Sender", "Car Salesman", "Salesperson", "Provider", "Provider Name", "Agent") || "Unknown"
-        );
-
-        // Get raw Y/N values for debugging
-        const rawPaid = getColumn(row, "Paid (Y/N)", "Paid the Lead Generator", "Paid", "Payment Made");
-        const rawContact = getColumn(row, "Contact Made (Y/N)", "Contact Made", "Contacted", "Contact");
-        const rawSold = getColumn(row, "Sold (Y/N)", "Sold", "Converted");
-
-        // Debug first few rows
-        if (index < 3) {
-          console.log(`[CRM Parser] Row ${index + 1}: Paid raw="${rawPaid}" Contact raw="${rawContact}" Sold raw="${rawSold}"`);
-        }
-
-        const paidGenerator = parseYesNo(rawPaid);
-        const contactMade = parseYesNo(rawContact);
-        const sold = parseYesNo(rawSold);
-
-        if (index < 3) {
-          console.log(`[CRM Parser] Row ${index + 1}: Paid=${paidGenerator} Contact=${contactMade} Sold=${sold}`);
-        }
-
-        const date = parseExcelDate(getColumn(row, "Date", "Created"));
-
-        return {
-          customerName,
-          businessSender,
-          individualSender,
-          paidGenerator,
-          contactMade,
-          sold,
-          providerName: individualSender,
-          customerEmail: String(getColumn(row, "Email", "Customer Email") || ""),
-          date,
-        };
-      });
-
-      // Debug: summary
-      const soldCount = records.filter(r => r.sold).length;
-      const contactCount = records.filter(r => r.contactMade).length;
-      const paidCount = records.filter(r => r.paidGenerator).length;
-      console.log(`[CRM Parser] Summary: ${records.length} records, ${contactCount} contacted, ${soldCount} sold, ${paidCount} paid`);
-
-      setUploadedCrmData(records);
-      setCrmAnalytics(calculateCrmAnalytics(records));
-    } catch (error) {
-      console.error("File parse error:", error);
-      setCrmUploadError("Failed to parse file. Please ensure it's a valid Excel (.xlsx) or CSV file.");
-    } finally {
-      setIsUploadingCrm(false);
-    }
-  };
-
-  const handleCrmFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) parseCrmFile(file);
-  };
-
-  const handleCrmDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingCrm(false);
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv"))) {
-      parseCrmFile(file);
-    } else {
-      setCrmUploadError("Please upload an Excel (.xlsx, .xls) or CSV file.");
-    }
-  };
 
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser) || !stripeSetupChecked) {
@@ -589,12 +380,13 @@ function BusinessPortalContent() {
   const currentYear = new Date().getFullYear();
 
   const leadsToday = dbLeads.filter(l => l.submittedAt.startsWith(today));
-  const quotesToday = leadsToday.filter(l => l.quoteCompleted).length;
   const leadsThisMonth = dbLeads.filter(l => {
     const d = new Date(l.submittedAt);
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
-  const quotesThisMonth = leadsThisMonth.filter(l => l.quoteCompleted).length;
+
+  const statusCount = (arr: ApiLead[], status: string) =>
+    arr.filter(l => (l.pipelineStatus || "new") === status).length;
 
   // Get leads by provider for chart
   const leadsByProvider = (() => {
@@ -609,44 +401,52 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
-  // Toggle quote_completed on a lead
-  const toggleQuote = async (leadId: string, value: boolean) => {
-    try {
-      await fetch(`/api/business/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quote_completed: value }),
-      });
-      await fetchDashboard();
-    } catch (err) {
-      console.error("Failed to toggle quote:", err);
-    }
-  };
-
-  // +/- handlers for stat card quote buttons
-  const handleQuotePlus = async (period: "today" | "month") => {
-    const pool = period === "today" ? leadsToday : leadsThisMonth;
-    // Find oldest unquoted lead
-    const unquoted = [...pool].reverse().find(l => !l.quoteCompleted);
-    if (unquoted) await toggleQuote(unquoted.id, true);
-  };
-  const handleQuoteMinus = async (period: "today" | "month") => {
-    const pool = period === "today" ? leadsToday : leadsThisMonth;
-    // Find newest quoted lead
-    const quoted = pool.find(l => l.quoteCompleted);
-    if (quoted) await toggleQuote(quoted.id, false);
-  };
-
+  // Optimistic lead field update
   const updateLeadField = async (leadId: string, fields: Record<string, unknown>) => {
+    // Save previous state for rollback
+    const prev = dbLeads.map(l => ({ ...l }));
+
+    // Optimistic update
+    setDbLeads(leads =>
+      leads.map(l => {
+        if (l.id !== leadId) return l;
+        const updated = { ...l };
+        if (fields.pipeline_status !== undefined) updated.pipelineStatus = fields.pipeline_status as string;
+        if (fields.contact_type !== undefined) updated.contactType = fields.contact_type as string | null;
+        if (fields.pipeline_notes !== undefined) updated.pipelineNotes = fields.pipeline_notes as string | null;
+        if (fields.contacted_sub_status !== undefined) updated.contactedSubStatus = fields.contacted_sub_status as string | null;
+        if (fields.dead_reason !== undefined) updated.deadReason = fields.dead_reason as string | null;
+        if (fields.assigned_to !== undefined) updated.assignedTo = fields.assigned_to as string | null;
+        if (fields.follow_up_date !== undefined) updated.followUpDate = fields.follow_up_date as string | null;
+        return updated;
+      })
+    );
+
     try {
-      await fetch(`/api/business/leads/${leadId}`, {
+      const res = await fetch(`/api/business/leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fields),
       });
-      await fetchDashboard();
-    } catch (err) {
-      console.error("Failed to update lead:", err);
+      if (!res.ok) throw new Error("Failed");
+    } catch {
+      // Revert on error
+      setDbLeads(prev);
+      setToast({ message: "Failed to update lead", type: "error" });
+      setTimeout(() => setToast(null), 4000);
+    }
+  };
+
+  const fetchActivity = async (leadId: string) => {
+    if (activityCache[leadId]) return;
+    try {
+      const res = await fetch(`/api/business/leads/${leadId}/activity`);
+      const data = await res.json();
+      if (data.success) {
+        setActivityCache(prev => ({ ...prev, [leadId]: data.entries }));
+      }
+    } catch {
+      // Ignore
     }
   };
 
@@ -710,97 +510,115 @@ function BusinessPortalContent() {
           ))}
         </div>
 
+        {/* Toast notification */}
+        {toast && (
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+            toast.type === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+          }`}>
+            {toast.message}
+          </div>
+        )}
+
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
           <div className="space-y-8">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <p className="text-gray-500 text-sm mb-1">Leads Received Today</p>
-                <p className="text-3xl font-bold text-[#E8822A]">{leadsToday.length}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <p className="text-gray-500 text-sm mb-1">Quotes Completed Today</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-3xl font-bold text-emerald-600">{quotesToday}</p>
-                  <div className="flex flex-col gap-1 ml-auto">
-                    <button
-                      onClick={() => handleQuotePlus("today")}
-                      className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 flex items-center justify-center text-lg font-bold transition"
-                    >+</button>
-                    <button
-                      onClick={() => handleQuoteMinus("today")}
-                      className="w-7 h-7 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-lg font-bold transition"
-                    >&minus;</button>
+            {/* Five Dual-Stat Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[
+                { label: "Leads Received", color: "#ef4444", todayVal: leadsToday.length, monthVal: leadsThisMonth.length },
+                { label: "Contacted", color: "#f97316", todayVal: statusCount(leadsToday, "contacted"), monthVal: statusCount(leadsThisMonth, "contacted") },
+                { label: "Quoted", color: "#ca8a04", todayVal: statusCount(leadsToday, "quoted"), monthVal: statusCount(leadsThisMonth, "quoted") },
+                { label: "Sold", color: "#16a34a", todayVal: statusCount(leadsToday, "sold"), monthVal: statusCount(leadsThisMonth, "sold") },
+                { label: "Dead", color: "#111827", todayVal: statusCount(leadsToday, "dead"), monthVal: statusCount(leadsThisMonth, "dead") },
+              ].map(card => (
+                <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-2 font-medium">{card.label}</p>
+                  <div className="flex items-end gap-3">
+                    <div>
+                      <p className="text-2xl font-bold" style={{ color: card.color }}>{card.todayVal}</p>
+                      <p className="text-[10px] text-gray-400 uppercase">Today</p>
+                    </div>
+                    <div className="border-l border-gray-200 pl-3">
+                      <p className="text-lg font-semibold text-gray-600">{card.monthVal}</p>
+                      <p className="text-[10px] text-gray-400 uppercase">Month</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <p className="text-gray-500 text-sm mb-1">Leads Received This Month</p>
-                <p className="text-3xl font-bold text-orange-600">{leadsThisMonth.length}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <p className="text-gray-500 text-sm mb-1">Quotes Completed This Month</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-3xl font-bold text-amber-600">{quotesThisMonth}</p>
-                  <div className="flex flex-col gap-1 ml-auto">
-                    <button
-                      onClick={() => handleQuotePlus("month")}
-                      className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 flex items-center justify-center text-lg font-bold transition"
-                    >+</button>
-                    <button
-                      onClick={() => handleQuoteMinus("month")}
-                      className="w-7 h-7 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-lg font-bold transition"
-                    >&minus;</button>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
+
+            {/* Pipeline Activity Chart */}
+            <DashboardChart leads={dbLeads} />
 
             {/* Recent Leads */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#E8822A] mb-4">Recent Leads</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-[#E8822A]">Recent Leads</h3>
+                <div className="flex items-center gap-1 text-xs text-gray-400">
+                  <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600">Lead</span>
+                  <span>&rarr;</span>
+                  <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600">Contacted</span>
+                  <span>&rarr;</span>
+                  <span className="px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-700">Quoted</span>
+                  <span>&rarr;</span>
+                  <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-600">Sold</span>
+                  <span>/</span>
+                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">Dead</span>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-gray-500 border-b border-gray-200">
                       <th className="pb-3 font-medium">Customer</th>
-                      <th className="pb-3 font-medium">Vehicle</th>
-                      <th className="pb-3 font-medium">Provider</th>
-                      <th className="pb-3 font-medium">Quote</th>
                       <th className="pb-3 font-medium">Status</th>
                       <th className="pb-3 font-medium">Payout</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dbLeads.slice(0, 5).map((lead) => (
-                      <tr key={lead.id} className="border-b border-gray-100">
-                        <td className="py-4 text-gray-800 font-medium">{lead.customerName}</td>
-                        <td className="py-4 text-gray-600">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
-                        <td className="py-4 text-gray-600">{lead.providerName || "Unknown"}</td>
-                        <td className="py-4">
-                          {lead.quoteCompleted ? (
-                            <span className="text-emerald-600 font-bold text-lg">&#10003;</span>
-                          ) : (
-                            <button
-                              onClick={() => toggleQuote(lead.id, true)}
-                              className="px-2 py-1 text-xs font-medium text-[#E8822A] bg-orange-50 border border-[#E8822A]/30 rounded hover:bg-orange-100 transition"
-                            >+ Quote</button>
-                          )}
-                        </td>
-                        <td className="py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
-                            lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
-                            "bg-amber-100 text-amber-700"
-                          }`}>{lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Sent to WOML" : "Pending"}</span>
-                        </td>
-                        <td className="py-4 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    {dbLeads.slice(0, 8).map((lead) => {
+                      const status = lead.pipelineStatus || "new";
+                      const pillStyles: Record<string, string> = {
+                        new: "bg-red-100 text-red-700",
+                        contacted: "bg-orange-100 text-orange-700",
+                        quoted: "bg-yellow-100 text-yellow-800",
+                        sold: "bg-green-100 text-green-700",
+                        dead: "bg-gray-200 text-gray-700",
+                      };
+                      const pillLabels: Record<string, string> = {
+                        new: "Lead",
+                        contacted: "Contacted",
+                        quoted: "Quoted",
+                        sold: "Sold",
+                        dead: "Dead",
+                      };
+                      const relTime = (() => {
+                        const ms = Date.now() - new Date(lead.submittedAt).getTime();
+                        const mins = Math.floor(ms / 60000);
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        return `${days}d ago`;
+                      })();
+                      return (
+                        <tr key={lead.id} className="border-b border-gray-100">
+                          <td className="py-3">
+                            <span className="text-gray-800 font-medium">{lead.customerName}</span>
+                            <span className="text-gray-400 text-xs ml-2">{relTime}</span>
+                          </td>
+                          <td className="py-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${pillStyles[status] || pillStyles.new}`}>
+                              {pillLabels[status] || "Lead"}
+                            </span>
+                          </td>
+                          <td className="py-3 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
                     {dbLeads.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="text-center text-gray-400 py-8">
+                        <td colSpan={3} className="text-center text-gray-400 py-8">
                           No leads yet
                         </td>
                       </tr>
@@ -837,417 +655,6 @@ function BusinessPortalContent() {
               </div>
             </div>
 
-            {/* CRM Data Upload Section */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-[#E8822A]">Import CRM Data</h3>
-                  <p className="text-gray-500 text-sm">Upload monthly data from EZLynx for advanced analytics</p>
-                </div>
-              </div>
-
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingCrm(true); }}
-                onDragLeave={() => setIsDraggingCrm(false)}
-                onDrop={handleCrmDrop}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
-                  isDraggingCrm ? "border-[#E8822A] bg-orange-50" : "border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                {isUploadingCrm ? (
-                  <div className="space-y-3">
-                    <div className="animate-spin h-10 w-10 border-4 border-[#E8822A] border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-[#E8822A] font-medium">Processing file...</p>
-                  </div>
-                ) : crmFileName && !crmUploadError ? (
-                  <div className="space-y-3">
-                    <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <p className="text-emerald-600 font-medium">{crmFileName}</p>
-                    <p className="text-gray-500 text-sm">{uploadedCrmData.length} records imported</p>
-                    <label className="inline-block cursor-pointer">
-                      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleCrmFileChange} className="hidden" />
-                      <span className="text-[#E8822A] hover:underline text-sm">Upload different file</span>
-                    </label>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer block">
-                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleCrmFileChange} className="hidden" />
-                    <div className="space-y-3">
-                      <div className="h-14 w-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
-                        <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                      </div>
-                      <p className="text-gray-600 font-medium">Drag & drop your Excel or CSV file here</p>
-                      <p className="text-gray-400 text-sm">or click to browse • Supported: .xlsx, .xls, .csv</p>
-                    </div>
-                  </label>
-                )}
-              </div>
-
-              {crmUploadError && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-600 text-sm">{crmUploadError}</p>
-                </div>
-              )}
-
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <p className="text-gray-600 text-sm font-medium mb-2">Expected columns in your Excel file:</p>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    "Name of Person",
-                    "Business Sender",
-                    "Individual Sender",
-                    "Paid (Y/N)",
-                    "Contact Made (Y/N)",
-                    "Sold (Y/N)"
-                  ].map(col => (
-                    <span key={col} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs text-gray-600">{col}</span>
-                  ))}
-                </div>
-                <p className="text-gray-400 text-xs mt-2">Source Conversion Rate is calculated automatically (Sold ÷ Total per Individual Sender)</p>
-              </div>
-            </div>
-
-            {/* CRM Analytics (shown after upload) */}
-            {crmAnalytics && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-[#E8822A]">Lead Performance Analytics</h3>
-
-                {/* Summary Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Total Leads</p>
-                    <p className="text-3xl font-bold text-[#E8822A]">{crmAnalytics.totalLeads}</p>
-                    <p className="text-gray-400 text-xs mt-1">From uploaded file</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Contact Rate</p>
-                    <p className="text-3xl font-bold text-orange-600">{crmAnalytics.overallContactRate.toFixed(1)}%</p>
-                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalContacted} contacted</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Conversion Rate</p>
-                    <p className="text-3xl font-bold text-emerald-600">{crmAnalytics.overallConversionRate.toFixed(1)}%</p>
-                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalSold} sold</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <p className="text-gray-500 text-sm">Payment Rate</p>
-                    <p className="text-3xl font-bold text-amber-600">{crmAnalytics.overallPaymentRate.toFixed(1)}%</p>
-                    <p className="text-gray-400 text-xs mt-1">{crmAnalytics.totalPaid} paid</p>
-                  </div>
-                </div>
-
-                {/* Lead Funnel Visualization */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#E8822A] mb-4">Lead Funnel</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Total Leads</span>
-                        <span className="font-bold text-[#E8822A]">{crmAnalytics.totalLeads}</span>
-                      </div>
-                      <div className="h-6 bg-[#E8822A] rounded"></div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Contacted</span>
-                        <span className="font-bold text-orange-600">{crmAnalytics.totalContacted} ({crmAnalytics.overallContactRate.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
-                        <div className="h-full bg-orange-500 rounded" style={{ width: `${crmAnalytics.overallContactRate}%` }}></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Sold</span>
-                        <span className="font-bold text-emerald-600">{crmAnalytics.totalSold} ({crmAnalytics.overallConversionRate.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded" style={{ width: `${crmAnalytics.overallConversionRate}%` }}></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Paid to Providers</span>
-                        <span className="font-bold text-amber-600">{crmAnalytics.totalPaid} ({crmAnalytics.overallPaymentRate.toFixed(0)}%)</span>
-                      </div>
-                      <div className="h-6 bg-gray-200 rounded overflow-hidden">
-                        <div className="h-full bg-amber-500 rounded" style={{ width: `${crmAnalytics.overallPaymentRate}%` }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Individual Sender (Provider) Performance Table */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Individual Sender Performance</h4>
-                  <p className="text-gray-500 text-sm mb-4">Use this to adjust payment rates or lead caps</p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b border-gray-200">
-                          <th className="pb-3 font-medium">Rank</th>
-                          <th className="pb-3 font-medium">Individual Sender</th>
-                          <th className="pb-3 font-medium">Business</th>
-                          <th className="pb-3 font-medium">Leads</th>
-                          <th className="pb-3 font-medium">Contacted</th>
-                          <th className="pb-3 font-medium">Sold</th>
-                          <th className="pb-3 font-medium">Conv. Rate</th>
-                          <th className="pb-3 font-medium">Unpaid</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {crmAnalytics.providerStats.slice(0, 10).map((provider, i) => (
-                          <tr key={provider.name} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-4">
-                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                                i === 0 ? "bg-yellow-100 text-yellow-700" :
-                                i === 1 ? "bg-gray-100 text-gray-700" :
-                                i === 2 ? "bg-amber-100 text-amber-700" :
-                                "bg-gray-50 text-gray-500"
-                              }`}>
-                                {i + 1}
-                              </span>
-                            </td>
-                            <td className="py-4 font-medium text-gray-800">{provider.name}</td>
-                            <td className="py-4 text-gray-500 text-sm">{provider.businessName || "-"}</td>
-                            <td className="py-4 text-gray-600">{provider.totalLeads}</td>
-                            <td className="py-4 text-gray-600">{provider.contactedLeads}</td>
-                            <td className="py-4 text-gray-600">{provider.soldLeads}</td>
-                            <td className="py-4">
-                              <span className={`font-medium ${provider.conversionRate >= 30 ? "text-emerald-600" : provider.conversionRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
-                                {provider.conversionRate.toFixed(1)}%
-                              </span>
-                            </td>
-                            <td className="py-4">
-                              <span className={`font-medium ${provider.unpaidAmount > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                                {provider.unpaidAmount}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Top 3 Performers Over Time - Dot Plot */}
-                {(() => {
-                  const { weeklyData, allWeeks } = calculateWeeklyPerformance(uploadedCrmData, crmAnalytics.providerStats);
-                  if (weeklyData.length === 0 || allWeeks.length < 2) return null;
-
-                  const chartHeight = 280;
-                  const chartWidth = 100; // percentage
-                  const paddingLeft = 50;
-                  const paddingRight = 20;
-                  const paddingTop = 20;
-                  const paddingBottom = 50;
-                  const effectiveWidth = 800 - paddingLeft - paddingRight;
-                  const effectiveHeight = chartHeight - paddingTop - paddingBottom;
-
-                  return (
-                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                      <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Top 3 Performers Over Time</h4>
-                      <p className="text-gray-500 text-sm mb-4">Weekly source conversion rate (%) for your best performers</p>
-
-                      {/* Legend */}
-                      <div className="flex gap-6 mb-4">
-                        {weeklyData.map(provider => (
-                          <div key={provider.providerName} className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }}></div>
-                            <span className="text-sm text-gray-700">{provider.providerName}</span>
-                            <span className="text-xs text-gray-400">({provider.overallConversionRate.toFixed(1)}%)</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* SVG Chart */}
-                      <div className="w-full overflow-x-auto">
-                        <svg viewBox="0 0 800 280" className="w-full" style={{ minWidth: "600px" }}>
-                          {/* Y-axis grid lines and labels */}
-                          {[0, 25, 50, 75, 100].map(val => {
-                            const y = paddingTop + effectiveHeight - (val / 100) * effectiveHeight;
-                            return (
-                              <g key={val}>
-                                <line x1={paddingLeft} y1={y} x2={800 - paddingRight} y2={y} stroke="#e5e7eb" strokeDasharray="4,4" />
-                                <text x={paddingLeft - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-xs">{val}%</text>
-                              </g>
-                            );
-                          })}
-
-                          {/* X-axis labels (weeks) */}
-                          {allWeeks.map((week, i) => {
-                            const x = paddingLeft + (i / (allWeeks.length - 1)) * effectiveWidth;
-                            return (
-                              <text key={week} x={x} y={chartHeight - 15} textAnchor="middle" className="fill-gray-500 text-xs">
-                                {formatWeekLabel(week)}
-                              </text>
-                            );
-                          })}
-
-                          {/* Lines and dots for each provider */}
-                          {weeklyData.map(provider => {
-                            const points = provider.weeks
-                              .map((w, i) => {
-                                if (w.totalLeads === 0) return null;
-                                const x = paddingLeft + (i / (allWeeks.length - 1)) * effectiveWidth;
-                                const y = paddingTop + effectiveHeight - (w.conversionRate / 100) * effectiveHeight;
-                                return { x, y, data: w };
-                              })
-                              .filter(Boolean) as { x: number; y: number; data: typeof provider.weeks[0] }[];
-
-                            if (points.length === 0) return null;
-
-                            // Create line path
-                            const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-
-                            return (
-                              <g key={provider.providerName}>
-                                {/* Line */}
-                                <path d={linePath} fill="none" stroke={provider.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                {/* Dots */}
-                                {points.map((p, i) => (
-                                  <g key={i}>
-                                    <circle cx={p.x} cy={p.y} r="6" fill={provider.color} />
-                                    <circle cx={p.x} cy={p.y} r="4" fill="white" />
-                                    <circle cx={p.x} cy={p.y} r="3" fill={provider.color} />
-                                    {/* Tooltip on hover (using title for basic tooltip) */}
-                                    <title>{`${provider.providerName}: ${p.data.conversionRate.toFixed(1)}% cumulative (${p.data.cumulativeSold}/${p.data.cumulativeTotal} total leads)`}</title>
-                                  </g>
-                                ))}
-                              </g>
-                            );
-                          })}
-                        </svg>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Volume vs Quality Scatter Plot */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Volume vs Quality</h4>
-                  <p className="text-gray-500 text-sm mb-4">Find providers with the best balance of lead volume and conversion quality</p>
-
-                  {(() => {
-                    const maxLeads = Math.max(...crmAnalytics.providerStats.map(p => p.totalLeads), 1);
-                    const chartHeight = 250;
-                    const paddingLeft = 50;
-                    const paddingRight = 20;
-                    const paddingTop = 20;
-                    const paddingBottom = 40;
-
-                    return (
-                      <div className="w-full overflow-x-auto">
-                        <svg viewBox="0 0 600 250" className="w-full" style={{ minWidth: "400px" }}>
-                          {/* Y-axis (Conversion Rate) */}
-                          {[0, 25, 50, 75, 100].map(val => {
-                            const y = paddingTop + (chartHeight - paddingTop - paddingBottom) * (1 - val / 100);
-                            return (
-                              <g key={val}>
-                                <line x1={paddingLeft} y1={y} x2={600 - paddingRight} y2={y} stroke="#e5e7eb" strokeDasharray="2,2" />
-                                <text x={paddingLeft - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-xs">{val}%</text>
-                              </g>
-                            );
-                          })}
-
-                          {/* X-axis label */}
-                          <text x={325} y={chartHeight - 5} textAnchor="middle" className="fill-gray-500 text-xs">Total Leads</text>
-                          <text x={20} y={chartHeight / 2} textAnchor="middle" transform={`rotate(-90, 20, ${chartHeight / 2})`} className="fill-gray-500 text-xs">Conv. Rate %</text>
-
-                          {/* Quadrant backgrounds */}
-                          <rect x={paddingLeft + (600 - paddingLeft - paddingRight) / 2} y={paddingTop}
-                                width={(600 - paddingLeft - paddingRight) / 2} height={(chartHeight - paddingTop - paddingBottom) / 2}
-                                fill="#10b98110" />
-
-                          {/* Scatter points */}
-                          {crmAnalytics.providerStats.slice(0, 15).map((provider, i) => {
-                            const x = paddingLeft + (provider.totalLeads / maxLeads) * (600 - paddingLeft - paddingRight - 20);
-                            const y = paddingTop + (chartHeight - paddingTop - paddingBottom) * (1 - provider.conversionRate / 100);
-                            const radius = Math.max(8, Math.min(20, 6 + provider.totalLeads / 3));
-                            const color = provider.conversionRate >= 30 ? "#10b981" : provider.conversionRate >= 15 ? "#f59e0b" : "#ef4444";
-
-                            return (
-                              <g key={provider.name}>
-                                <circle cx={x} cy={y} r={radius} fill={color} opacity="0.7" />
-                                <title>{`${provider.name}: ${provider.totalLeads} leads, ${provider.conversionRate.toFixed(1)}% conv.`}</title>
-                              </g>
-                            );
-                          })}
-
-                          {/* Legend */}
-                          <g transform="translate(480, 30)">
-                            <circle cx="0" cy="0" r="6" fill="#10b981" />
-                            <text x="12" y="4" className="fill-gray-600 text-xs">High (30%+)</text>
-                            <circle cx="0" cy="18" r="6" fill="#f59e0b" />
-                            <text x="12" y="22" className="fill-gray-600 text-xs">Med (15-30%)</text>
-                            <circle cx="0" cy="36" r="6" fill="#ef4444" />
-                            <text x="12" y="40" className="fill-gray-600 text-xs">Low (&lt;15%)</text>
-                          </g>
-                        </svg>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Payment Status by Provider */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <h4 className="text-lg font-semibold text-[#E8822A] mb-2">Payment Status</h4>
-                  <p className="text-gray-500 text-sm mb-4">Track paid vs unpaid leads by provider</p>
-
-                  <div className="space-y-3">
-                    {crmAnalytics.providerStats
-                      .filter(p => p.totalLeads > 0)
-                      .sort((a, b) => b.unpaidAmount - a.unpaidAmount)
-                      .slice(0, 8)
-                      .map(provider => {
-                        const paidPercent = (provider.paidLeads / provider.totalLeads) * 100;
-                        return (
-                          <div key={provider.name} className="flex items-center gap-3">
-                            <div className="w-32 truncate text-sm text-gray-700" title={provider.name}>{provider.name}</div>
-                            <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden flex">
-                              <div
-                                className="h-full bg-emerald-500 transition-all"
-                                style={{ width: `${paidPercent}%` }}
-                              ></div>
-                              <div
-                                className="h-full bg-amber-400 transition-all"
-                                style={{ width: `${100 - paidPercent}%` }}
-                              ></div>
-                            </div>
-                            <div className="text-xs text-gray-500 w-24 text-right">
-                              <span className="text-emerald-600 font-medium">{provider.paidLeads}</span>
-                              <span className="mx-1">/</span>
-                              <span className="text-amber-600 font-medium">{provider.unpaidAmount}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-
-                  <div className="flex gap-4 mt-4 text-xs text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded bg-emerald-500"></div>
-                      <span>Paid</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded bg-amber-400"></div>
-                      <span>Unpaid</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1601,81 +1008,116 @@ function BusinessPortalContent() {
 
         {/* Pipeline Tab */}
         {activeTab === "pipeline" && (() => {
-          const now = new Date();
-          const thisMonth = now.getMonth();
-          const thisYear = now.getFullYear();
-          const monthLeads = dbLeads.filter(l => {
-            const d = new Date(l.submittedAt);
-            return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
-          });
-          const newCount = monthLeads.filter(l => !l.pipelineStatus || l.pipelineStatus === "new").length;
-          const contactedCount = monthLeads.filter(l => l.pipelineStatus === "contacted").length;
-          const quotedCount = monthLeads.filter(l => l.pipelineStatus === "quoted").length;
-          const soldCount = monthLeads.filter(l => l.pipelineStatus === "sold").length;
+          const pipeStages = ["new", "contacted", "quoted", "sold", "dead"] as const;
+          const pipeColors: Record<string, { bg: string; text: string; dot: string }> = {
+            new: { bg: "bg-red-100", text: "text-red-700", dot: "#ef4444" },
+            contacted: { bg: "bg-orange-100", text: "text-orange-700", dot: "#f97316" },
+            quoted: { bg: "bg-yellow-100", text: "text-yellow-800", dot: "#ca8a04" },
+            sold: { bg: "bg-green-100", text: "text-green-700", dot: "#16a34a" },
+            dead: { bg: "bg-gray-200", text: "text-gray-700", dot: "#111827" },
+          };
+          const stageCounts = Object.fromEntries(
+            pipeStages.map(s => [s, dbLeads.filter(l => (l.pipelineStatus || "new") === s).length])
+          );
 
-          const filtered = pipelineFilter === "all"
+          // Filter
+          let filtered = pipelineFilter === "all"
             ? dbLeads
             : dbLeads.filter(l => (l.pipelineStatus || "new") === pipelineFilter);
 
-          const stages = ["contacted", "quoted", "sold", "dead"] as const;
-          const stageColors: Record<string, string> = {
-            contacted: "bg-blue-100 text-blue-700 border-blue-300",
-            quoted: "bg-purple-100 text-purple-700 border-purple-300",
-            sold: "bg-emerald-100 text-emerald-700 border-emerald-300",
-            dead: "bg-gray-100 text-gray-500 border-gray-300",
+          // Search
+          if (pipelineSearch.trim()) {
+            const q = pipelineSearch.toLowerCase();
+            filtered = filtered.filter(l =>
+              l.customerName.toLowerCase().includes(q) ||
+              (l.customerPhone || "").toLowerCase().includes(q) ||
+              (l.customerEmail || "").toLowerCase().includes(q) ||
+              (l.providerName || "").toLowerCase().includes(q) ||
+              (l.assignedTo || "").toLowerCase().includes(q)
+            );
+          }
+
+          // Sort
+          filtered = [...filtered].sort((a, b) => {
+            if (pipelineSort === "newest") return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+            if (pipelineSort === "oldest") return new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
+            if (pipelineSort === "followup") {
+              if (!a.followUpDate && !b.followUpDate) return 0;
+              if (!a.followUpDate) return 1;
+              if (!b.followUpDate) return -1;
+              return a.followUpDate.localeCompare(b.followUpDate);
+            }
+            if (pipelineSort === "assigned") return (a.assignedTo || "zzz").localeCompare(b.assignedTo || "zzz");
+            return 0;
+          });
+
+          const relTime = (iso: string) => {
+            const ms = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(ms / 60000);
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            const days = Math.floor(hrs / 24);
+            return `${days}d ago`;
           };
-          const stageActive: Record<string, string> = {
-            contacted: "bg-blue-600 text-white border-blue-600",
-            quoted: "bg-purple-600 text-white border-purple-600",
-            sold: "bg-emerald-600 text-white border-emerald-600",
-            dead: "bg-gray-600 text-white border-gray-600",
-          };
+
+          // Progress bar helper
+          const progressSteps = ["new", "contacted", "quoted", "sold"] as const;
+          const stepIdx = (s: string) => progressSteps.indexOf(s as typeof progressSteps[number]);
 
           return (
           <div className="space-y-4">
-            {/* Summary Bar */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">New</p>
-                <p className="text-2xl font-bold text-[#E8822A]">{newCount}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Contacted</p>
-                <p className="text-2xl font-bold text-blue-600">{contactedCount}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Quoted</p>
-                <p className="text-2xl font-bold text-purple-600">{quotedCount}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Sold</p>
-                <p className="text-2xl font-bold text-emerald-600">{soldCount}</p>
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-xl font-bold text-white">Pipeline</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Filter pills */}
+                {[{ key: "all", label: "All" }, ...pipeStages.map(s => ({ key: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))].map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setPipelineFilter(f.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      pipelineFilter === f.key ? "bg-white text-[#E77500] shadow-md" : "text-white/80 hover:text-white hover:bg-white/10"
+                    }`}
+                  >{f.label}</button>
+                ))}
+                {/* Sort */}
+                <select
+                  value={pipelineSort}
+                  onChange={e => setPipelineSort(e.target.value as typeof pipelineSort)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white border border-white/20 focus:outline-none"
+                >
+                  <option value="newest" className="text-gray-800">Newest</option>
+                  <option value="oldest" className="text-gray-800">Oldest</option>
+                  <option value="followup" className="text-gray-800">Follow-up</option>
+                  <option value="assigned" className="text-gray-800">Assigned</option>
+                </select>
+                {/* Search */}
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={pipelineSearch}
+                  onChange={e => setPipelineSearch(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-36"
+                />
               </div>
             </div>
 
-            {/* Filter Buttons */}
+            {/* Summary badges */}
             <div className="flex gap-2 flex-wrap">
-              {[
-                { key: "all", label: "All" },
-                { key: "new", label: "New" },
-                { key: "contacted", label: "Contacted" },
-                { key: "quoted", label: "Quoted" },
-                { key: "sold", label: "Sold" },
-                { key: "dead", label: "Dead" },
-              ].map(f => (
+              {pipeStages.map(s => (
                 <button
-                  key={f.key}
-                  onClick={() => setPipelineFilter(f.key)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    pipelineFilter === f.key
-                      ? "bg-white text-[#E77500] shadow-md"
-                      : "text-white/80 hover:text-white hover:bg-white/10"
-                  }`}
-                >{f.label}</button>
+                  key={s}
+                  onClick={() => setPipelineFilter(pipelineFilter === s ? "all" : s)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${pipeColors[s].bg} ${pipeColors[s].text}`}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: pipeColors[s].dot }} />
+                  {s.charAt(0).toUpperCase() + s.slice(1)}: {stageCounts[s]}
+                </button>
               ))}
             </div>
 
-            {/* Lead Rows */}
+            {/* Lead Cards */}
             <div className="space-y-3">
               {filtered.length === 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 p-12 shadow-sm text-center text-gray-400">
@@ -1684,78 +1126,193 @@ function BusinessPortalContent() {
               )}
               {filtered.map(lead => {
                 const currentStatus = lead.pipelineStatus || "new";
+                const isDead = currentStatus === "dead";
+                const currentStep = isDead ? -1 : stepIdx(currentStatus);
                 const localNotes = pipelineNotesLocal[lead.id] ?? lead.pipelineNotes ?? "";
+                const isExpanded = activityDrawer === lead.id;
 
                 return (
-                <div key={lead.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Lead Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className="font-semibold text-gray-800">{lead.customerName}</span>
-                        <span className="text-gray-400 text-xs">{new Date(lead.submittedAt).toLocaleDateString()}</span>
+                <div key={lead.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex items-start gap-4 flex-wrap">
+                      {/* Left: Customer Info */}
+                      <div className="flex-1 min-w-[180px]">
+                        <p className="font-semibold text-gray-800">{lead.customerName}</p>
+                        <div className="flex gap-3 mt-1 text-sm">
+                          {lead.customerPhone && (
+                            <>
+                              <a href={`tel:${lead.customerPhone}`} className="text-blue-600 hover:underline">{lead.customerPhone}</a>
+                              <a href={`sms:${lead.customerPhone}`} className="text-green-600 hover:underline text-xs">SMS</a>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">{relTime(lead.submittedAt)} &middot; via {lead.providerName || "Unknown"}</p>
                       </div>
-                      <div className="flex gap-4 text-sm text-gray-500">
-                        {lead.customerPhone && <span>{lead.customerPhone}</span>}
-                        {lead.customerEmail && <span>{lead.customerEmail}</span>}
-                        <span>via {lead.providerName || "Unknown"}</span>
+
+                      {/* Middle: Progress Bar */}
+                      <div className="flex-1 min-w-[200px] flex items-center gap-1 pt-1">
+                        {progressSteps.map((step, i) => {
+                          const isActive = !isDead && currentStep >= i;
+                          const color = isActive ? pipeColors[step].dot : "#e5e7eb";
+                          return (
+                            <React.Fragment key={step}>
+                              <div className="flex flex-col items-center" style={{ flex: 1 }}>
+                                <div
+                                  className="w-full h-2 rounded-full"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className={`text-[10px] mt-0.5 ${isActive ? "text-gray-600 font-medium" : "text-gray-300"}`}>
+                                  {step === "new" ? "Lead" : step.charAt(0).toUpperCase() + step.slice(1)}
+                                </span>
+                              </div>
+                              {i < progressSteps.length - 1 && <div className="w-1" />}
+                            </React.Fragment>
+                          );
+                        })}
+                        {isDead && (
+                          <span className="ml-2 px-2 py-0.5 rounded bg-gray-800 text-white text-[10px] font-medium">DEAD</span>
+                        )}
+                      </div>
+
+                      {/* Right: Controls */}
+                      <div className="flex flex-col gap-2 min-w-[180px]">
+                        {/* Stage select */}
+                        <select
+                          value={currentStatus}
+                          onChange={e => updateLeadField(lead.id, { pipeline_status: e.target.value })}
+                          className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
+                        >
+                          {pipeStages.map(s => (
+                            <option key={s} value={s}>{s === "new" ? "Lead" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                          ))}
+                        </select>
+
+                        {/* Sub-status for Contacted */}
+                        {currentStatus === "contacted" && (
+                          <select
+                            value={lead.contactedSubStatus || ""}
+                            onChange={e => updateLeadField(lead.id, { contacted_sub_status: e.target.value || null })}
+                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none"
+                          >
+                            <option value="">Sub-status...</option>
+                            <option value="reached">Reached</option>
+                            <option value="voicemail">Voicemail</option>
+                            <option value="no_answer">No Answer</option>
+                          </select>
+                        )}
+
+                        {/* Dead reason */}
+                        {currentStatus === "dead" && (
+                          <select
+                            value={lead.deadReason || ""}
+                            onChange={e => updateLeadField(lead.id, { dead_reason: e.target.value || null })}
+                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none"
+                          >
+                            <option value="">Reason...</option>
+                            <option value="not_interested">Not Interested</option>
+                            <option value="bad_contact">Bad Contact</option>
+                            <option value="already_insured">Already Insured</option>
+                            <option value="price">Price</option>
+                            <option value="other">Other</option>
+                          </select>
+                        )}
+
+                        {/* Assigned to */}
+                        <input
+                          type="text"
+                          placeholder="Assigned to..."
+                          defaultValue={lead.assignedTo || ""}
+                          onBlur={e => {
+                            const val = e.target.value.trim() || null;
+                            if (val !== (lead.assignedTo || null)) updateLeadField(lead.id, { assigned_to: val });
+                          }}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
+                        />
+
+                        {/* Follow-up date */}
+                        <input
+                          type="date"
+                          defaultValue={lead.followUpDate || ""}
+                          onChange={e => updateLeadField(lead.id, { follow_up_date: e.target.value || null })}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
+                        />
                       </div>
                     </div>
 
-                    {/* Stage Buttons */}
-                    <div className="flex gap-1.5 shrink-0">
-                      {stages.map(stage => (
-                        <button
-                          key={stage}
-                          onClick={() => updateLeadField(lead.id, { pipeline_status: stage })}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            currentStatus === stage ? stageActive[stage] : stageColors[stage]
-                          }`}
-                        >
-                          {stage.charAt(0).toUpperCase() + stage.slice(1)}
-                        </button>
-                      ))}
+                    {/* Notes row */}
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Add note..."
+                        value={localNotes}
+                        onChange={e => setPipelineNotesLocal(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                        onBlur={() => {
+                          if (localNotes !== (lead.pipelineNotes ?? "")) {
+                            updateLeadField(lead.id, { pipeline_notes: localNotes });
+                          }
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && localNotes.trim()) {
+                            updateLeadField(lead.id, { note: localNotes, pipeline_notes: localNotes });
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
+                      />
+                      <button
+                        onClick={() => {
+                          if (localNotes.trim()) {
+                            updateLeadField(lead.id, { note: localNotes, pipeline_notes: localNotes });
+                            setToast({ message: "Note added", type: "success" });
+                            setTimeout(() => setToast(null), 2000);
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                      >Add Note</button>
                     </div>
+
+                    {/* Activity toggle */}
+                    <button
+                      onClick={() => {
+                        const nextId = isExpanded ? null : lead.id;
+                        setActivityDrawer(nextId);
+                        if (nextId) fetchActivity(nextId);
+                      }}
+                      className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition"
+                    >
+                      <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Activity
+                    </button>
                   </div>
 
-                  {/* Quoted: contact type toggle */}
-                  {currentStatus === "quoted" && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Type:</span>
-                      <button
-                        onClick={() => updateLeadField(lead.id, { contact_type: "quote" })}
-                        className={`px-3 py-1 rounded text-xs font-medium transition ${
-                          lead.contactType === "quote" || !lead.contactType
-                            ? "bg-purple-600 text-white"
-                            : "bg-purple-100 text-purple-700"
-                        }`}
-                      >Quote</button>
-                      <button
-                        onClick={() => updateLeadField(lead.id, { contact_type: "direct_sale" })}
-                        className={`px-3 py-1 rounded text-xs font-medium transition ${
-                          lead.contactType === "direct_sale"
-                            ? "bg-purple-600 text-white"
-                            : "bg-purple-100 text-purple-700"
-                        }`}
-                      >Direct Sale</button>
+                  {/* Activity Drawer */}
+                  {isExpanded && (
+                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
+                      {!activityCache[lead.id] ? (
+                        <p className="text-xs text-gray-400">Loading...</p>
+                      ) : activityCache[lead.id].length === 0 ? (
+                        <p className="text-xs text-gray-400">No activity yet</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {activityCache[lead.id].map((entry, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs">
+                              <span className="text-gray-400 whitespace-nowrap">
+                                {new Date(entry.created_at).toLocaleDateString()} {new Date(entry.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              <span className="text-gray-600 font-medium">{entry.actor_name}</span>
+                              <span className="text-gray-500">
+                                {entry.action === "status_change" && `changed status from ${entry.from_value} to ${entry.to_value}`}
+                                {entry.action === "assigned" && `assigned to ${entry.to_value || "unassigned"}`}
+                                {entry.action === "follow_up_set" && `set follow-up to ${entry.to_value}`}
+                                {entry.action === "note" && entry.note}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-
-                  {/* Notes */}
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      placeholder="Add notes..."
-                      value={localNotes}
-                      onChange={e => setPipelineNotesLocal(prev => ({ ...prev, [lead.id]: e.target.value }))}
-                      onBlur={() => {
-                        if (localNotes !== (lead.pipelineNotes ?? "")) {
-                          updateLeadField(lead.id, { pipeline_notes: localNotes });
-                        }
-                      }}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A] focus:border-[#E8822A]"
-                    />
-                  </div>
                 </div>
                 );
               })}
@@ -4270,6 +3827,9 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           </button>
         </div>
 
+        {/* ── Pipeline Settings ─────────────────────────────────────────── */}
+        <PipelineSettingsSection />
+
         {/* ── Close Account ─────────────────────────────────────────────── */}
         <div className="border-t border-red-100 pt-6 mt-2">
           <h4 className="text-sm font-semibold text-red-700 mb-2">Close Account</h4>
@@ -4287,6 +3847,70 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           </p>
           <DisableAccountButton />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PipelineSettingsSection() {
+  const [windowDays, setWindowDays] = useState(30);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/business/settings")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setWindowDays(data.settings.dead_lead_window_days);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/business/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dead_lead_window_days: windowDays }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      // Ignore
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="border-t border-gray-200 pt-6 mt-2">
+      <h4 className="text-sm font-semibold text-gray-800 mb-1">Pipeline Settings</h4>
+      <p className="text-gray-500 text-xs mb-4">
+        Leads without activity will automatically be marked &quot;dead&quot; after this window.
+      </p>
+      <div className="flex items-center gap-3">
+        <select
+          value={windowDays}
+          onChange={e => setWindowDays(Number(e.target.value))}
+          className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none"
+        >
+          {[7, 14, 30, 60, 90].map(d => (
+            <option key={d} value={d}>{d} days</option>
+          ))}
+        </select>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        {saved && <span className="text-emerald-600 text-sm font-medium">Saved!</span>}
       </div>
     </div>
   );
