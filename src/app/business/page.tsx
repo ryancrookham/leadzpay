@@ -4267,6 +4267,15 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
   const [smsSaved, setSmsSaved] = useState(false);
   const [smsError, setSmsError] = useState("");
 
+  // PIN state
+  const [pinHasExisting, setPinHasExisting] = useState<boolean | null>(null);
+  const [pinCurrentInput, setPinCurrentInput] = useState("");
+  const [pinNewInput, setPinNewInput] = useState("");
+  const [pinConfirmInput, setPinConfirmInput] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [pinSuccess, setPinSuccess] = useState(false);
+
   // Fetch full profile on mount
   useEffect(() => {
     async function loadProfile() {
@@ -4305,6 +4314,10 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
     }
     loadProfile();
     loadSmsSettings();
+    fetch("/api/business/pin-status")
+      .then(r => r.json())
+      .then(d => setPinHasExisting(d.hasPin ?? false))
+      .catch(() => setPinHasExisting(false));
   }, []);
 
   const compressImage = (file: File): Promise<string> => {
@@ -4389,6 +4402,44 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
     }
   };
 
+  const handlePinChange = async () => {
+    setPinError("");
+    setPinSuccess(false);
+    if (!/^\d{4}$/.test(pinNewInput)) {
+      setPinError("New PIN must be exactly 4 digits.");
+      return;
+    }
+    if (pinNewInput !== pinConfirmInput) {
+      setPinError("New PINs do not match.");
+      return;
+    }
+    if (pinHasExisting && !/^\d{4}$/.test(pinCurrentInput)) {
+      setPinError("Please enter your current PIN.");
+      return;
+    }
+    setPinSaving(true);
+    try {
+      const res = await fetch("/api/business/change-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPin: pinHasExisting ? pinCurrentInput : undefined,
+          newPin: pinNewInput,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to update PIN");
+      setPinSuccess(true);
+      setPinHasExisting(true);
+      setPinCurrentInput("");
+      setPinNewInput("");
+      setPinConfirmInput("");
+    } catch (err: any) {
+      setPinError(err.message || "Failed to update PIN.");
+    } finally {
+      setPinSaving(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl shadow-sm">
@@ -4629,6 +4680,84 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
             {smsSaving ? "Saving\u2026" : "Save Alert Settings"}
+          </button>
+        </div>
+
+        {/* ── Business Owner PIN ─────────────────────────────────────────── */}
+        <div className="border-t border-gray-200 pt-6 mt-2">
+          <div className="mb-3">
+            <h4 className="text-sm font-semibold text-gray-800">Business Owner PIN</h4>
+            <p className="text-gray-500 text-xs mt-0.5">
+              {pinHasExisting
+                ? "Update your 4-digit PIN used to access the full business portal."
+                : "No PIN set yet. Create one to protect your business portal from Lead Chasers."}
+            </p>
+          </div>
+
+          <div className="space-y-3 max-w-xs">
+            {pinHasExisting && (
+              <div className="space-y-1">
+                <label className="block text-gray-700 text-xs font-medium">Current PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="••••"
+                  value={pinCurrentInput}
+                  onChange={e => setPinCurrentInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-center text-lg tracking-[0.4em] focus:border-[#E8822A] focus:outline-none transition"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="block text-gray-700 text-xs font-medium">
+                {pinHasExisting ? "New PIN" : "Create PIN"}
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="••••"
+                value={pinNewInput}
+                onChange={e => setPinNewInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-center text-lg tracking-[0.4em] focus:border-[#E8822A] focus:outline-none transition"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-gray-700 text-xs font-medium">Confirm PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="••••"
+                value={pinConfirmInput}
+                onChange={e => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-center text-lg tracking-[0.4em] focus:border-[#E8822A] focus:outline-none transition"
+              />
+            </div>
+          </div>
+
+          {pinError && (
+            <p className="mt-2 text-red-600 text-xs">{pinError}</p>
+          )}
+
+          {pinSuccess && (
+            <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              PIN {pinHasExisting ? "updated" : "created"} successfully!
+            </div>
+          )}
+
+          <button
+            onClick={handlePinChange}
+            disabled={pinSaving || pinNewInput.length < 4 || pinConfirmInput.length < 4}
+            className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          >
+            {pinSaving ? "Saving\u2026" : pinHasExisting ? "Update PIN" : "Set PIN"}
           </button>
         </div>
 
