@@ -389,6 +389,12 @@ function BusinessPortalContent() {
   const statusCount = (arr: ApiLead[], status: string) =>
     arr.filter(l => (l.pipelineStatus || "new") === status).length;
 
+  const leadsThisYear = dbLeads.filter(l => new Date(l.submittedAt).getFullYear() === currentYear);
+  const yearContacted = dbLeads.filter(l => l.contactedAt && new Date(l.contactedAt).getFullYear() === currentYear).length;
+  const yearQuoted = dbLeads.filter(l => l.quotedAt && new Date(l.quotedAt).getFullYear() === currentYear).length;
+  const yearSold = dbLeads.filter(l => l.soldAt && new Date(l.soldAt).getFullYear() === currentYear).length;
+  const yearDead = dbLeads.filter(l => l.deadAt && new Date(l.deadAt).getFullYear() === currentYear).length;
+
   // Get leads by provider for chart
   const leadsByProvider = (() => {
     const providerMap = new Map<string, { id: string; name: string; leadCount: number; totalPayout: number }>();
@@ -552,46 +558,46 @@ function BusinessPortalContent() {
             {/* Five Dual-Stat Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {[
-                { label: "Leads Received", color: "#ef4444", todayVal: leadsToday.length, monthVal: leadsThisMonth.length },
-                { label: "Contacted", color: "#f97316", todayVal: statusCount(leadsToday, "contacted"), monthVal: statusCount(leadsThisMonth, "contacted") },
-                { label: "Quoted", color: "#ca8a04", todayVal: statusCount(leadsToday, "quoted"), monthVal: statusCount(leadsThisMonth, "quoted") },
-                { label: "Sold", color: "#16a34a", todayVal: statusCount(leadsToday, "sold"), monthVal: statusCount(leadsThisMonth, "sold") },
-                { label: "Dead", color: "#111827", todayVal: statusCount(leadsToday, "dead"), monthVal: statusCount(leadsThisMonth, "dead") },
+                { label: "Leads Received", color: "#ef4444", todayVal: leadsToday.length, monthVal: leadsThisMonth.length, yearVal: leadsThisYear.length },
+                { label: "Contacted", color: "#f97316", todayVal: statusCount(leadsToday, "contacted"), monthVal: statusCount(leadsThisMonth, "contacted"), yearVal: yearContacted },
+                { label: "Quoted", color: "#ca8a04", todayVal: statusCount(leadsToday, "quoted"), monthVal: statusCount(leadsThisMonth, "quoted"), yearVal: yearQuoted },
+                { label: "Sold", color: "#16a34a", todayVal: statusCount(leadsToday, "sold"), monthVal: statusCount(leadsThisMonth, "sold"), yearVal: yearSold },
+                { label: "Dead", color: "#111827", todayVal: statusCount(leadsToday, "dead"), monthVal: statusCount(leadsThisMonth, "dead"), yearVal: yearDead },
               ].map(card => (
-                <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <p className="text-gray-500 text-xs mb-2 font-medium">{card.label}</p>
-                  <div className="flex items-end gap-3">
-                    <div>
+                <div key={card.label} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <p className="text-gray-500 text-[10px] uppercase tracking-wide font-medium text-center pt-3 pb-2">{card.label}</p>
+                  <div className="grid grid-cols-3 divide-x divide-gray-100 pb-3">
+                    <div className="flex flex-col items-center justify-center px-2">
                       <p className="text-2xl font-bold" style={{ color: card.color }}>{card.todayVal}</p>
-                      <p className="text-[10px] text-gray-400 uppercase">Today</p>
+                      <p className="text-[10px] text-gray-400 uppercase mt-0.5">Today</p>
                     </div>
-                    <div className="border-l border-gray-200 pl-3">
-                      <p className="text-lg font-semibold text-gray-600">{card.monthVal}</p>
-                      <p className="text-[10px] text-gray-400 uppercase">Month</p>
+                    <div className="flex flex-col items-center justify-center px-2">
+                      <p className="text-2xl font-bold" style={{ color: card.color }}>{card.monthVal}</p>
+                      <p className="text-[10px] text-gray-400 uppercase mt-0.5">Month</p>
+                    </div>
+                    <div className="flex flex-col items-center justify-center px-2">
+                      <p className="text-2xl font-bold" style={{ color: card.color }}>{card.yearVal}</p>
+                      <p className="text-[10px] text-gray-400 uppercase mt-0.5">Year</p>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* All-Time Conversion Totals */}
+            {/* This Year's Conversion */}
             {(() => {
-              const total = dbLeads.length;
-              const contactedCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "contacted").length;
-              const quotedCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "quoted").length;
-              const soldCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "sold").length;
-              const deadCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "dead").length;
-              const pct = (n: number) => total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "0%";
+              const yrLeads = leadsThisYear.length;
+              const pct = (n: number) => yrLeads > 0 ? `${((n / yrLeads) * 100).toFixed(1)}%` : "0%";
               const conversionStats = [
-                { label: "Leads", color: "#ef4444", count: total, rate: "100% of all" },
-                { label: "Contacted", color: "#f97316", count: contactedCount, rate: `${pct(contactedCount)} of leads` },
-                { label: "Quoted", color: "#ca8a04", count: quotedCount, rate: `${pct(quotedCount)} of leads` },
-                { label: "Sold", color: "#16a34a", count: soldCount, rate: `${pct(soldCount)} of leads` },
-                { label: "Dead", color: "#111827", count: deadCount, rate: `${pct(deadCount)} of leads` },
+                { label: "Leads", color: "#ef4444", count: yrLeads, rate: "100% of leads" },
+                { label: "Contacted", color: "#f97316", count: yearContacted, rate: `${pct(yearContacted)} of leads` },
+                { label: "Quoted", color: "#ca8a04", count: yearQuoted, rate: `${pct(yearQuoted)} of leads` },
+                { label: "Sold", color: "#16a34a", count: yearSold, rate: `${pct(yearSold)} of leads` },
+                { label: "Dead", color: "#111827", count: yearDead, rate: `${pct(yearDead)} of leads` },
               ];
               return (
                 <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                  <p className="text-gray-500 text-xs font-medium mb-3 uppercase tracking-wide">All-Time Conversion</p>
+                  <p className="text-gray-500 text-xs font-medium mb-3 uppercase tracking-wide">This Year&apos;s Conversion</p>
                   <div className="grid grid-cols-5 gap-4">
                     {conversionStats.map(s => (
                       <div key={s.label} className="text-center">
