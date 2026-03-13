@@ -106,6 +106,12 @@ export default function Home() {
             className="mx-auto w-full h-auto object-contain"
             priority
           />
+          <p
+            className="mt-4 text-[#E77500] text-2xl md:text-3xl"
+            style={{ fontFamily: "var(--font-source-serif), 'Georgia', serif", fontWeight: 700 }}
+          >
+            Optimize your leads, optimize your business.
+          </p>
         </div>
       </main>
 
