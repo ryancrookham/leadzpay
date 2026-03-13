@@ -1230,6 +1230,113 @@ export async function getPlatformStats() {
   };
 }
 
+export async function getAdminPlatformHealth() {
+  const sql = getSql();
+
+  // Platform-wide funnel
+  const [funnelStats] = await sql`
+    SELECT
+      COUNT(*)::int as total_leads,
+      COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)::int as total_contacted,
+      COUNT(*) FILTER (WHERE quoted_at IS NOT NULL)::int as total_quoted,
+      COUNT(*) FILTER (WHERE sold_at IS NOT NULL)::int as total_sold,
+      COUNT(*) FILTER (WHERE dead_at IS NOT NULL)::int as total_dead
+    FROM leads
+  `;
+
+  // 30-day trend
+  const trendRows = await sql`
+    SELECT
+      DATE(submitted_at)::text as date,
+      COUNT(*)::int as leads,
+      COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)::int as contacted,
+      COUNT(*) FILTER (WHERE sold_at IS NOT NULL)::int as sold
+    FROM leads
+    WHERE submitted_at >= NOW() - INTERVAL '30 days'
+    GROUP BY DATE(submitted_at)
+    ORDER BY DATE(submitted_at) ASC
+  `;
+
+  // Per-business health
+  const businessStats = await sql`
+    SELECT
+      u.id as business_id,
+      u.display_name,
+      u.business_name,
+      u.email,
+      u.is_active,
+      u.disabled_at,
+      COUNT(l.id)::int as total_leads,
+      COUNT(l.id) FILTER (WHERE l.submitted_at >= NOW() - INTERVAL '30 days')::int as leads_this_month,
+      COUNT(l.id) FILTER (WHERE l.contacted_at IS NOT NULL)::int as contacted,
+      COUNT(l.id) FILTER (WHERE l.quoted_at IS NOT NULL)::int as quoted,
+      COUNT(l.id) FILTER (WHERE l.sold_at IS NOT NULL)::int as sold,
+      COUNT(l.id) FILTER (WHERE l.dead_at IS NOT NULL)::int as dead,
+      MAX(l.submitted_at)::text as last_lead_at
+    FROM users u
+    LEFT JOIN leads l ON l.buyer_id = u.id
+    WHERE u.role = 'buyer'
+    GROUP BY u.id, u.display_name, u.business_name, u.email, u.is_active, u.disabled_at
+    ORDER BY leads_this_month DESC, total_leads DESC
+  `;
+
+  // Active chasers per business (separate query to avoid cross-join)
+  const chaserStats = await sql`
+    SELECT
+      business_id,
+      COUNT(DISTINCT actor_name)::int as active_chasers,
+      MAX(created_at)::text as last_chaser_activity
+    FROM lead_activity_log
+    WHERE actor_name IS NOT NULL AND actor_name != ''
+    GROUP BY business_id
+  `;
+  const chaserMap = new Map(chaserStats.map((r: any) => [r.business_id, { active_chasers: r.active_chasers, last_chaser_activity: r.last_chaser_activity }]));
+
+  const businesses = businessStats.map((b: any) => ({
+    ...b,
+    active_chasers: chaserMap.get(b.business_id)?.active_chasers ?? 0,
+    last_chaser_activity: chaserMap.get(b.business_id)?.last_chaser_activity ?? null,
+  }));
+
+  // Per-provider activity
+  const providerStats = await sql`
+    SELECT
+      u.id as provider_id,
+      u.display_name,
+      u.email,
+      u.is_active,
+      u.disabled_at,
+      COUNT(l.id)::int as total_leads,
+      COUNT(l.id) FILTER (WHERE l.submitted_at >= NOW() - INTERVAL '30 days')::int as leads_this_month,
+      COUNT(l.id) FILTER (WHERE l.submitted_at >= NOW() - INTERVAL '7 days')::int as leads_this_week,
+      COALESCE(SUM(l.payout_amount), 0)::numeric as total_earnings,
+      MAX(l.submitted_at)::text as last_submission
+    FROM users u
+    LEFT JOIN leads l ON l.provider_id = u.id
+    WHERE u.role = 'provider'
+    GROUP BY u.id, u.display_name, u.email, u.is_active, u.disabled_at
+    ORDER BY leads_this_month DESC, total_leads DESC
+  `;
+
+  // Revenue breakdown
+  const [revenueStats] = await sql`
+    SELECT
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'completed' AND created_at >= DATE_TRUNC('week', NOW())), 0)::numeric as revenue_this_week,
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'completed' AND created_at >= DATE_TRUNC('month', NOW())), 0)::numeric as revenue_this_month,
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'completed' AND created_at >= DATE_TRUNC('year', NOW())), 0)::numeric as revenue_this_year,
+      COALESCE(SUM(amount) FILTER (WHERE type = 'platform_fee' AND status = 'completed'), 0)::numeric as revenue_all_time
+    FROM transactions
+  `;
+
+  return {
+    funnel: funnelStats,
+    trend: trendRows,
+    businesses,
+    providers: providerStats,
+    revenue: revenueStats,
+  };
+}
+
 // ============================================
 // User discovery (connection-scoped)
 // ============================================

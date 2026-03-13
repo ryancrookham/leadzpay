@@ -4,13 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const tabs = [
+const tabs: { label: string; href: string; external?: boolean }[] = [
   { label: "Home", href: "/" },
   { label: "About", href: "/about" },
   { label: "How It Works", href: "/how-it-works" },
   { label: "Pricing", href: "/pricing" },
   { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
+  { label: "Social Media", href: "/social" },
   { label: "Legal", href: "/legal" },
 ];
 
@@ -41,20 +42,33 @@ export default function Sidebar() {
         }}
       >
         <nav className="py-4">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              onClick={() => setOpen(false)}
-              className={`flex items-center justify-center py-5 text-sm tracking-wide transition-colors ${
-                pathname === tab.href
-                  ? "text-[#E77500]"
-                  : "text-[#E77500]/60 hover:text-[#E77500]"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
+          {tabs.map((tab) =>
+            tab.external ? (
+              <a
+                key={tab.href}
+                href={tab.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-center py-5 text-sm tracking-wide transition-colors text-[#E77500]/60 hover:text-[#E77500]"
+              >
+                {tab.label}
+              </a>
+            ) : (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center justify-center py-5 text-sm tracking-wide transition-colors ${
+                  pathname === tab.href
+                    ? "text-[#E77500]"
+                    : "text-[#E77500]/60 hover:text-[#E77500]"
+                }`}
+              >
+                {tab.label}
+              </Link>
+            )
+          )}
         </nav>
       </div>
 

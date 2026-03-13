@@ -78,6 +78,52 @@ interface HardDeleteTarget {
   role: string;
 }
 
+interface BusinessHealth {
+  business_id: string;
+  display_name: string | null;
+  business_name: string | null;
+  email: string;
+  is_active: boolean;
+  disabled_at: string | null;
+  total_leads: number;
+  leads_this_month: number;
+  contacted: number;
+  quoted: number;
+  sold: number;
+  dead: number;
+  last_lead_at: string | null;
+  active_chasers: number;
+  last_chaser_activity: string | null;
+}
+
+interface ProviderHealth {
+  provider_id: string;
+  display_name: string | null;
+  email: string;
+  is_active: boolean;
+  disabled_at: string | null;
+  total_leads: number;
+  leads_this_month: number;
+  leads_this_week: number;
+  total_earnings: number;
+  last_submission: string | null;
+}
+
+interface PlatformFunnel {
+  total_leads: number;
+  total_contacted: number;
+  total_quoted: number;
+  total_sold: number;
+  total_dead: number;
+}
+
+interface PlatformRevenue {
+  revenue_this_week: number;
+  revenue_this_month: number;
+  revenue_this_year: number;
+  revenue_all_time: number;
+}
+
 export default function AdminPanel() {
   const { currentUser, isLoading: authLoading, isAuthenticated, isSigningOut, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("users");
@@ -127,6 +173,16 @@ export default function AdminPanel() {
   const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Platform health state (Data tab)
+  const [platformHealth, setPlatformHealth] = useState<{
+    funnel: PlatformFunnel | null;
+    trend: { date: string; leads: number; contacted: number; sold: number }[];
+    businesses: BusinessHealth[];
+    providers: ProviderHealth[];
+    revenue: PlatformRevenue | null;
+  }>({ funnel: null, trend: [], businesses: [], providers: [], revenue: null });
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser || currentUser.role !== "admin") return;
@@ -178,6 +234,29 @@ export default function AdminPanel() {
       console.error("Refresh failed:", e);
     }
   };
+
+  // Fetch platform health when Data tab is active
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser || currentUser.role !== "admin") return;
+    if (activeTab !== "data") return;
+    if (platformHealth.funnel) return; // already loaded
+    setHealthLoading(true);
+    fetch("/api/admin/platform-health", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setPlatformHealth({
+            funnel: d.funnel,
+            trend: d.trend,
+            businesses: d.businesses,
+            providers: d.providers,
+            revenue: d.revenue,
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setHealthLoading(false));
+  }, [activeTab, isAuthenticated, currentUser, platformHealth.funnel]);
 
   const handleToggleUser = async (userId: string, isActive: boolean) => {
     try {
@@ -368,6 +447,37 @@ export default function AdminPanel() {
 
             {/* ===== USERS TAB ===== */}
             {activeTab === "users" && (
+              <>
+                {/* Disabled accounts alert */}
+                {(() => {
+                  const selfDisabled = detailedUsers.filter(u => u.disabledAt);
+                  if (selfDisabled.length === 0) return null;
+                  return (
+                    <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-700 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                        <span className="text-yellow-300 text-sm font-semibold">
+                          {selfDisabled.length} account{selfDisabled.length > 1 ? "s" : ""} self-disabled
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {selfDisabled.map(u => (
+                          <div key={u.id} className="flex items-center justify-between text-xs text-yellow-200/80">
+                            <span>{u.displayName || u.email} ({u.role}) — disabled {new Date(u.disabledAt!).toLocaleDateString()}</span>
+                            <button
+                              onClick={() => handleEnableAccount(u.id)}
+                              className="ml-4 px-2 py-0.5 rounded bg-yellow-700 hover:bg-yellow-600 text-white transition"
+                            >
+                              Re-enable
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
                 <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
                   <h3 className="text-white font-semibold">All Users ({detailedUsers.length})</h3>
@@ -429,49 +539,55 @@ export default function AdminPanel() {
                                 ? timeAgo(user.lastLeadAt)
                                 : "Never"}
                             </td>
-                            <td className="px-6 py-3 text-center">
+                            <td className="px-4 py-3 text-right">
                               {user.role !== "admin" && (
-                                <div className="flex items-center justify-center gap-2">
+                                <div className="flex items-center justify-end gap-2 flex-wrap">
                                   {user.disabledAt ? (
                                     <>
-                                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
-                                        Disabled
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-900/40 text-yellow-300 border border-yellow-700">
+                                        Self-Disabled
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {new Date(user.disabledAt).toLocaleDateString()}
                                       </span>
                                       <button
                                         onClick={() => handleEnableAccount(user.id)}
-                                        className="text-xs font-medium px-3 py-1 rounded transition bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                                        className="px-3 py-1 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white transition"
                                       >
                                         Re-enable
                                       </button>
                                     </>
-                                  ) : (
+                                  ) : !user.isActive ? (
                                     <>
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        user.isActive
-                                          ? "bg-green-500/20 text-green-400"
-                                          : "bg-red-500/20 text-red-400"
-                                      }`}>
-                                        {user.isActive ? "Active" : "Suspended"}
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-900/40 text-red-300 border border-red-700">
+                                        Suspended
                                       </span>
                                       <button
-                                        onClick={() => handleToggleUser(user.id, !user.isActive)}
-                                        className={`text-xs font-medium px-3 py-1 rounded transition ${
-                                          user.isActive
-                                            ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                            : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                                        }`}
+                                        onClick={() => handleToggleUser(user.id, true)}
+                                        className="px-3 py-1 rounded text-xs font-medium bg-blue-700 hover:bg-blue-600 text-white transition"
                                       >
-                                        {user.isActive ? "Suspend" : "Reactivate"}
+                                        Reactivate
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-900/40 text-emerald-300 border border-emerald-700">
+                                        Active
+                                      </span>
+                                      <button
+                                        onClick={() => handleToggleUser(user.id, false)}
+                                        className="px-3 py-1 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white transition"
+                                      >
+                                        Suspend
                                       </button>
                                     </>
                                   )}
-                                  {/* Hard Delete — permanent, admin-only pre-launch cleanup */}
                                   <button
                                     onClick={() => {
                                       setHardDeleteError("");
                                       setHardDeleteTarget({ id: user.id, email: user.email, role: user.role });
                                     }}
-                                    className="text-xs font-medium px-3 py-1 rounded transition border border-red-600/40 text-red-500 hover:bg-red-600/10"
+                                    className="px-3 py-1 rounded text-xs font-medium bg-red-900 hover:bg-red-800 text-white transition"
                                     title="Permanently delete this account and all associated data"
                                   >
                                     Delete
@@ -486,107 +602,265 @@ export default function AdminPanel() {
                   </div>
                 )}
               </div>
+              </>
             )}
 
             {/* ===== DATA TAB ===== */}
             {activeTab === "data" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <MetricCard label="Total Leads" value={stats.totalLeads} />
-                  <MetricCard label="This Month" value={leadsThisMonth} />
-                  <MetricCard label="Revenue" value={`$${Number(stats.completedRevenue).toFixed(2)}`} accent />
-                  <MetricCard label="Active Providers" value={stats.activeProviders} />
-                  <MetricCard label="Active Businesses" value={stats.activeBuyers} />
-                </div>
-
-                <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-white/10">
-                    <h3 className="text-white font-semibold">Recent Leads</h3>
-                  </div>
-                  {recentLeads.length === 0 ? (
-                    <div className="px-6 py-8 text-center text-gray-500">No leads yet</div>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="text-gray-400 text-xs uppercase tracking-wider">
-                          <th className="px-6 py-3 text-left">Date</th>
-                          <th className="px-6 py-3 text-left">Provider</th>
-                          <th className="px-6 py-3 text-left">Business</th>
-                          <th className="px-6 py-3 text-right">Amount</th>
-                          <th className="px-6 py-3 text-right">Fee</th>
-                          <th className="px-6 py-3 text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {recentLeads.map((lead) => (
-                          <tr key={lead.id} className="hover:bg-white/[0.02]">
-                            <td className="px-6 py-3 text-gray-300 text-sm">
-                              {new Date(lead.submittedAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-3 text-white text-sm">{lead.providerName}</td>
-                            <td className="px-6 py-3 text-white text-sm">{lead.buyerName}</td>
-                            <td className="px-6 py-3 text-white text-sm text-right">
-                              ${Number(lead.payoutAmount).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-3 text-[#E8822A] text-sm text-right">
-                              ${Number(lead.platformFee).toFixed(2)}
-                            </td>
-                            <td className="px-6 py-3 text-right">
-                              <StatusBadge status={lead.payoutStatus} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                {/* 1099 Tracker — only renders if flagged providers exist */}
-                {(() => {
-                  const providers = detailedUsers.filter(u => u.role === "provider");
-                  const flagged = providers.filter(u => u.yearlyEarnings >= 500);
-                  if (flagged.length === 0) return null;
-                  return (
-                    <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
-                      <div className="px-6 py-4 border-b border-white/10">
-                        <h3 className="text-white font-semibold">1099 Tracker</h3>
-                        <p className="text-gray-500 text-xs mt-1">
-                          Providers at or approaching $600 in yearly earnings (requires Form 1099-NEC)
-                        </p>
-                      </div>
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-gray-400 text-xs uppercase tracking-wider">
-                            <th className="px-6 py-3 text-left">Provider</th>
-                            <th className="px-6 py-3 text-left">Email</th>
-                            <th className="px-6 py-3 text-right">Yearly Earnings</th>
-                            <th className="px-6 py-3 text-right">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {flagged.map((u) => (
-                            <tr key={u.id} className="hover:bg-white/[0.02]">
-                              <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
-                              <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
-                              <td className="px-6 py-3 text-white text-sm text-right">
-                                ${Number(u.yearlyEarnings).toFixed(2)}
-                              </td>
-                              <td className="px-6 py-3 text-right">
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                  u.needs1099
-                                    ? "bg-red-500/20 text-red-400"
-                                    : "bg-yellow-500/20 text-yellow-400"
-                                }`}>
-                                  {u.needs1099 ? "1099 Required" : "Approaching"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {healthLoading ? (
+                  <div className="text-center py-12 text-gray-400">Loading platform health...</div>
+                ) : (
+                  <>
+                    {/* ── WOML Revenue ───────────────────────────── */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { label: "This Week", value: platformHealth.revenue?.revenue_this_week ?? 0 },
+                        { label: "This Month", value: platformHealth.revenue?.revenue_this_month ?? 0 },
+                        { label: "This Year", value: platformHealth.revenue?.revenue_this_year ?? 0 },
+                        { label: "All Time", value: platformHealth.revenue?.revenue_all_time ?? 0 },
+                      ].map(item => (
+                        <div key={item.label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                          <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">WOML Revenue — {item.label}</p>
+                          <p className="text-2xl font-bold text-[#E8822A]">${Number(item.value).toFixed(2)}</p>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })()}
+
+                    {/* ── Quick Stats ───────────────────────────── */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <MetricCard label="Total Leads" value={stats.totalLeads} />
+                      <MetricCard label="This Month" value={leadsThisMonth} />
+                      <MetricCard label="Paid Leads" value={stats.paidLeads} />
+                      <MetricCard label="Active Providers" value={stats.activeProviders} />
+                      <MetricCard label="Active Businesses" value={stats.activeBuyers} />
+                    </div>
+
+                    {/* ── Platform Funnel ───────────────────────────── */}
+                    {platformHealth.funnel && (() => {
+                      const f = platformHealth.funnel!;
+                      const total = f.total_leads || 1;
+                      const stages = [
+                        { label: "Leads", count: f.total_leads, color: "#ef4444", pct: 100 },
+                        { label: "Contacted", count: f.total_contacted, color: "#f97316", pct: Math.round(f.total_contacted / total * 100) },
+                        { label: "Quoted", count: f.total_quoted, color: "#ca8a04", pct: Math.round(f.total_quoted / total * 100) },
+                        { label: "Sold", count: f.total_sold, color: "#16a34a", pct: Math.round(f.total_sold / total * 100) },
+                        { label: "Dead", count: f.total_dead, color: "#374151", pct: Math.round(f.total_dead / total * 100) },
+                      ];
+                      return (
+                        <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                          <h3 className="text-sm font-semibold text-white mb-4">Platform Conversion Funnel (All Time)</h3>
+                          <div className="space-y-3">
+                            {stages.map(s => (
+                              <div key={s.label} className="flex items-center gap-3">
+                                <span className="text-xs text-gray-400 w-20 shrink-0">{s.label}</span>
+                                <div className="flex-1 bg-gray-700 rounded-full h-4 overflow-hidden">
+                                  <div
+                                    className="h-4 rounded-full transition-all duration-500"
+                                    style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+                                  />
+                                </div>
+                                <span className="text-sm font-semibold text-white w-12 text-right">{s.pct}%</span>
+                                <span className="text-xs text-gray-400 w-16 text-right">{s.count} leads</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── 30-Day Trend Chart ───────────────────────────── */}
+                    {platformHealth.trend.length > 0 && (
+                      <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                        <h3 className="text-sm font-semibold text-white mb-4">Lead Volume — Last 30 Days</h3>
+                        <div className="h-32 flex items-end gap-1">
+                          {platformHealth.trend.map(day => {
+                            const maxLeads = Math.max(...platformHealth.trend.map(d => d.leads), 1);
+                            const heightPct = (day.leads / maxLeads) * 100;
+                            const soldPct = (day.sold / maxLeads) * 100;
+                            return (
+                              <div key={day.date} className="flex-1 flex flex-col justify-end gap-0.5" title={`${day.date}: ${day.leads} leads, ${day.sold} sold`}>
+                                <div className="w-full rounded-sm" style={{ height: `${soldPct}%`, minHeight: day.sold > 0 ? 3 : 0, backgroundColor: "#16a34a" }} />
+                                <div className="w-full rounded-sm" style={{ height: `${heightPct - soldPct}%`, minHeight: day.leads > 0 ? 3 : 0, backgroundColor: "#ef4444", opacity: 0.6 }} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center gap-4 mt-2">
+                          <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-red-500/60 inline-block" /> Leads</span>
+                          <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Sold</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Per-Business Health Cards ───────────────────────────── */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-3">Business Health</h3>
+                      <div className="space-y-3">
+                        {platformHealth.businesses.length === 0 && (
+                          <p className="text-gray-400 text-sm">No businesses yet.</p>
+                        )}
+                        {platformHealth.businesses.map(biz => {
+                          const daysSinceLastLead = biz.last_lead_at
+                            ? Math.floor((Date.now() - new Date(biz.last_lead_at).getTime()) / 86400000)
+                            : 999;
+                          const daysSinceChaser = biz.last_chaser_activity
+                            ? Math.floor((Date.now() - new Date(biz.last_chaser_activity).getTime()) / 86400000)
+                            : 999;
+
+                          const isDisabled = !!biz.disabled_at || !biz.is_active;
+                          const isHealthy = !isDisabled && daysSinceLastLead <= 7 && biz.leads_this_month > 0 && daysSinceChaser <= 7;
+                          const isAtRisk = !isDisabled && !isHealthy && daysSinceLastLead <= 14;
+                          const healthColor = isDisabled ? "#6b7280" : isHealthy ? "#16a34a" : isAtRisk ? "#ca8a04" : "#ef4444";
+                          const healthLabel = isDisabled ? "Disabled" : isHealthy ? "Healthy" : isAtRisk ? "At Risk" : "Inactive";
+
+                          const convRate = biz.total_leads > 0 ? Math.round(biz.sold / biz.total_leads * 100) : 0;
+
+                          return (
+                            <div key={biz.business_id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                              <div className="flex items-start justify-between gap-4 flex-wrap">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: healthColor }} />
+                                    <span className="text-white font-semibold text-sm">{biz.business_name || biz.display_name || biz.email}</span>
+                                    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: healthColor + "33", color: healthColor }}>
+                                      {healthLabel}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">{biz.email}</p>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-gray-400 flex-wrap">
+                                  <span><span className="text-white font-medium">{biz.leads_this_month}</span> leads this month</span>
+                                  <span><span className="text-white font-medium">{convRate}%</span> conversion</span>
+                                  <span><span className="text-white font-medium">{biz.active_chasers}</span> Lead Chasers active</span>
+                                  <span>Last lead: <span className="text-white font-medium">{biz.last_lead_at ? `${daysSinceLastLead}d ago` : "never"}</span></span>
+                                </div>
+                              </div>
+
+                              {biz.total_leads > 0 && (
+                                <div className="mt-3 flex items-center gap-2">
+                                  {[
+                                    { label: "Leads", count: biz.total_leads, color: "#ef4444" },
+                                    { label: "Contacted", count: biz.contacted, color: "#f97316" },
+                                    { label: "Quoted", count: biz.quoted, color: "#ca8a04" },
+                                    { label: "Sold", count: biz.sold, color: "#16a34a" },
+                                    { label: "Dead", count: biz.dead, color: "#374151" },
+                                  ].map((s, i) => (
+                                    <div key={s.label} className="flex items-center gap-2">
+                                      {i > 0 && <span className="text-gray-600 text-xs">&rarr;</span>}
+                                      <div className="text-center">
+                                        <div className="text-sm font-bold" style={{ color: s.color }}>{s.count}</div>
+                                        <div className="text-[10px] text-gray-500">{s.label}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Per-Provider Activity ───────────────────────────── */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-3">Provider Activity</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-xs text-gray-400 border-b border-gray-700">
+                              <th className="pb-2 pr-4">Provider</th>
+                              <th className="pb-2 pr-4">This Week</th>
+                              <th className="pb-2 pr-4">This Month</th>
+                              <th className="pb-2 pr-4">All Time</th>
+                              <th className="pb-2 pr-4">Earnings</th>
+                              <th className="pb-2 pr-4">Last Submission</th>
+                              <th className="pb-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {platformHealth.providers.map(p => {
+                              const daysSince = p.last_submission
+                                ? Math.floor((Date.now() - new Date(p.last_submission).getTime()) / 86400000)
+                                : 999;
+                              const isDisabled = !!p.disabled_at || !p.is_active;
+                              const activityColor = isDisabled ? "text-gray-500" : daysSince <= 3 ? "text-green-400" : daysSince <= 14 ? "text-yellow-400" : "text-red-400";
+                              return (
+                                <tr key={p.provider_id} className="border-b border-gray-700/50">
+                                  <td className="py-2 pr-4">
+                                    <div className="text-white font-medium">{p.display_name || p.email}</div>
+                                    <div className="text-xs text-gray-500">{p.email}</div>
+                                  </td>
+                                  <td className="py-2 pr-4 text-white">{p.leads_this_week}</td>
+                                  <td className="py-2 pr-4 text-white">{p.leads_this_month}</td>
+                                  <td className="py-2 pr-4 text-white">{p.total_leads}</td>
+                                  <td className="py-2 pr-4 text-[#E8822A]">${Number(p.total_earnings).toFixed(2)}</td>
+                                  <td className={`py-2 pr-4 ${activityColor}`}>
+                                    {p.last_submission ? `${daysSince}d ago` : "Never"}
+                                  </td>
+                                  <td className="py-2">
+                                    {isDisabled ? (
+                                      <span className="text-xs text-gray-400">{p.disabled_at ? "Self-disabled" : "Suspended"}</span>
+                                    ) : (
+                                      <span className="text-xs text-green-400">Active</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* ── 1099 Tracker ───────────────────────────── */}
+                    {(() => {
+                      const providers = detailedUsers.filter(u => u.role === "provider");
+                      const flagged = providers.filter(u => u.yearlyEarnings >= 500);
+                      if (flagged.length === 0) return null;
+                      return (
+                        <div className="bg-white/10 rounded-xl border border-white/10 overflow-hidden">
+                          <div className="px-6 py-4 border-b border-white/10">
+                            <h3 className="text-white font-semibold">1099 Tracker</h3>
+                            <p className="text-gray-500 text-xs mt-1">
+                              Providers at or approaching $600 in yearly earnings (requires Form 1099-NEC)
+                            </p>
+                          </div>
+                          <table className="w-full">
+                            <thead>
+                              <tr className="text-gray-400 text-xs uppercase tracking-wider">
+                                <th className="px-6 py-3 text-left">Provider</th>
+                                <th className="px-6 py-3 text-left">Email</th>
+                                <th className="px-6 py-3 text-right">Yearly Earnings</th>
+                                <th className="px-6 py-3 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {flagged.map((u) => (
+                                <tr key={u.id} className="hover:bg-white/[0.02]">
+                                  <td className="px-6 py-3 text-white text-sm">{u.displayName}</td>
+                                  <td className="px-6 py-3 text-gray-300 text-sm">{u.email}</td>
+                                  <td className="px-6 py-3 text-white text-sm text-right">
+                                    ${Number(u.yearlyEarnings).toFixed(2)}
+                                  </td>
+                                  <td className="px-6 py-3 text-right">
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                      u.needs1099
+                                        ? "bg-red-500/20 text-red-400"
+                                        : "bg-yellow-500/20 text-yellow-400"
+                                    }`}>
+                                      {u.needs1099 ? "1099 Required" : "Approaching"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
             )}
 
