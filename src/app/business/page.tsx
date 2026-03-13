@@ -541,11 +541,33 @@ function BusinessPortalContent() {
   const statusCount = (arr: ApiLead[], status: string) =>
     arr.filter(l => (l.pipelineStatus || "new") === status).length;
 
+  const isToday = (ts: string | null) => !!ts && ts.startsWith(today);
+  const isThisMonth = (ts: string | null) => {
+    if (!ts) return false;
+    const d = new Date(ts);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  };
+  const isThisYear = (ts: string | null) => !!ts && new Date(ts).getFullYear() === currentYear;
+
   const leadsThisYear = dbLeads.filter(l => new Date(l.submittedAt).getFullYear() === currentYear);
-  const yearContacted = dbLeads.filter(l => l.contactedAt && new Date(l.contactedAt).getFullYear() === currentYear).length;
-  const yearQuoted = dbLeads.filter(l => l.quotedAt && new Date(l.quotedAt).getFullYear() === currentYear).length;
-  const yearSold = dbLeads.filter(l => l.soldAt && new Date(l.soldAt).getFullYear() === currentYear).length;
-  const yearDead = dbLeads.filter(l => l.deadAt && new Date(l.deadAt).getFullYear() === currentYear).length;
+
+  // TODAY stats — timestamp-based (how many reached each stage today)
+  const todayContacted = dbLeads.filter(l => isToday(l.contactedAt)).length;
+  const todayQuoted    = dbLeads.filter(l => isToday(l.quotedAt)).length;
+  const todaySold      = dbLeads.filter(l => isToday(l.soldAt)).length;
+  const todayDead      = dbLeads.filter(l => isToday(l.deadAt)).length;
+
+  // MONTH stats — timestamp-based (how many reached each stage this month)
+  const monthContacted = dbLeads.filter(l => isThisMonth(l.contactedAt)).length;
+  const monthQuoted    = dbLeads.filter(l => isThisMonth(l.quotedAt)).length;
+  const monthSold      = dbLeads.filter(l => isThisMonth(l.soldAt)).length;
+  const monthDead      = dbLeads.filter(l => isThisMonth(l.deadAt)).length;
+
+  // YEAR stats — timestamp-based
+  const yearContacted = dbLeads.filter(l => isThisYear(l.contactedAt)).length;
+  const yearQuoted    = dbLeads.filter(l => isThisYear(l.quotedAt)).length;
+  const yearSold      = dbLeads.filter(l => isThisYear(l.soldAt)).length;
+  const yearDead      = dbLeads.filter(l => isThisYear(l.deadAt)).length;
 
   // Get leads by provider for chart
   const leadsByProvider = (() => {
@@ -1148,10 +1170,10 @@ function BusinessPortalContent() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {[
                 { label: "Leads Received", color: "#ef4444", todayVal: leadsToday.length, monthVal: leadsThisMonth.length, yearVal: leadsThisYear.length },
-                { label: "Contacted", color: "#f97316", todayVal: statusCount(leadsToday, "contacted"), monthVal: statusCount(leadsThisMonth, "contacted"), yearVal: yearContacted },
-                { label: "Quoted", color: "#ca8a04", todayVal: statusCount(leadsToday, "quoted"), monthVal: statusCount(leadsThisMonth, "quoted"), yearVal: yearQuoted },
-                { label: "Sold", color: "#16a34a", todayVal: statusCount(leadsToday, "sold"), monthVal: statusCount(leadsThisMonth, "sold"), yearVal: yearSold },
-                { label: "Dead", color: "#111827", todayVal: statusCount(leadsToday, "dead"), monthVal: statusCount(leadsThisMonth, "dead"), yearVal: yearDead },
+                { label: "Contacted", color: "#f97316", todayVal: todayContacted, monthVal: monthContacted, yearVal: yearContacted },
+                { label: "Quoted",    color: "#ca8a04", todayVal: todayQuoted,    monthVal: monthQuoted,    yearVal: yearQuoted },
+                { label: "Sold",      color: "#16a34a", todayVal: todaySold,      monthVal: monthSold,      yearVal: yearSold },
+                { label: "Dead",      color: "#111827", todayVal: todayDead,      monthVal: monthDead,      yearVal: yearDead },
               ].map(card => (
                 <div key={card.label} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <p className="text-gray-500 text-[10px] uppercase tracking-wide font-medium text-center pt-3 pb-2">{card.label}</p>
