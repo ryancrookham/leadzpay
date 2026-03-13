@@ -1760,7 +1760,7 @@ export async function getDetailedUserStats() {
   const result = await sql`
     SELECT
       u.id, u.email, u.username, u.role, u.display_name, u.phone,
-      u.business_name, u.location, u.is_active, u.created_at,
+      u.business_name, u.location, u.is_active, u.disabled_at, u.created_at,
       u.payout_method, u.payout_venmo,
       COALESCE(ls.total_leads, 0)::int as total_leads,
       COALESCE(ls.total_volume, 0)::numeric as total_volume,
