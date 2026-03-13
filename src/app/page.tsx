@@ -103,15 +103,9 @@ export default function Home() {
             alt="WOML - Word of Mouth Leads"
             width={4480}
             height={1260}
-            className="mx-auto w-full max-w-2xl h-auto object-contain"
+            className="mx-auto w-full h-auto object-contain"
             priority
           />
-          <p
-            className="mt-6 text-[#E77500] text-2xl md:text-3xl"
-            style={{ fontFamily: "var(--font-source-serif), 'Georgia', serif", fontWeight: 700 }}
-          >
-            Optimize your leads, optimize your business.
-          </p>
         </div>
       </main>
 
