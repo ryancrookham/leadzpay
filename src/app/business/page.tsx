@@ -111,7 +111,6 @@ function BusinessPortalContent() {
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
-  const [pipelineNotesLocal, setPipelineNotesLocal] = useState<Record<string, string>>({});
   const [pipelineSearch, setPipelineSearch] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const [providerInfoDrawer, setProviderInfoDrawer] = useState<string | null>(null);
@@ -166,6 +165,7 @@ function BusinessPortalContent() {
   } | null>(null);
   const [attrStage, setAttrStage] = useState<string>("");
   const [attrAgent, setAttrAgent] = useState<string>("");
+  const [attrStep, setAttrStep] = useState<1 | 2>(1);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -619,7 +619,7 @@ function BusinessPortalContent() {
           </div>
         )}
 
-        {/* Attribution Modal */}
+        {/* Attribution Modal — Two-Step Flow */}
         {attributionModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
@@ -628,74 +628,91 @@ function BusinessPortalContent() {
                 {attributionModal.leadName} &mdash; {new Date(attributionModal.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </p>
 
-              {/* Stage */}
-              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">What happened?</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {[
-                  { value: "contacted", label: "Contacted", color: "#f97316" },
-                  { value: "quoted",    label: "Quoted",    color: "#ca8a04" },
-                  { value: "sold",      label: "Sold",      color: "#16a34a" },
-                  { value: "dead",      label: "Dead",      color: "#111827" },
-                ].map(s => (
-                  <button
-                    key={s.value}
-                    onClick={() => setAttrStage(s.value)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition ${
-                      attrStage === s.value ? "border-current text-white" : "border-gray-200 text-gray-600 hover:border-gray-400"
-                    }`}
-                    style={attrStage === s.value ? { backgroundColor: s.color, borderColor: s.color } : {}}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Agent credit */}
-              {smsAgents.length > 0 && (
+              {attrStep === 1 ? (
                 <>
+                  {/* Step 1: Choose stage */}
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">What happened?</p>
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    {[
+                      { value: "contacted", label: "Contacted", color: "#f97316" },
+                      { value: "quoted",    label: "Quoted",    color: "#ca8a04" },
+                      { value: "sold",      label: "Sold",      color: "#16a34a" },
+                      { value: "dead",      label: "Dead",      color: "#111827" },
+                    ].map(s => (
+                      <button
+                        key={s.value}
+                        onClick={() => {
+                          setAttrStage(s.value);
+                          if (smsAgents.length > 0) {
+                            setAttrStep(2);
+                          } else {
+                            // No agents configured — save immediately
+                            updateLeadField(attributionModal.leadId, {
+                              follow_up_date: attributionModal.date,
+                              pipeline_status: s.value,
+                            });
+                            setAttributionModal(null);
+                          }
+                        }}
+                        className="px-3 py-2 rounded-lg text-sm font-medium border-2 transition border-gray-200 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setAttributionModal(null)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Step 2: Choose agent */}
                   <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Who gets credit?</p>
                   <div className="flex flex-col gap-2 mb-4">
                     {smsAgents.map(a => (
                       <button
                         key={a.phone}
-                        onClick={() => setAttrAgent(a.name)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition text-left ${
-                          attrAgent === a.name
-                            ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
-                            : "border-gray-200 text-gray-700 hover:border-gray-400"
-                        }`}
+                        onClick={() => {
+                          updateLeadField(attributionModal.leadId, {
+                            follow_up_date: attributionModal.date,
+                            pipeline_status: attrStage,
+                            actor_name: a.name,
+                          });
+                          setAttributionModal(null);
+                        }}
+                        className="px-3 py-2 rounded-lg text-sm font-medium border-2 transition text-left border-gray-200 text-gray-700 hover:border-[#E8822A] hover:bg-orange-50"
                       >
                         {a.name} <span className="text-gray-400 text-xs">{a.phone}</span>
                       </button>
                     ))}
                   </div>
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setAttrStep(1)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateLeadField(attributionModal.leadId, {
+                          follow_up_date: attributionModal.date,
+                          pipeline_status: attrStage,
+                        });
+                        setAttributionModal(null);
+                      }}
+                      className="text-sm text-gray-400 hover:text-gray-600 transition"
+                    >
+                      Skip &mdash; no agent
+                    </button>
+                  </div>
                 </>
               )}
-
-              {/* Actions */}
-              <div className="flex gap-2 justify-end mt-2">
-                <button
-                  onClick={() => setAttributionModal(null)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={!attrStage}
-                  onClick={() => {
-                    const updates: Record<string, unknown> = {
-                      follow_up_date: attributionModal.date,
-                    };
-                    if (attrStage) updates.pipeline_status = attrStage;
-                    if (attrAgent) updates.actor_name = attrAgent;
-                    updateLeadField(attributionModal.leadId, updates);
-                    setAttributionModal(null);
-                  }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-[#E8822A] text-white hover:bg-[#d4731f] disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  Confirm
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -1316,7 +1333,6 @@ function BusinessPortalContent() {
                 const currentStatus = lead.pipelineStatus || "new";
                 const isDead = currentStatus === "dead";
                 const currentStep = isDead ? -1 : stepIdx(currentStatus);
-                const localNotes = pipelineNotesLocal[lead.id] ?? lead.pipelineNotes ?? "";
                 const isExpanded = activityDrawer === lead.id;
 
                 return (
@@ -1392,65 +1408,6 @@ function BusinessPortalContent() {
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
                         </button>
-                        {/* Stage select */}
-                        <select
-                          value={currentStatus}
-                          onChange={e => updateLeadField(lead.id, {
-                            pipeline_status: e.target.value,
-                            ...(lead.assignedTo ? { actor_name: lead.assignedTo } : {}),
-                          })}
-                          className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
-                        >
-                          {pipeStages.map(s => (
-                            <option key={s} value={s}>{s === "new" ? "Lead" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                          ))}
-                        </select>
-
-                        {/* Sub-status for Contacted */}
-                        {currentStatus === "contacted" && (
-                          <select
-                            value={lead.contactedSubStatus || ""}
-                            onChange={e => updateLeadField(lead.id, { contacted_sub_status: e.target.value || null })}
-                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none"
-                          >
-                            <option value="">Sub-status...</option>
-                            <option value="reached">Reached</option>
-                            <option value="voicemail">Voicemail</option>
-                            <option value="no_answer">No Answer</option>
-                          </select>
-                        )}
-
-                        {/* Dead reason */}
-                        {currentStatus === "dead" && (
-                          <select
-                            value={lead.deadReason || ""}
-                            onChange={e => updateLeadField(lead.id, { dead_reason: e.target.value || null })}
-                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none"
-                          >
-                            <option value="">Reason...</option>
-                            <option value="not_interested">Not Interested</option>
-                            <option value="bad_contact">Bad Contact</option>
-                            <option value="already_insured">Already Insured</option>
-                            <option value="price">Price</option>
-                            <option value="other">Other</option>
-                          </select>
-                        )}
-
-                        {/* Assigned to */}
-                        <select
-                          value={lead.assignedTo || ""}
-                          onChange={e => {
-                            const val = e.target.value || null;
-                            updateLeadField(lead.id, { assigned_to: val });
-                          }}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A] bg-white"
-                        >
-                          <option value="">Assigned to...</option>
-                          {smsAgents.map(a => (
-                            <option key={a.name} value={a.name}>{a.name}</option>
-                          ))}
-                        </select>
-
                         {/* Follow-up date */}
                         <input
                           type="date"
@@ -1460,6 +1417,7 @@ function BusinessPortalContent() {
                               updateLeadField(lead.id, { follow_up_date: null });
                               return;
                             }
+                            setAttrStep(1);
                             setAttrStage("");
                             setAttrAgent("");
                             setAttributionModal({ leadId: lead.id, leadName: lead.customerName, date: e.target.value });
@@ -1467,37 +1425,6 @@ function BusinessPortalContent() {
                           className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
                         />
                       </div>
-                    </div>
-
-                    {/* Notes row */}
-                    <div className="mt-3 flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add note..."
-                        value={localNotes}
-                        onChange={e => setPipelineNotesLocal(prev => ({ ...prev, [lead.id]: e.target.value }))}
-                        onBlur={() => {
-                          if (localNotes !== (lead.pipelineNotes ?? "")) {
-                            updateLeadField(lead.id, { pipeline_notes: localNotes });
-                          }
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === "Enter" && localNotes.trim()) {
-                            updateLeadField(lead.id, { note: localNotes, pipeline_notes: localNotes });
-                          }
-                        }}
-                        className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
-                      />
-                      <button
-                        onClick={() => {
-                          if (localNotes.trim()) {
-                            updateLeadField(lead.id, { note: localNotes, pipeline_notes: localNotes });
-                            setToast({ message: "Note added", type: "success" });
-                            setTimeout(() => setToast(null), 2000);
-                          }
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-                      >Add Note</button>
                     </div>
 
                     {/* Lead Info / Provider Info / Activity toggles */}
