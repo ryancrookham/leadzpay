@@ -662,17 +662,22 @@ export async function ensureSmsAlertColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alerts_enabled BOOLEAN DEFAULT FALSE`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alert_phone1 TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alert_phone2 TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_1_name TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_2_name TEXT`;
 }
 
 export async function getSmsAlertSettings(userId: string): Promise<{
   smsAlertsEnabled: boolean;
   smsAlertPhone1: string | null;
   smsAlertPhone2: string | null;
+  smsAgentName1: string | null;
+  smsAgentName2: string | null;
 }> {
   await ensureSmsAlertColumns();
   const sql = getSql();
   const result = await sql`
-    SELECT sms_alerts_enabled, sms_alert_phone1, sms_alert_phone2
+    SELECT sms_alerts_enabled, sms_alert_phone1, sms_alert_phone2,
+           sms_agent_1_name, sms_agent_2_name
     FROM users WHERE id = ${userId} LIMIT 1
   `;
   const row = result[0] as any;
@@ -680,12 +685,20 @@ export async function getSmsAlertSettings(userId: string): Promise<{
     smsAlertsEnabled: row?.sms_alerts_enabled ?? false,
     smsAlertPhone1: row?.sms_alert_phone1 ?? null,
     smsAlertPhone2: row?.sms_alert_phone2 ?? null,
+    smsAgentName1: row?.sms_agent_1_name ?? null,
+    smsAgentName2: row?.sms_agent_2_name ?? null,
   };
 }
 
 export async function updateSmsAlertSettings(
   userId: string,
-  settings: { smsAlertsEnabled: boolean; smsAlertPhone1: string | null; smsAlertPhone2: string | null }
+  settings: {
+    smsAlertsEnabled: boolean;
+    smsAlertPhone1: string | null;
+    smsAlertPhone2: string | null;
+    smsAgentName1?: string | null;
+    smsAgentName2?: string | null;
+  }
 ): Promise<void> {
   await ensureSmsAlertColumns();
   const sql = getSql();
@@ -694,9 +707,28 @@ export async function updateSmsAlertSettings(
       sms_alerts_enabled = ${settings.smsAlertsEnabled},
       sms_alert_phone1 = ${settings.smsAlertPhone1},
       sms_alert_phone2 = ${settings.smsAlertPhone2},
+      sms_agent_1_name = ${settings.smsAgentName1 ?? null},
+      sms_agent_2_name = ${settings.smsAgentName2 ?? null},
       updated_at = NOW()
     WHERE id = ${userId}
   `;
+}
+
+export async function getLeaderboardData(businessId: string): Promise<
+  { actor_name: string; to_value: string; count: number }[]
+> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT actor_name, to_value, COUNT(*)::int as count
+    FROM lead_activity_log
+    WHERE business_id = ${businessId}
+      AND action = 'status_change'
+      AND to_value IN ('contacted', 'quoted', 'sold', 'dead')
+      AND actor_name NOT IN ('Unknown', '')
+    GROUP BY actor_name, to_value
+    ORDER BY actor_name
+  `;
+  return result as unknown as { actor_name: string; to_value: string; count: number }[];
 }
 
 function normalise(value: string | undefined | null): string {

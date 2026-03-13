@@ -40,10 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { smsAlertsEnabled, smsAlertPhone1, smsAlertPhone2 } = body as {
+    const { smsAlertsEnabled, smsAlertPhone1, smsAlertPhone2, smsAgentName1, smsAgentName2 } = body as {
       smsAlertsEnabled?: boolean;
       smsAlertPhone1?: string;
       smsAlertPhone2?: string;
+      smsAgentName1?: string;
+      smsAgentName2?: string;
     };
 
     // Basic phone validation helper
@@ -63,6 +65,8 @@ export async function POST(request: NextRequest) {
       smsAlertsEnabled: smsAlertsEnabled ?? false,
       smsAlertPhone1: normalizedPhone1,
       smsAlertPhone2: normalizedPhone2,
+      smsAgentName1: smsAgentName1 ?? null,
+      smsAgentName2: smsAgentName2 ?? null,
     });
 
     return NextResponse.json({ success: true });

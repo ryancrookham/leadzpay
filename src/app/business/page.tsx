@@ -62,7 +62,7 @@ interface ApiLead {
   followUpDate: string | null;
 }
 
-type Tab = "dashboard" | "pipeline" | "connections" | "marketing" | "invite" | "settings";
+type Tab = "dashboard" | "pipeline" | "connections" | "leaderboard" | "marketing" | "invite" | "settings";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -107,7 +107,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "pipeline", "connections", "marketing", "invite", "settings"];
+  const validTabs: Tab[] = ["dashboard", "pipeline", "connections", "leaderboard", "marketing", "invite", "settings"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
@@ -154,6 +154,18 @@ function BusinessPortalContent() {
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
   const [funnelTargets, setFunnelTargets] = useState({ contacted: 80, quoted: 50, sold: 30, dead: 20 });
+
+  // SMS agents loaded from settings (for attribution)
+  const [smsAgents, setSmsAgents] = useState<{ name: string; phone: string }[]>([]);
+
+  // Attribution modal state
+  const [attributionModal, setAttributionModal] = useState<{
+    leadId: string;
+    leadName: string;
+    date: string;
+  } | null>(null);
+  const [attrStage, setAttrStage] = useState<string>("");
+  const [attrAgent, setAttrAgent] = useState<string>("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -220,6 +232,25 @@ function BusinessPortalContent() {
             sold:      data.settings.funnel_target_sold      ?? 30,
             dead:      data.settings.funnel_target_dead      ?? 20,
           });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load SMS agents for attribution
+  useEffect(() => {
+    fetch("/api/business/sms-alerts")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const agents: { name: string; phone: string }[] = [];
+          if (data.smsAgentName1 && data.smsAlertPhone1) {
+            agents.push({ name: data.smsAgentName1, phone: data.smsAlertPhone1.replace(/^\+1/, "") });
+          }
+          if (data.smsAgentName2 && data.smsAlertPhone2) {
+            agents.push({ name: data.smsAgentName2, phone: data.smsAlertPhone2.replace(/^\+1/, "") });
+          }
+          setSmsAgents(agents);
         }
       })
       .catch(() => {});
@@ -564,7 +595,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "pipeline", "connections", "marketing", "invite", "settings"] as Tab[]).map((tab) => (
+          {(["dashboard", "pipeline", "connections", "leaderboard", "marketing", "invite", "settings"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -574,7 +605,7 @@ function BusinessPortalContent() {
                   : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
-              {tab === "marketing" ? "Outreach" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "marketing" ? "Outreach" : tab === "leaderboard" ? "Leaderboard" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -585,6 +616,87 @@ function BusinessPortalContent() {
             toast.type === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
           }`}>
             {toast.message}
+          </div>
+        )}
+
+        {/* Attribution Modal */}
+        {attributionModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+              <h3 className="text-base font-bold text-gray-900 mb-0.5">Log Activity</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {attributionModal.leadName} &mdash; {new Date(attributionModal.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
+
+              {/* Stage */}
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">What happened?</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {[
+                  { value: "contacted", label: "Contacted", color: "#f97316" },
+                  { value: "quoted",    label: "Quoted",    color: "#ca8a04" },
+                  { value: "sold",      label: "Sold",      color: "#16a34a" },
+                  { value: "dead",      label: "Dead",      color: "#111827" },
+                ].map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => setAttrStage(s.value)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition ${
+                      attrStage === s.value ? "border-current text-white" : "border-gray-200 text-gray-600 hover:border-gray-400"
+                    }`}
+                    style={attrStage === s.value ? { backgroundColor: s.color, borderColor: s.color } : {}}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Agent credit */}
+              {smsAgents.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Who gets credit?</p>
+                  <div className="flex flex-col gap-2 mb-4">
+                    {smsAgents.map(a => (
+                      <button
+                        key={a.phone}
+                        onClick={() => setAttrAgent(a.name)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium border-2 transition text-left ${
+                          attrAgent === a.name
+                            ? "border-[#E8822A] bg-orange-50 text-[#E8822A]"
+                            : "border-gray-200 text-gray-700 hover:border-gray-400"
+                        }`}
+                      >
+                        {a.name} <span className="text-gray-400 text-xs">{a.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end mt-2">
+                <button
+                  onClick={() => setAttributionModal(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!attrStage}
+                  onClick={() => {
+                    const updates: Record<string, unknown> = {
+                      follow_up_date: attributionModal.date,
+                    };
+                    if (attrStage) updates.pipeline_status = attrStage;
+                    if (attrAgent) updates.actor_name = attrAgent;
+                    updateLeadField(attributionModal.leadId, updates);
+                    setAttributionModal(null);
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-[#E8822A] text-white hover:bg-[#d4731f] disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1337,7 +1449,15 @@ function BusinessPortalContent() {
                         <input
                           type="date"
                           defaultValue={lead.followUpDate || ""}
-                          onChange={e => updateLeadField(lead.id, { follow_up_date: e.target.value || null })}
+                          onChange={e => {
+                            if (!e.target.value) {
+                              updateLeadField(lead.id, { follow_up_date: null });
+                              return;
+                            }
+                            setAttrStage("");
+                            setAttrAgent("");
+                            setAttributionModal({ leadId: lead.id, leadName: lead.customerName, date: e.target.value });
+                          }}
                           className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
                         />
                       </div>
@@ -1605,6 +1725,11 @@ function BusinessPortalContent() {
           </div>
           );
         })()}
+
+        {/* Leaderboard Tab */}
+        {activeTab === "leaderboard" && (
+          <LeaderboardTab />
+        )}
 
         {/* Marketing Tab */}
         {activeTab === "marketing" && (
@@ -3763,6 +3888,88 @@ function AnalyticsTab({
   );
 }
 
+// Leaderboard Tab
+function LeaderboardTab() {
+  const [rows, setRows] = useState<{ actor_name: string; to_value: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/business/leaderboard")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setRows(data.rows);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // Aggregate by actor_name
+  const agentNames = Array.from(new Set(rows.map(r => r.actor_name)));
+  const agents = agentNames.map(name => {
+    const mine = rows.filter(r => r.actor_name === name);
+    const get = (stage: string) => mine.find(r => r.to_value === stage)?.count ?? 0;
+    const contacted = get("contacted");
+    const quoted = get("quoted");
+    const sold = get("sold");
+    const dead = get("dead");
+    const total = contacted + quoted + sold + dead;
+    const convRate = total > 0 ? ((sold / total) * 100).toFixed(1) : "0.0";
+    return { name, contacted, quoted, sold, dead, total, convRate };
+  }).sort((a, b) => Number(b.convRate) - Number(a.convRate));
+
+  const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-white">Leaderboard</h2>
+        <p className="text-white/70 text-sm mt-1">Agent performance ranked by conversion rate.</p>
+      </div>
+
+      {loading && (
+        <div className="bg-white rounded-xl p-8 text-center text-gray-400">Loading...</div>
+      )}
+
+      {!loading && agents.length === 0 && (
+        <div className="bg-white rounded-xl p-8 text-center text-gray-400">
+          No activity yet. Add named agents in Settings and start logging transitions to see rankings here.
+        </div>
+      )}
+
+      {!loading && agents.map((agent, idx) => (
+        <div key={agent.name} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{medals[idx] ?? `#${idx + 1}`}</span>
+              <div>
+                <p className="font-bold text-gray-900 text-base">{agent.name}</p>
+                <p className="text-xs text-gray-400">{agent.total} total actions</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-emerald-600">{agent.convRate}%</p>
+              <p className="text-xs text-gray-400">conversion</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: "Contacted", value: agent.contacted, color: "#f97316" },
+              { label: "Quoted",    value: agent.quoted,    color: "#ca8a04" },
+              { label: "Sold",      value: agent.sold,      color: "#16a34a" },
+              { label: "Dead",      value: agent.dead,      color: "#6b7280" },
+            ].map(s => (
+              <div key={s.label} className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Marketing Tab
 function MarketingTab() {
   const defaultScript = {
@@ -3876,6 +4083,8 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsPhone1, setSmsPhone1] = useState("");
   const [smsPhone2, setSmsPhone2] = useState("");
+  const [smsName1, setSmsName1] = useState("");
+  const [smsName2, setSmsName2] = useState("");
   const [smsSaving, setSmsSaving] = useState(false);
   const [smsSaved, setSmsSaved] = useState(false);
   const [smsError, setSmsError] = useState("");
@@ -3905,6 +4114,8 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           const fmt = (p: string | null) => p ? p.replace(/^\+1/, "") : "";
           setSmsPhone1(fmt(data.smsAlertPhone1));
           setSmsPhone2(fmt(data.smsAlertPhone2));
+          setSmsName1(data.smsAgentName1 ?? "");
+          setSmsName2(data.smsAgentName2 ?? "");
         }
       } catch (e) {
         console.error("Failed to load SMS settings:", e);
@@ -3981,6 +4192,8 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           smsAlertsEnabled: smsEnabled,
           smsAlertPhone1: smsPhone1 || null,
           smsAlertPhone2: smsPhone2 || null,
+          smsAgentName1: smsName1 || null,
+          smsAgentName2: smsName2 || null,
         }),
       });
       const data = await res.json();
@@ -4169,25 +4382,45 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
           {smsEnabled && (
             <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-gray-700 text-xs font-medium mb-1">Alert Number 1</label>
-                <input
-                  type="tel"
-                  placeholder="(215) 555-0100"
-                  value={smsPhone1}
-                  onChange={e => setSmsPhone1(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                />
+              {/* Agent 1 */}
+              <div className="space-y-1">
+                <label className="block text-gray-700 text-xs font-medium">Agent 1</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Name (e.g. Mike)"
+                    value={smsName1}
+                    onChange={e => setSmsName1(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="(215) 555-0100"
+                    value={smsPhone1}
+                    onChange={e => setSmsPhone1(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-gray-700 text-xs font-medium mb-1">Alert Number 2 <span className="text-gray-400">(optional)</span></label>
-                <input
-                  type="tel"
-                  placeholder="(215) 555-0101"
-                  value={smsPhone2}
-                  onChange={e => setSmsPhone2(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                />
+              {/* Agent 2 */}
+              <div className="space-y-1">
+                <label className="block text-gray-700 text-xs font-medium">Agent 2 <span className="text-gray-400">(optional)</span></label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Name (e.g. Sarah)"
+                    value={smsName2}
+                    onChange={e => setSmsName2(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="(215) 555-0101"
+                    value={smsPhone2}
+                    onChange={e => setSmsPhone2(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                  />
+                </div>
               </div>
             </div>
           )}
