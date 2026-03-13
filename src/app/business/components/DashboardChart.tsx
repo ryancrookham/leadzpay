@@ -76,6 +76,15 @@ export default function DashboardChart({ leads }: { leads: ApiLead[] }) {
     return days;
   }, [leads, range]);
 
+  const ticks = useMemo(() => {
+    if (data.length === 0) return [];
+    const tickCount = range === 7 ? 7 : range === 30 ? 8 : 10;
+    const step = (data.length - 1) / (tickCount - 1);
+    return Array.from({ length: tickCount }, (_, i) =>
+      data[Math.round(i * step)].date
+    );
+  }, [data, range]);
+
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
       const next = new Set(prev);
@@ -142,7 +151,7 @@ export default function DashboardChart({ leads }: { leads: ApiLead[] }) {
         {chartType === "line" ? (
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} />
+            <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} ticks={ticks} interval={0} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip labelFormatter={(label) => formatDate(label as string | number)} />
             {seriesKeys.map(
@@ -163,7 +172,7 @@ export default function DashboardChart({ leads }: { leads: ApiLead[] }) {
         ) : (
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} />
+            <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11 }} ticks={ticks} interval={0} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip labelFormatter={(label) => formatDate(label as string | number)} />
             {seriesKeys.map(
