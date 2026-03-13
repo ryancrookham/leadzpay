@@ -116,6 +116,8 @@ function BusinessPortalContent() {
   const [detailsDrawer, setDetailsDrawer] = useState<string | null>(null);
   const [activityCache, setActivityCache] = useState<Record<string, { actor_name: string; action: string; from_value: string | null; to_value: string | null; note: string | null; created_at: string }[]>>({});
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [expandedModalLead, setExpandedModalLead] = useState<ApiLead | null>(null);
 
   // Excel upload state for Dashboard analytics
 
@@ -289,6 +291,18 @@ function BusinessPortalContent() {
       router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
     }
   }, [isLoading, isAuthenticated, isSigningOut, currentUser, router]);
+
+  // Escape key closes lightbox and modal
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (lightboxSrc) setLightboxSrc(null);
+        else if (expandedModalLead) setExpandedModalLead(null);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [lightboxSrc, expandedModalLead]);
 
   const handleLogout = () => logout();
 
@@ -551,6 +565,207 @@ function BusinessPortalContent() {
             {toast.message}
           </div>
         )}
+
+        {/* Photo Lightbox */}
+        {lightboxSrc && (
+          <div
+            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+            onClick={() => setLightboxSrc(null)}
+          >
+            <button
+              onClick={() => setLightboxSrc(null)}
+              className="absolute top-6 right-6 text-white/80 hover:text-white transition"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <img
+              src={lightboxSrc}
+              alt="Enlarged view"
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        )}
+
+        {/* Full-Screen Lead Modal (Mid-Call View) */}
+        {expandedModalLead && (() => {
+          const ml = expandedModalLead;
+          const mlStatus = ml.pipelineStatus || "new";
+          const mlColors: Record<string, { bg: string; text: string; dot: string }> = {
+            new: { bg: "bg-red-100", text: "text-red-700", dot: "#ef4444" },
+            contacted: { bg: "bg-orange-100", text: "text-orange-700", dot: "#f97316" },
+            quoted: { bg: "bg-yellow-100", text: "text-yellow-800", dot: "#ca8a04" },
+            sold: { bg: "bg-green-100", text: "text-green-700", dot: "#16a34a" },
+            dead: { bg: "bg-gray-200", text: "text-gray-700", dot: "#111827" },
+          };
+          const mlSteps = ["new", "contacted", "quoted", "sold"] as const;
+          const mlStepIdx = mlSteps.indexOf(mlStatus as typeof mlSteps[number]);
+          const mlIsDead = mlStatus === "dead";
+          const mlBreakdown = calculateFeeBreakdown(ml.payoutAmount || 0, feeSettings);
+          return (
+            <div className="fixed inset-0 z-40 bg-white overflow-y-auto">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold text-gray-800">{ml.customerName}</h2>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${mlColors[mlStatus]?.bg || "bg-gray-100"} ${mlColors[mlStatus]?.text || "text-gray-700"}`}>
+                    {mlStatus === "new" ? "Lead" : mlStatus.charAt(0).toUpperCase() + mlStatus.slice(1)}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium uppercase tracking-wide">Mid-Call View</span>
+                </div>
+                <button
+                  onClick={() => setExpandedModalLead(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="max-w-4xl mx-auto p-8">
+                <div className="grid lg:grid-cols-2 gap-6">
+                  {/* Left Column */}
+                  <div className="space-y-6">
+                    {/* Contact Card */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                      <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-4">Contact</h3>
+                      <div className="space-y-4">
+                        {ml.customerPhone && (
+                          <div className="flex items-center gap-3">
+                            <a href={`tel:${ml.customerPhone}`} className="flex items-center gap-2 text-blue-600 hover:underline text-lg font-medium">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                              {ml.customerPhone}
+                            </a>
+                            <a href={`sms:${ml.customerPhone}`} className="px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100 transition">SMS</a>
+                          </div>
+                        )}
+                        {ml.customerEmail && (
+                          <a href={`mailto:${ml.customerEmail}`} className="flex items-center gap-2 text-blue-600 hover:underline text-lg">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            {ml.customerEmail}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Vehicle Info */}
+                    {(ml.vehicleYear || ml.vehicleMake || ml.vehicleModel) && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                        <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-3">Vehicle</h3>
+                        <p className="text-gray-800 text-lg font-medium">
+                          {[ml.vehicleYear, ml.vehicleMake, ml.vehicleModel].filter(Boolean).join(" ")}
+                        </p>
+                        {ml.customerState && <p className="text-gray-500 text-sm mt-1">State: {ml.customerState}</p>}
+                      </div>
+                    )}
+
+                    {/* Lead Source */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                      <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-3">Lead Source</h3>
+                      <p className="text-gray-800 font-medium">{ml.providerName || "Unknown"}</p>
+                      <p className="text-gray-500 text-sm mt-1">Submitted {new Date(ml.submittedAt).toLocaleDateString()} at {new Date(ml.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  </div>
+
+                  {/* Right Column */}
+                  <div className="space-y-6">
+                    {/* Pipeline Status + Progress Bar */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                      <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-4">Pipeline Status</h3>
+                      <div className="flex items-center gap-1">
+                        {mlSteps.map((step, i) => {
+                          const isActive = !mlIsDead && mlStepIdx >= i;
+                          const color = isActive ? (mlColors[step]?.dot || "#e5e7eb") : "#e5e7eb";
+                          return (
+                            <div key={step} className="flex flex-col items-center" style={{ flex: 1 }}>
+                              <div className="w-full h-3 rounded-full" style={{ backgroundColor: color }} />
+                              <span className={`text-xs mt-1 ${isActive ? "text-gray-600 font-medium" : "text-gray-300"}`}>
+                                {step === "new" ? "Lead" : step.charAt(0).toUpperCase() + step.slice(1)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {mlIsDead && (
+                          <span className="ml-2 px-3 py-1 rounded bg-gray-800 text-white text-xs font-medium">DEAD</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Custom Lead Fields */}
+                    {ml.criteriaFieldsData && ml.criteriaFieldsData.length > 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                        <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-4">Custom Lead Fields</h3>
+                        <div className="space-y-3">
+                          {ml.criteriaFieldsData.map((field, idx) => (
+                            <div key={idx}>
+                              <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">{field.label}</p>
+                              {field.fieldType === "PHOTO" && field.value ? (() => {
+                                const photoSrc = field.value.startsWith("data:") ? field.value : `data:image/jpeg;base64,${field.value}`;
+                                return (
+                                  <div>
+                                    <img
+                                      src={photoSrc}
+                                      alt={field.label}
+                                      className="max-h-48 rounded-lg border-2 border-gray-200 hover:border-orange-400 shadow-sm cursor-pointer transition"
+                                      onClick={() => setLightboxSrc(photoSrc)}
+                                    />
+                                    <p className="text-gray-400 text-[10px] mt-1">Tap to enlarge</p>
+                                  </div>
+                                );
+                              })() : field.fieldType === "BINARY" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                  {field.value || "—"}
+                                </span>
+                              ) : (
+                                <p className="text-gray-800">{field.value || "—"}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Driver's License */}
+                    {ml.customerLicenseImage && (() => {
+                      const licSrc = ml.customerLicenseImage.startsWith("data:") ? ml.customerLicenseImage : `data:image/jpeg;base64,${ml.customerLicenseImage}`;
+                      return (
+                        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                          <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-3">Driver&apos;s License</h3>
+                          <img
+                            src={licSrc}
+                            alt="License"
+                            className="max-h-64 rounded-lg border-2 border-gray-200 hover:border-orange-400 shadow-sm cursor-pointer transition"
+                            onClick={() => setLightboxSrc(licSrc)}
+                          />
+                          <p className="text-gray-400 text-[10px] mt-1">Tap to enlarge</p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Payout Status */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                      <h3 className="text-gray-500 text-xs uppercase tracking-wide font-medium mb-3">Payout</h3>
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-800 text-lg font-bold">${mlBreakdown.buyerTotal.toFixed(2)}</span>
+                        {ml.payoutStatus === "completed" ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-medium">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            Completed
+                          </span>
+                        ) : ml.payoutStatus === "processing" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Processing</span>
+                        ) : (
+                          <span className="text-amber-600 text-sm font-medium">Unpaid</span>
+                        )}
+                      </div>
+                      <p className="text-gray-400 text-xs mt-1">${Number(ml.payoutAmount || 0).toFixed(2)} + ${mlBreakdown.buyerFee.toFixed(2)} fee</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Dashboard Tab */}
         {activeTab === "dashboard" && (
@@ -995,6 +1210,14 @@ function BusinessPortalContent() {
 
                       {/* Right: Controls */}
                       <div className="flex flex-col gap-2 min-w-[180px]">
+                        {/* Expand to mid-call view */}
+                        <button
+                          onClick={() => setExpandedModalLead(lead)}
+                          className="self-end p-1 text-gray-400 hover:text-[#E8822A] transition"
+                          title="Open mid-call view"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
+                        </button>
                         {/* Stage select */}
                         <select
                           value={currentStatus}
@@ -1121,16 +1344,21 @@ function BusinessPortalContent() {
                     <div className="bg-gray-50 border-t border-gray-200 px-4 py-4">
                       <div className="flex gap-6 flex-wrap">
                         {/* License photo */}
-                        {lead.customerLicenseImage && (
-                          <div className="shrink-0">
-                            <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">License Photo</p>
-                            <img
-                              src={lead.customerLicenseImage}
-                              alt="License"
-                              className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
-                            />
-                          </div>
-                        )}
+                        {lead.customerLicenseImage && (() => {
+                          const src = lead.customerLicenseImage.startsWith("data:") ? lead.customerLicenseImage : `data:image/jpeg;base64,${lead.customerLicenseImage}`;
+                          return (
+                            <div className="shrink-0">
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">License Photo</p>
+                              <img
+                                src={src}
+                                alt="License"
+                                className="max-h-32 rounded-lg border-2 border-gray-200 hover:border-orange-400 shadow-sm cursor-pointer transition"
+                                onClick={() => setLightboxSrc(src)}
+                              />
+                              <p className="text-gray-400 text-[10px] mt-1">Tap to enlarge</p>
+                            </div>
+                          );
+                        })()}
                         {/* Contact info */}
                         <div className="space-y-2 min-w-[200px]">
                           <div>
@@ -1184,13 +1412,20 @@ function BusinessPortalContent() {
                             {lead.criteriaFieldsData.map((field, idx) => (
                               <div key={idx} className="min-w-[150px]">
                                 <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">{field.label}</p>
-                                {field.fieldType === "PHOTO" && field.value ? (
-                                  <img
-                                    src={field.value}
-                                    alt={field.label}
-                                    className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
-                                  />
-                                ) : field.fieldType === "BINARY" ? (
+                                {field.fieldType === "PHOTO" && field.value ? (() => {
+                                  const photoSrc = field.value.startsWith("data:") ? field.value : `data:image/jpeg;base64,${field.value}`;
+                                  return (
+                                    <div>
+                                      <img
+                                        src={photoSrc}
+                                        alt={field.label}
+                                        className="max-h-32 rounded-lg border-2 border-gray-200 hover:border-orange-400 shadow-sm cursor-pointer transition"
+                                        onClick={() => setLightboxSrc(photoSrc)}
+                                      />
+                                      <p className="text-gray-400 text-[10px] mt-1">Tap to enlarge</p>
+                                    </div>
+                                  );
+                                })() : field.fieldType === "BINARY" ? (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
                                     {field.value || "—"}
                                   </span>
