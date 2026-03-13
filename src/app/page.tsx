@@ -79,12 +79,6 @@ export default function Home() {
           ) : (
             <>
               <Link
-                href="/auth/forgot-password"
-                className="text-gray-500 hover:text-[#E77500] px-3 py-2 text-sm transition"
-              >
-                Forgot Password?
-              </Link>
-              <Link
                 href="/auth/login"
                 className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition"
               >
