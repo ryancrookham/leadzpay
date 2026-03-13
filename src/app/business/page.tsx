@@ -60,7 +60,7 @@ interface ApiLead {
   followUpDate: string | null;
 }
 
-type Tab = "dashboard" | "connections" | "pipeline" | "records" | "settings" | "invite";
+type Tab = "dashboard" | "connections" | "pipeline" | "settings" | "invite";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -105,7 +105,7 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "connections", "pipeline", "records", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "connections", "pipeline", "settings", "invite"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
@@ -113,6 +113,7 @@ function BusinessPortalContent() {
   const [pipelineSearch, setPipelineSearch] = useState("");
   const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest" | "followup" | "assigned">("newest");
   const [activityDrawer, setActivityDrawer] = useState<string | null>(null);
+  const [detailsDrawer, setDetailsDrawer] = useState<string | null>(null);
   const [activityCache, setActivityCache] = useState<Record<string, { actor_name: string; action: string; from_value: string | null; to_value: string | null; note: string | null; created_at: string }[]>>({});
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -217,7 +218,7 @@ function BusinessPortalContent() {
     const payment = searchParams.get("payment");
     if (payment === "success") {
       setPaymentNotice("Payment successful! Leads are being processed.");
-      setActiveTab("records");
+      setActiveTab("pipeline");
 
       // Call verify-payment to process lead status + trigger provider transfer
       // even if the Stripe webhook hasn't fired yet
@@ -242,7 +243,7 @@ function BusinessPortalContent() {
       setTimeout(() => setPaymentNotice(null), 8000);
     } else if (payment === "cancelled") {
       setPaymentNotice("Payment was cancelled. No charges were made.");
-      setActiveTab("records");
+      setActiveTab("pipeline");
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
       window.history.replaceState({}, "", url.toString());
@@ -401,6 +402,32 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
+  // Stripe payment handler (used by Pipeline tab)
+  const handleStripePayment = async (ids: string[]) => {
+    setBatchMarkingPaid(true);
+    try {
+      const res = await fetch("/api/stripe/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds: ids }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to create payment session");
+      }
+    } catch (e) {
+      console.error("Stripe payment failed:", e);
+      alert("Failed to create payment session. Please try again.");
+    } finally {
+      setBatchMarkingPaid(false);
+    }
+  };
+
   // Optimistic lead field update
   const updateLeadField = async (leadId: string, fields: Record<string, unknown>) => {
     // Save previous state for rollback
@@ -495,7 +522,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "connections", "pipeline", "records", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "connections", "pipeline", "settings", "invite"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -546,6 +573,37 @@ function BusinessPortalContent() {
                 </div>
               ))}
             </div>
+
+            {/* All-Time Conversion Totals */}
+            {(() => {
+              const total = dbLeads.length;
+              const contactedCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "contacted").length;
+              const quotedCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "quoted").length;
+              const soldCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "sold").length;
+              const deadCount = dbLeads.filter(l => (l.pipelineStatus || "new") === "dead").length;
+              const pct = (n: number) => total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "0%";
+              const conversionStats = [
+                { label: "Leads", color: "#ef4444", count: total, rate: "100% of all" },
+                { label: "Contacted", color: "#f97316", count: contactedCount, rate: `${pct(contactedCount)} of leads` },
+                { label: "Quoted", color: "#ca8a04", count: quotedCount, rate: `${pct(quotedCount)} of leads` },
+                { label: "Sold", color: "#16a34a", count: soldCount, rate: `${pct(soldCount)} of leads` },
+                { label: "Dead", color: "#111827", count: deadCount, rate: `${pct(deadCount)} of leads` },
+              ];
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <p className="text-gray-500 text-xs font-medium mb-3 uppercase tracking-wide">All-Time Conversion</p>
+                  <div className="grid grid-cols-5 gap-4">
+                    {conversionStats.map(s => (
+                      <div key={s.label} className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: s.color }}>{s.count}</p>
+                        <p className="text-sm font-medium text-gray-700">{s.label}</p>
+                        <p className="text-[11px] text-gray-400">{s.rate}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Pipeline Activity Chart */}
             <DashboardChart leads={dbLeads} />
@@ -672,339 +730,7 @@ function BusinessPortalContent() {
           </TabErrorBoundary>
         )}
 
-        {/* Leads Tab — Grouped by Provider */}
-        {activeTab === "records" && (() => {
-          // Group leads by provider
-          const providerGroups = (() => {
-            const groups = new Map<string, { providerId: string; providerName: string; leads: ApiLead[] }>();
-            dbLeads.forEach(lead => {
-              const key = lead.providerId;
-              if (!groups.has(key)) {
-                groups.set(key, { providerId: key, providerName: lead.providerName || "Unknown", leads: [] });
-              }
-              groups.get(key)!.leads.push(lead);
-            });
-            return Array.from(groups.values()).sort((a, b) => b.leads.length - a.leads.length);
-          })();
 
-          const selectedTotal = Array.from(selectedLeads).reduce((sum, id) => {
-            const lead = dbLeads.find(l => l.id === id);
-            return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
-          }, 0);
-
-          const handleStripePayment = async (ids: string[]) => {
-            setBatchMarkingPaid(true);
-            try {
-              const res = await fetch("/api/stripe/create-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ leadIds: ids }),
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (data.url) {
-                  window.location.href = data.url;
-                }
-              } else {
-                const data = await res.json();
-                alert(data.error || "Failed to create payment session");
-              }
-            } catch (e) {
-              console.error("Stripe payment failed:", e);
-              alert("Failed to create payment session. Please try again.");
-            } finally {
-              setBatchMarkingPaid(false);
-            }
-          };
-
-          const paidOutLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
-          const totalPaidOut = paidOutLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-          const pendingLeads = dbLeads.filter(l => l.payoutStatus === "pending");
-          const amountPending = pendingLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-          const avgPayout = paidOutLeads.length > 0 ? totalPaidOut / paidOutLeads.length : 0;
-
-          return (
-          <div className="space-y-4">
-            {/* Financial Summary */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Total Paid Out</p>
-                <p className="text-2xl font-bold text-emerald-600">${totalPaidOut.toFixed(2)}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Amount Pending</p>
-                <p className="text-2xl font-bold text-amber-600">${amountPending.toFixed(2)}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <p className="text-gray-500 text-xs mb-1">Avg Payout Per Lead</p>
-                <p className="text-2xl font-bold text-[#E8822A]">${avgPayout.toFixed(2)}</p>
-              </div>
-            </div>
-
-            {paymentNotice && (
-              <div className={`rounded-xl border p-4 shadow-sm flex items-center gap-3 ${paymentNotice.includes("successful") ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {paymentNotice.includes("successful") ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  )}
-                </svg>
-                <span className="text-sm font-medium">{paymentNotice}</span>
-                <button onClick={() => setPaymentNotice(null)} className="ml-auto text-current opacity-50 hover:opacity-100">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            )}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold text-[#E8822A]">All Leads ({dbLeads.length})</h3>
-                {selectedLeads.size > 0 && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600">{selectedLeads.size} selected &middot; <span className="font-semibold">${selectedTotal.toFixed(2)}</span></span>
-                  </div>
-                )}
-              </div>
-              {selectedLeads.size > 0 && (
-                <p className="text-gray-400 text-xs mb-4">Select leads below, then use the batch actions on each provider group to pay via Stripe.</p>
-              )}
-            </div>
-
-            {dbLeadsLoading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
-              </div>
-            ) : providerGroups.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 shadow-sm text-center text-gray-400">No leads yet</div>
-            ) : (
-              providerGroups.map(group => {
-                const pendingLeads = group.leads.filter(l => l.payoutStatus === "pending");
-                const selectedInGroup = pendingLeads.filter(l => selectedLeads.has(l.id));
-                const allPendingSelected = pendingLeads.length > 0 && selectedInGroup.length === pendingLeads.length;
-                const groupSelectedTotal = selectedInGroup.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-                const groupSelectedIds = selectedInGroup.map(l => l.id);
-
-                return (
-                  <div key={group.providerId} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                    {/* Provider group header */}
-                    <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          {pendingLeads.length > 0 && (
-                            <input
-                              type="checkbox"
-                              checked={allPendingSelected}
-                              onChange={() => {
-                                setSelectedLeads(prev => {
-                                  const next = new Set(prev);
-                                  if (allPendingSelected) {
-                                    pendingLeads.forEach(l => next.delete(l.id));
-                                  } else {
-                                    pendingLeads.forEach(l => next.add(l.id));
-                                  }
-                                  return next;
-                                });
-                              }}
-                              className="w-4 h-4 text-[#E8822A] border-gray-300 rounded cursor-pointer"
-                            />
-                          )}
-                          <div>
-                            <span className="font-semibold text-gray-800">{group.providerName}</span>
-                            <span className="text-gray-500 text-sm ml-2">
-                              {group.leads.length} lead{group.leads.length !== 1 ? "s" : ""}
-                              {pendingLeads.length > 0 && <span className="text-amber-600 ml-1">({pendingLeads.length} unpaid)</span>}
-                            </span>
-                          </div>
-                        </div>
-                        {/* Batch action buttons */}
-                        {groupSelectedIds.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleStripePayment(groupSelectedIds)}
-                              disabled={batchMarkingPaid}
-                              className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
-                            >
-                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
-                              {batchMarkingPaid ? "Processing..." : `Pay $${groupSelectedTotal.toFixed(2)} via Stripe`}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {/* Leads table */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-left text-gray-500 text-xs border-b border-gray-100">
-                            <th className="pl-6 pr-2 py-2 w-8"></th>
-                            <th className="px-2 py-2 font-medium">Date</th>
-                            <th className="px-2 py-2 font-medium">Customer</th>
-                            <th className="px-2 py-2 font-medium">Vehicle</th>
-                            <th className="px-2 py-2 font-medium">Cost</th>
-                            <th className="px-2 py-2 font-medium">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.leads.map(lead => {
-                            const breakdown = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings);
-                            const isPending = lead.payoutStatus === "pending";
-                            const isSelected = selectedLeads.has(lead.id);
-                            const isExpanded = expandedLeadId === lead.id;
-                            return (
-                              <React.Fragment key={lead.id}>
-                              <tr
-                                className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition ${isSelected ? "bg-orange-50/50" : ""} ${isExpanded ? "bg-blue-50/30" : ""}`}
-                                onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
-                              >
-                                <td className="pl-6 pr-2 py-3" onClick={e => e.stopPropagation()}>
-                                  {isPending ? (
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => {
-                                        setSelectedLeads(prev => {
-                                          const next = new Set(prev);
-                                          if (next.has(lead.id)) next.delete(lead.id); else next.add(lead.id);
-                                          return next;
-                                        });
-                                      }}
-                                      className="w-4 h-4 text-[#E8822A] border-gray-300 rounded cursor-pointer"
-                                    />
-                                  ) : null}
-                                </td>
-                                <td className="px-2 py-3 text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</td>
-                                <td className="px-2 py-3 text-gray-800 font-medium text-sm">
-                                  <span className="inline-flex items-center gap-1.5">
-                                    <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                                    {lead.customerName}
-                                  </span>
-                                </td>
-                                <td className="px-2 py-3 text-gray-600 text-sm">{[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ") || "-"}</td>
-                                <td className="px-2 py-3">
-                                  <div className="text-gray-800 font-medium text-sm">${breakdown.buyerTotal.toFixed(2)}</div>
-                                  <div className="text-gray-400 text-[10px]">${Number(lead.payoutAmount || 0).toFixed(2)} + ${breakdown.buyerFee.toFixed(2)} fee</div>
-                                </td>
-                                <td className="px-2 py-3">
-                                  {lead.payoutStatus === "completed" ? (
-                                    <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                                      Completed
-                                    </span>
-                                  ) : lead.payoutStatus === "processing" ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">
-                                      Paid to @womleads
-                                    </span>
-                                  ) : (
-                                    <span className="text-amber-600 text-xs font-medium">Unpaid</span>
-                                  )}
-                                </td>
-                              </tr>
-                              {/* Expanded detail row */}
-                              {isExpanded && (
-                                <tr className="bg-gray-50/80">
-                                  <td colSpan={6} className="px-6 py-4">
-                                    <div className="flex gap-6 flex-wrap">
-                                      {/* License photo */}
-                                      {lead.customerLicenseImage && (
-                                        <div className="shrink-0">
-                                          <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">License Photo</p>
-                                          <img
-                                            src={lead.customerLicenseImage}
-                                            alt="License"
-                                            className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
-                                          />
-                                        </div>
-                                      )}
-                                      {/* Contact info */}
-                                      <div className="space-y-2 min-w-[200px]">
-                                        <div>
-                                          <p className="text-gray-500 text-[10px] uppercase tracking-wide">Name</p>
-                                          <p className="text-gray-800 text-sm font-medium">{lead.customerName}</p>
-                                        </div>
-                                        {lead.customerEmail && (
-                                          <div>
-                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Email</p>
-                                            <a href={`mailto:${lead.customerEmail}`} className="text-blue-600 text-sm hover:underline">{lead.customerEmail}</a>
-                                          </div>
-                                        )}
-                                        {lead.customerPhone && (
-                                          <div>
-                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Phone</p>
-                                            <a href={`tel:${lead.customerPhone}`} className="text-blue-600 text-sm hover:underline">{lead.customerPhone}</a>
-                                          </div>
-                                        )}
-                                      </div>
-                                      {/* Optional fields */}
-                                      <div className="space-y-2 min-w-[150px]">
-                                        {lead.customerMaritalStatus && (
-                                          <div>
-                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Marital Status</p>
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize">
-                                              {lead.customerMaritalStatus}
-                                            </span>
-                                          </div>
-                                        )}
-                                        {lead.customerHasInsurance && (
-                                          <div>
-                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Currently Insured?</p>
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.customerHasInsurance === "yes" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                                              {lead.customerHasInsurance === "yes" ? "Yes" : "No"}
-                                            </span>
-                                          </div>
-                                        )}
-                                        {lead.customerState && (
-                                          <div>
-                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">State</p>
-                                            <p className="text-gray-800 text-sm">{lead.customerState}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {/* Criteria Fields Data */}
-                                    {lead.criteriaFieldsData && lead.criteriaFieldsData.length > 0 && (
-                                      <div className="mt-4 pt-4 border-t border-gray-200">
-                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-3">Custom Lead Fields</p>
-                                        <div className="flex gap-6 flex-wrap">
-                                          {lead.criteriaFieldsData.map((field, idx) => (
-                                            <div key={idx} className="min-w-[150px]">
-                                              <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">{field.label}</p>
-                                              {field.fieldType === "PHOTO" && field.value ? (
-                                                <img
-                                                  src={field.value}
-                                                  alt={field.label}
-                                                  className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
-                                                />
-                                              ) : field.fieldType === "BINARY" ? (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                                  {field.value || "—"}
-                                                </span>
-                                              ) : (
-                                                <p className="text-gray-800 text-sm">{field.value || "—"}</p>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {!lead.customerEmail && !lead.customerPhone && !lead.customerLicenseImage && !lead.customerMaritalStatus && !lead.customerHasInsurance && (!lead.criteriaFieldsData || lead.criteriaFieldsData.length === 0) && (
-                                      <p className="text-gray-400 text-sm italic">No additional details available for this lead.</p>
-                                    )}
-                                  </td>
-                                </tr>
-                              )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-          );
-        })()}
 
         {/* Pipeline Tab */}
         {activeTab === "pipeline" && (() => {
@@ -1065,14 +791,101 @@ function BusinessPortalContent() {
           const progressSteps = ["new", "contacted", "quoted", "sold"] as const;
           const stepIdx = (s: string) => progressSteps.indexOf(s as typeof progressSteps[number]);
 
+          const paidOutLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
+          const totalPaidOut = paidOutLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const pendingLeads = dbLeads.filter(l => l.payoutStatus === "pending");
+          const amountPending = pendingLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const avgPayout = paidOutLeads.length > 0 ? totalPaidOut / paidOutLeads.length : 0;
+
+          const stageLabels: Record<string, string> = { new: "Lead", contacted: "Contacted", quoted: "Quoted", sold: "Sold", dead: "Dead" };
+
           return (
           <div className="space-y-4">
+            {/* Financial Summary */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Total Paid Out</p>
+                <p className="text-2xl font-bold text-emerald-600">${totalPaidOut.toFixed(2)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Amount Pending</p>
+                <p className="text-2xl font-bold text-amber-600">${amountPending.toFixed(2)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <p className="text-gray-500 text-xs mb-1">Avg Payout Per Lead</p>
+                <p className="text-2xl font-bold text-[#E8822A]">${avgPayout.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Payment Notice */}
+            {paymentNotice && (
+              <div className={`rounded-xl border p-4 shadow-sm flex items-center gap-3 ${paymentNotice.includes("successful") ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {paymentNotice.includes("successful") ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  )}
+                </svg>
+                <span className="text-sm font-medium">{paymentNotice}</span>
+                <button onClick={() => setPaymentNotice(null)} className="ml-auto text-current opacity-50 hover:opacity-100">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+
+            {/* Pending Payment Bar */}
+            {pendingLeads.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+                <span className="text-amber-800 text-sm font-medium">
+                  {pendingLeads.length} unpaid lead{pendingLeads.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} pending
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const pendingIds = pendingLeads.map(l => l.id);
+                      setSelectedLeads(prev => {
+                        const next = new Set(prev);
+                        const allSelected = pendingIds.every(id => next.has(id));
+                        if (allSelected) {
+                          pendingIds.forEach(id => next.delete(id));
+                        } else {
+                          pendingIds.forEach(id => next.add(id));
+                        }
+                        return next;
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
+                  >
+                    {pendingLeads.every(l => selectedLeads.has(l.id)) ? "Deselect All Pending" : "Select All Pending"}
+                  </button>
+                  {selectedLeads.size > 0 && (() => {
+                    const selectedPendingIds = pendingLeads.filter(l => selectedLeads.has(l.id)).map(l => l.id);
+                    const selectedTotal = selectedPendingIds.reduce((sum, id) => {
+                      const lead = dbLeads.find(l => l.id === id);
+                      return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
+                    }, 0);
+                    return selectedPendingIds.length > 0 ? (
+                      <button
+                        onClick={() => handleStripePayment(selectedPendingIds)}
+                        disabled={batchMarkingPaid}
+                        className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                        {batchMarkingPaid ? "Processing..." : `Pay $${selectedTotal.toFixed(2)} via Stripe`}
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-xl font-bold text-white">Pipeline</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Filter pills */}
-                {[{ key: "all", label: "All" }, ...pipeStages.map(s => ({ key: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))].map(f => (
+                {[{ key: "all", label: "All" }, ...pipeStages.map(s => ({ key: s, label: stageLabels[s] || s }))].map(f => (
                   <button
                     key={f.key}
                     onClick={() => setPipelineFilter(f.key)}
@@ -1112,7 +925,7 @@ function BusinessPortalContent() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${pipeColors[s].bg} ${pipeColors[s].text}`}
                 >
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: pipeColors[s].dot }} />
-                  {s.charAt(0).toUpperCase() + s.slice(1)}: {stageCounts[s]}
+                  {stageLabels[s] || s}: {stageCounts[s]}
                 </button>
               ))}
             </div>
@@ -1146,6 +959,15 @@ function BusinessPortalContent() {
                             </>
                           )}
                         </div>
+                        {lead.customerEmail && (
+                          <a href={`mailto:${lead.customerEmail}`} className="text-blue-600 text-sm hover:underline block mt-0.5">{lead.customerEmail}</a>
+                        )}
+                        {(lead.vehicleYear || lead.vehicleMake || lead.vehicleModel) && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ")}
+                            {lead.customerState && <span> &middot; {lead.customerState}</span>}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-400 mt-1">{relTime(lead.submittedAt)} &middot; via {lead.providerName || "Unknown"}</p>
                       </div>
 
@@ -1270,21 +1092,148 @@ function BusinessPortalContent() {
                       >Add Note</button>
                     </div>
 
-                    {/* Activity toggle */}
-                    <button
-                      onClick={() => {
-                        const nextId = isExpanded ? null : lead.id;
-                        setActivityDrawer(nextId);
-                        if (nextId) fetchActivity(nextId);
-                      }}
-                      className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition"
-                    >
-                      <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      Activity
-                    </button>
+                    {/* Details & Activity toggles */}
+                    <div className="mt-2 flex items-center gap-4">
+                      <button
+                        onClick={() => setDetailsDrawer(detailsDrawer === lead.id ? null : lead.id)}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition"
+                      >
+                        <svg className={`w-3 h-3 transition-transform ${detailsDrawer === lead.id ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          const nextId = isExpanded ? null : lead.id;
+                          setActivityDrawer(nextId);
+                          if (nextId) fetchActivity(nextId);
+                        }}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition"
+                      >
+                        <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Activity
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Details Drawer */}
+                  {detailsDrawer === lead.id && (
+                    <div className="bg-gray-50 border-t border-gray-200 px-4 py-4">
+                      <div className="flex gap-6 flex-wrap">
+                        {/* License photo */}
+                        {lead.customerLicenseImage && (
+                          <div className="shrink-0">
+                            <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">License Photo</p>
+                            <img
+                              src={lead.customerLicenseImage}
+                              alt="License"
+                              className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
+                            />
+                          </div>
+                        )}
+                        {/* Contact info */}
+                        <div className="space-y-2 min-w-[200px]">
+                          <div>
+                            <p className="text-gray-500 text-[10px] uppercase tracking-wide">Name</p>
+                            <p className="text-gray-800 text-sm font-medium">{lead.customerName}</p>
+                          </div>
+                          {lead.customerEmail && (
+                            <div>
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Email</p>
+                              <a href={`mailto:${lead.customerEmail}`} className="text-blue-600 text-sm hover:underline">{lead.customerEmail}</a>
+                            </div>
+                          )}
+                          {lead.customerPhone && (
+                            <div>
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Phone</p>
+                              <a href={`tel:${lead.customerPhone}`} className="text-blue-600 text-sm hover:underline">{lead.customerPhone}</a>
+                            </div>
+                          )}
+                        </div>
+                        {/* Optional fields */}
+                        <div className="space-y-2 min-w-[150px]">
+                          {lead.customerMaritalStatus && (
+                            <div>
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Marital Status</p>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize">
+                                {lead.customerMaritalStatus}
+                              </span>
+                            </div>
+                          )}
+                          {lead.customerHasInsurance && (
+                            <div>
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide">Currently Insured?</p>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.customerHasInsurance === "yes" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                {lead.customerHasInsurance === "yes" ? "Yes" : "No"}
+                              </span>
+                            </div>
+                          )}
+                          {lead.customerState && (
+                            <div>
+                              <p className="text-gray-500 text-[10px] uppercase tracking-wide">State</p>
+                              <p className="text-gray-800 text-sm">{lead.customerState}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Criteria Fields Data */}
+                      {lead.criteriaFieldsData && lead.criteriaFieldsData.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-3">Custom Lead Fields</p>
+                          <div className="flex gap-6 flex-wrap">
+                            {lead.criteriaFieldsData.map((field, idx) => (
+                              <div key={idx} className="min-w-[150px]">
+                                <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">{field.label}</p>
+                                {field.fieldType === "PHOTO" && field.value ? (
+                                  <img
+                                    src={field.value}
+                                    alt={field.label}
+                                    className="max-h-36 rounded-lg border border-gray-200 shadow-sm"
+                                  />
+                                ) : field.fieldType === "BINARY" ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                    {field.value || "—"}
+                                  </span>
+                                ) : (
+                                  <p className="text-gray-800 text-sm">{field.value || "—"}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Payout Status */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-2">Payout</p>
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-800 text-sm font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</span>
+                          {lead.payoutStatus === "completed" ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Completed
+                            </span>
+                          ) : lead.payoutStatus === "processing" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">Processing</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-amber-600 text-xs font-medium">Unpaid</span>
+                              <button
+                                onClick={() => handleStripePayment([lead.id])}
+                                disabled={batchMarkingPaid}
+                                className="inline-flex items-center gap-1 text-white bg-[#635BFF] hover:bg-[#5248e5] px-2.5 py-1 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                                {batchMarkingPaid ? "..." : "Pay via Stripe"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Activity Drawer */}
                   {isExpanded && (
