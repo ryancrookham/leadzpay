@@ -142,6 +142,8 @@ export interface DbLead {
   provider_venmo?: string | null;
   buyer_name?: string | null;
   buyer_business_name?: string | null;
+  provider_email?: string | null;
+  provider_phone?: string | null;
 }
 
 export interface DbTransaction {
@@ -797,7 +799,8 @@ export async function getLeadsByProviderId(providerId: string): Promise<DbLead[]
 export async function getLeadsByBuyerId(buyerId: string): Promise<DbLead[]> {
   const sql = getSql();
   const result = await sql`
-    SELECT l.*, u.display_name as provider_name, u.payout_venmo as provider_venmo
+    SELECT l.*, u.display_name as provider_name, u.payout_venmo as provider_venmo,
+           u.email as provider_email, u.phone as provider_phone
     FROM leads l
     LEFT JOIN users u ON l.provider_id = u.id
     WHERE l.buyer_id = ${buyerId}

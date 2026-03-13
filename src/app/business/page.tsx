@@ -38,6 +38,8 @@ interface ApiLead {
   payoutCompletedAt: string | null;
   submittedAt: string;
   providerName: string | null;
+  providerEmail: string | null;
+  providerPhone: string | null;
   buyerName: string | null;
   buyerBusinessName: string | null;
   criteriaFieldsData?: {
@@ -111,6 +113,8 @@ function BusinessPortalContent() {
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
   const [pipelineNotesLocal, setPipelineNotesLocal] = useState<Record<string, string>>({});
   const [pipelineSearch, setPipelineSearch] = useState("");
+  const [providerSearch, setProviderSearch] = useState("");
+  const [providerInfoDrawer, setProviderInfoDrawer] = useState<string | null>(null);
   const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest">("newest");
   const [activityDrawer, setActivityDrawer] = useState<string | null>(null);
   const [detailsDrawer, setDetailsDrawer] = useState<string | null>(null);
@@ -972,15 +976,24 @@ function BusinessPortalContent() {
             ? dbLeads
             : dbLeads.filter(l => (l.pipelineStatus || "new") === pipelineFilter);
 
-          // Search
+          // Search leads
           if (pipelineSearch.trim()) {
             const q = pipelineSearch.toLowerCase();
             filtered = filtered.filter(l =>
               l.customerName.toLowerCase().includes(q) ||
               (l.customerPhone || "").toLowerCase().includes(q) ||
               (l.customerEmail || "").toLowerCase().includes(q) ||
-              (l.providerName || "").toLowerCase().includes(q) ||
               (l.assignedTo || "").toLowerCase().includes(q)
+            );
+          }
+
+          // Search providers
+          if (providerSearch.trim()) {
+            const pq = providerSearch.toLowerCase();
+            filtered = filtered.filter(l =>
+              (l.providerName || "").toLowerCase().includes(pq) ||
+              (l.providerEmail || "").toLowerCase().includes(pq) ||
+              (l.providerPhone || "").toLowerCase().includes(pq)
             );
           }
 
@@ -1117,13 +1130,21 @@ function BusinessPortalContent() {
                   <option value="newest" className="text-gray-800">Newest</option>
                   <option value="oldest" className="text-gray-800">Oldest</option>
                 </select>
-                {/* Search */}
+                {/* Search leads */}
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search leads..."
                   value={pipelineSearch}
                   onChange={e => setPipelineSearch(e.target.value)}
                   className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-36"
+                />
+                {/* Search providers */}
+                <input
+                  type="text"
+                  placeholder="Search providers..."
+                  value={providerSearch}
+                  onChange={e => setProviderSearch(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-40"
                 />
               </div>
             </div>
@@ -1162,26 +1183,37 @@ function BusinessPortalContent() {
                     <div className="flex items-start gap-4 flex-wrap">
                       {/* Left: Customer Info */}
                       <div className="flex-1 min-w-[180px]">
-                        <p className="font-semibold text-gray-800">{lead.customerName}</p>
-                        <div className="flex gap-3 mt-1 text-sm">
+                        <p className="text-sm">
+                          <span className="font-semibold text-gray-800">{lead.customerName}</span>
                           {lead.customerPhone && (
                             <>
+                              <span className="text-gray-400">: </span>
                               <a href={`tel:${lead.customerPhone}`} className="text-blue-600 hover:underline">{lead.customerPhone}</a>
-                              <a href={`sms:${lead.customerPhone}`} className="text-green-600 hover:underline text-xs">SMS</a>
                             </>
                           )}
-                        </div>
-                        {lead.customerEmail && (
-                          <a href={`mailto:${lead.customerEmail}`} className="text-blue-600 text-sm hover:underline block mt-0.5">{lead.customerEmail}</a>
-                        )}
-                        {(lead.vehicleYear || lead.vehicleMake || lead.vehicleModel) && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            {[lead.vehicleYear, lead.vehicleMake, lead.vehicleModel].filter(Boolean).join(" ")}
-                            {lead.customerState && <span> &middot; {lead.customerState}</span>}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-1">{relTime(lead.submittedAt)} &middot; via {lead.providerName || "Unknown"}</p>
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{relTime(lead.submittedAt)}</p>
                       </div>
+
+                      {/* Pending payment checkbox */}
+                      {lead.payoutStatus === "pending" && (
+                        <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedLeads.has(lead.id)}
+                            onChange={() => {
+                              setSelectedLeads(prev => {
+                                const next = new Set(prev);
+                                if (next.has(lead.id)) next.delete(lead.id);
+                                else next.add(lead.id);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-[#E8822A] focus:ring-[#E8822A]"
+                          />
+                          <span className="text-xs text-amber-600 font-medium">Pending</span>
+                        </label>
+                      )}
 
                       {/* Middle: Progress Bar */}
                       <div className="flex-1 min-w-[200px] flex items-center gap-1 pt-1">
@@ -1312,7 +1344,7 @@ function BusinessPortalContent() {
                       >Add Note</button>
                     </div>
 
-                    {/* Details & Activity toggles */}
+                    {/* Lead Info / Provider Info / Activity toggles */}
                     <div className="mt-2 flex items-center gap-4">
                       <button
                         onClick={() => setDetailsDrawer(detailsDrawer === lead.id ? null : lead.id)}
@@ -1321,7 +1353,16 @@ function BusinessPortalContent() {
                         <svg className={`w-3 h-3 transition-transform ${detailsDrawer === lead.id ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
-                        Details
+                        Lead Info
+                      </button>
+                      <button
+                        onClick={() => setProviderInfoDrawer(providerInfoDrawer === lead.id ? null : lead.id)}
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-600 transition"
+                      >
+                        <svg className={`w-3 h-3 transition-transform ${providerInfoDrawer === lead.id ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Provider Info
                       </button>
                       <button
                         onClick={() => {
@@ -1462,6 +1503,39 @@ function BusinessPortalContent() {
                               </button>
                             </div>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Provider Info Drawer */}
+                  {providerInfoDrawer === lead.id && (
+                    <div className="bg-blue-50 border-t border-blue-200 px-4 py-4">
+                      <p className="text-blue-700 text-[10px] uppercase tracking-wide font-semibold mb-3">Provider Info</p>
+                      <div className="flex gap-6 flex-wrap">
+                        <div className="space-y-2 min-w-[150px]">
+                          <div>
+                            <p className="text-blue-500 text-[10px] uppercase tracking-wide">Name</p>
+                            <p className="text-gray-800 text-sm font-medium">{lead.providerName || "Unknown"}</p>
+                          </div>
+                          {lead.providerEmail && (
+                            <div>
+                              <p className="text-blue-500 text-[10px] uppercase tracking-wide">Email</p>
+                              <a href={`mailto:${lead.providerEmail}`} className="text-blue-600 text-sm hover:underline">{lead.providerEmail}</a>
+                            </div>
+                          )}
+                          {lead.providerPhone && (
+                            <div>
+                              <p className="text-blue-500 text-[10px] uppercase tracking-wide">Phone</p>
+                              <a href={`tel:${lead.providerPhone}`} className="text-blue-600 text-sm hover:underline">{lead.providerPhone}</a>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2 min-w-[150px]">
+                          <div>
+                            <p className="text-blue-500 text-[10px] uppercase tracking-wide">Submitted</p>
+                            <p className="text-gray-800 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
+                          </div>
                         </div>
                       </div>
                     </div>

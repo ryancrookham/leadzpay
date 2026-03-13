@@ -113,6 +113,8 @@ export async function GET() {
         payoutCompletedAt: lead.payout_completed_at,
         submittedAt: lead.submitted_at,
         providerName: lead.provider_name || null,
+        providerEmail: lead.provider_email || null,
+        providerPhone: lead.provider_phone || null,
         buyerName: lead.buyer_name || null,
         buyerBusinessName: lead.buyer_business_name || null,
         criteriaFieldsData: lead.criteria_fields_data,
