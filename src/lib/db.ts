@@ -714,21 +714,35 @@ export async function updateSmsAlertSettings(
   `;
 }
 
-export async function getLeaderboardData(businessId: string): Promise<
-  { actor_name: string; to_value: string; count: number }[]
-> {
+export async function getLeaderboardData(businessId: string): Promise<{
+  rows: { actor_name: string; to_value: string; count: number }[];
+  uniqueLeads: { actor_name: string; unique_leads: number }[];
+}> {
   const sql = getSql();
-  const result = await sql`
-    SELECT actor_name, to_value, COUNT(*)::int as count
-    FROM lead_activity_log
-    WHERE business_id = ${businessId}
-      AND action = 'status_change'
-      AND to_value IN ('contacted', 'quoted', 'sold', 'dead')
-      AND actor_name NOT IN ('Unknown', '')
-    GROUP BY actor_name, to_value
-    ORDER BY actor_name
-  `;
-  return result as unknown as { actor_name: string; to_value: string; count: number }[];
+  const [rows, uniqueLeads] = await Promise.all([
+    sql`
+      SELECT actor_name, to_value, COUNT(*)::int as count
+      FROM lead_activity_log
+      WHERE business_id = ${businessId}
+        AND action = 'status_change'
+        AND to_value IN ('contacted', 'quoted', 'sold', 'dead')
+        AND actor_name NOT IN ('Unknown', '')
+      GROUP BY actor_name, to_value
+      ORDER BY actor_name
+    `,
+    sql`
+      SELECT actor_name, COUNT(DISTINCT lead_id)::int as unique_leads
+      FROM lead_activity_log
+      WHERE business_id = ${businessId}
+        AND action = 'status_change'
+        AND actor_name NOT IN ('Unknown', '')
+      GROUP BY actor_name
+    `,
+  ]);
+  return {
+    rows: rows as unknown as { actor_name: string; to_value: string; count: number }[],
+    uniqueLeads: uniqueLeads as unknown as { actor_name: string; unique_leads: number }[],
+  };
 }
 
 function normalise(value: string | undefined | null): string {

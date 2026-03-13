@@ -1395,7 +1395,10 @@ function BusinessPortalContent() {
                         {/* Stage select */}
                         <select
                           value={currentStatus}
-                          onChange={e => updateLeadField(lead.id, { pipeline_status: e.target.value })}
+                          onChange={e => updateLeadField(lead.id, {
+                            pipeline_status: e.target.value,
+                            ...(lead.assignedTo ? { actor_name: lead.assignedTo } : {}),
+                          })}
                           className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
                         >
                           {pipeStages.map(s => (
@@ -1434,16 +1437,19 @@ function BusinessPortalContent() {
                         )}
 
                         {/* Assigned to */}
-                        <input
-                          type="text"
-                          placeholder="Assigned to..."
-                          defaultValue={lead.assignedTo || ""}
-                          onBlur={e => {
-                            const val = e.target.value.trim() || null;
-                            if (val !== (lead.assignedTo || null)) updateLeadField(lead.id, { assigned_to: val });
+                        <select
+                          value={lead.assignedTo || ""}
+                          onChange={e => {
+                            const val = e.target.value || null;
+                            updateLeadField(lead.id, { assigned_to: val });
                           }}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
-                        />
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A] bg-white"
+                        >
+                          <option value="">Assigned to...</option>
+                          {smsAgents.map(a => (
+                            <option key={a.name} value={a.name}>{a.name}</option>
+                          ))}
+                        </select>
 
                         {/* Follow-up date */}
                         <input
@@ -3891,13 +3897,17 @@ function AnalyticsTab({
 // Leaderboard Tab
 function LeaderboardTab() {
   const [rows, setRows] = useState<{ actor_name: string; to_value: string; count: number }[]>([]);
+  const [uniqueLeads, setUniqueLeads] = useState<{ actor_name: string; unique_leads: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/business/leaderboard")
       .then(r => r.json())
       .then(data => {
-        if (data.success) setRows(data.rows);
+        if (data.success) {
+          setRows(data.rows);
+          setUniqueLeads(data.uniqueLeads ?? []);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -3913,8 +3923,10 @@ function LeaderboardTab() {
     const sold = get("sold");
     const dead = get("dead");
     const total = contacted + quoted + sold + dead;
-    const convRate = total > 0 ? ((sold / total) * 100).toFixed(1) : "0.0";
-    return { name, contacted, quoted, sold, dead, total, convRate };
+    const leadsInteracted = uniqueLeads.find(u => u.actor_name === name)?.unique_leads ?? total;
+    // Conversion = sales completed / unique leads interacted with
+    const convRate = leadsInteracted > 0 ? ((sold / leadsInteracted) * 100).toFixed(1) : "0.0";
+    return { name, contacted, quoted, sold, dead, total, leadsInteracted, convRate };
   }).sort((a, b) => Number(b.convRate) - Number(a.convRate));
 
   const medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
@@ -3932,7 +3944,7 @@ function LeaderboardTab() {
 
       {!loading && agents.length === 0 && (
         <div className="bg-white rounded-xl p-8 text-center text-gray-400">
-          No activity yet. Add named agents in Settings and start logging transitions to see rankings here.
+          No activity yet. Assign agents to leads in the Pipeline and move them through stages to see rankings here.
         </div>
       )}
 
@@ -3942,8 +3954,10 @@ function LeaderboardTab() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">{medals[idx] ?? `#${idx + 1}`}</span>
               <div>
-                <p className="font-bold text-gray-900 text-base">{agent.name}</p>
-                <p className="text-xs text-gray-400">{agent.total} total actions</p>
+                <p className="font-bold text-gray-900 text-lg">{agent.name}</p>
+                <p className="text-xs text-gray-400">
+                  {agent.total} total actions &middot; {agent.leadsInteracted} leads interacted with
+                </p>
               </div>
             </div>
             <div className="text-right">
