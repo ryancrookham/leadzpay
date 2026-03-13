@@ -27,7 +27,7 @@ export async function GET() {
 /**
  * POST /api/business/sms-alerts
  * Updates SMS alert settings for the authenticated buyer.
- * Body: { smsAlertsEnabled: boolean, smsAlertPhone1?: string, smsAlertPhone2?: string }
+ * Body: { smsAlertsEnabled: boolean, leadChasers: { name: string; phone: string }[] }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -40,17 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { smsAlertsEnabled, smsAlertPhone1, smsAlertPhone2, smsAgentName1, smsAgentName2 } = body as {
+    const { smsAlertsEnabled, leadChasers } = body as {
       smsAlertsEnabled?: boolean;
-      smsAlertPhone1?: string;
-      smsAlertPhone2?: string;
-      smsAgentName1?: string;
-      smsAgentName2?: string;
+      leadChasers?: { name: string; phone: string }[];
     };
 
-    // Basic phone validation helper
-    function validatePhone(phone: string | undefined): string | null {
-      if (!phone || !phone.trim()) return null;
+    function validatePhone(phone: string): string {
       const cleaned = phone.replace(/\D/g, "");
       if (cleaned.length < 10 || cleaned.length > 11) {
         throw new Error(`Invalid phone number: ${phone}`);
@@ -58,15 +53,13 @@ export async function POST(request: NextRequest) {
       return cleaned.length === 10 ? `+1${cleaned}` : `+${cleaned}`;
     }
 
-    const normalizedPhone1 = validatePhone(smsAlertPhone1);
-    const normalizedPhone2 = validatePhone(smsAlertPhone2);
+    const normalizedChasers = (leadChasers ?? [])
+      .filter(c => c.name?.trim() && c.phone?.trim())
+      .map(c => ({ name: c.name.trim(), phone: validatePhone(c.phone) }));
 
     await updateSmsAlertSettings(session.user.id, {
       smsAlertsEnabled: smsAlertsEnabled ?? false,
-      smsAlertPhone1: normalizedPhone1,
-      smsAlertPhone2: normalizedPhone2,
-      smsAgentName1: smsAgentName1 ?? null,
-      smsAgentName2: smsAgentName2 ?? null,
+      leadChasers: normalizedChasers,
     });
 
     return NextResponse.json({ success: true });

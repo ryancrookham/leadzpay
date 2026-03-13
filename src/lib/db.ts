@@ -664,54 +664,96 @@ export async function ensureSmsAlertColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_alert_phone2 TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_1_name TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_2_name TEXT`;
+  await ensureLeadChasersTable();
+}
+
+export async function ensureLeadChasersTable(): Promise<void> {
+  const sql = getSql();
+  await sql`
+    CREATE TABLE IF NOT EXISTS business_lead_chasers (
+      id SERIAL PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      position INT NOT NULL DEFAULT 0
+    )
+  `;
 }
 
 export async function getSmsAlertSettings(userId: string): Promise<{
   smsAlertsEnabled: boolean;
-  smsAlertPhone1: string | null;
-  smsAlertPhone2: string | null;
-  smsAgentName1: string | null;
-  smsAgentName2: string | null;
+  leadChasers: { name: string; phone: string }[];
 }> {
   await ensureSmsAlertColumns();
   const sql = getSql();
-  const result = await sql`
-    SELECT sms_alerts_enabled, sms_alert_phone1, sms_alert_phone2,
-           sms_agent_1_name, sms_agent_2_name
-    FROM users WHERE id = ${userId} LIMIT 1
+
+  const userRow = await sql`
+    SELECT sms_alerts_enabled FROM users WHERE id = ${userId} LIMIT 1
   `;
-  const row = result[0] as any;
-  return {
-    smsAlertsEnabled: row?.sms_alerts_enabled ?? false,
-    smsAlertPhone1: row?.sms_alert_phone1 ?? null,
-    smsAlertPhone2: row?.sms_alert_phone2 ?? null,
-    smsAgentName1: row?.sms_agent_1_name ?? null,
-    smsAgentName2: row?.sms_agent_2_name ?? null,
-  };
+  const smsAlertsEnabled = (userRow[0] as any)?.sms_alerts_enabled ?? false;
+
+  const chasersResult = await sql`
+    SELECT name, phone FROM business_lead_chasers
+    WHERE business_id = ${userId}
+    ORDER BY position ASC, id ASC
+  `;
+
+  let leadChasers: { name: string; phone: string }[] = chasersResult.map((r: any) => ({
+    name: r.name,
+    phone: r.phone,
+  }));
+
+  // Auto-migrate from old columns if new table is empty
+  if (leadChasers.length === 0) {
+    const oldRow = await sql`
+      SELECT sms_alert_phone1, sms_alert_phone2, sms_agent_1_name, sms_agent_2_name
+      FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    const old = oldRow[0] as any;
+    const migrated: { name: string; phone: string }[] = [];
+    if (old?.sms_agent_1_name && old?.sms_alert_phone1) {
+      migrated.push({ name: old.sms_agent_1_name, phone: old.sms_alert_phone1 });
+    }
+    if (old?.sms_agent_2_name && old?.sms_alert_phone2) {
+      migrated.push({ name: old.sms_agent_2_name, phone: old.sms_alert_phone2 });
+    }
+    if (migrated.length > 0) {
+      for (let i = 0; i < migrated.length; i++) {
+        await sql`
+          INSERT INTO business_lead_chasers (business_id, name, phone, position)
+          VALUES (${userId}, ${migrated[i].name}, ${migrated[i].phone}, ${i})
+        `;
+      }
+      leadChasers = migrated;
+    }
+  }
+
+  return { smsAlertsEnabled, leadChasers };
 }
 
 export async function updateSmsAlertSettings(
   userId: string,
   settings: {
     smsAlertsEnabled: boolean;
-    smsAlertPhone1: string | null;
-    smsAlertPhone2: string | null;
-    smsAgentName1?: string | null;
-    smsAgentName2?: string | null;
+    leadChasers: { name: string; phone: string }[];
   }
 ): Promise<void> {
   await ensureSmsAlertColumns();
   const sql = getSql();
+
   await sql`
-    UPDATE users SET
-      sms_alerts_enabled = ${settings.smsAlertsEnabled},
-      sms_alert_phone1 = ${settings.smsAlertPhone1},
-      sms_alert_phone2 = ${settings.smsAlertPhone2},
-      sms_agent_1_name = ${settings.smsAgentName1 ?? null},
-      sms_agent_2_name = ${settings.smsAgentName2 ?? null},
-      updated_at = NOW()
+    UPDATE users SET sms_alerts_enabled = ${settings.smsAlertsEnabled}, updated_at = NOW()
     WHERE id = ${userId}
   `;
+
+  await sql`DELETE FROM business_lead_chasers WHERE business_id = ${userId}`;
+  for (let i = 0; i < settings.leadChasers.length; i++) {
+    const c = settings.leadChasers[i];
+    await sql`
+      INSERT INTO business_lead_chasers (business_id, name, phone, position)
+      VALUES (${userId}, ${c.name}, ${c.phone}, ${i})
+    `;
+  }
 }
 
 export async function getLeaderboardData(businessId: string): Promise<{

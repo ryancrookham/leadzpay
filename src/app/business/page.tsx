@@ -237,20 +237,18 @@ function BusinessPortalContent() {
       .catch(() => {});
   }, []);
 
-  // Load SMS agents for attribution
+  // Load SMS agents (lead chasers) for attribution
   useEffect(() => {
     fetch("/api/business/sms-alerts")
       .then(r => r.json())
       .then(data => {
-        if (data.success) {
-          const agents: { name: string; phone: string }[] = [];
-          if (data.smsAgentName1 && data.smsAlertPhone1) {
-            agents.push({ name: data.smsAgentName1, phone: data.smsAlertPhone1.replace(/^\+1/, "") });
-          }
-          if (data.smsAgentName2 && data.smsAlertPhone2) {
-            agents.push({ name: data.smsAgentName2, phone: data.smsAlertPhone2.replace(/^\+1/, "") });
-          }
-          setSmsAgents(agents);
+        if (data.success && data.leadChasers && Array.isArray(data.leadChasers)) {
+          setSmsAgents(
+            data.leadChasers.map((c: { name: string; phone: string }) => ({
+              name: c.name,
+              phone: c.phone.replace(/^\+1/, ""),
+            }))
+          );
         }
       })
       .catch(() => {});
@@ -4027,10 +4025,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
   // SMS Alert state
   const [smsEnabled, setSmsEnabled] = useState(false);
-  const [smsPhone1, setSmsPhone1] = useState("");
-  const [smsPhone2, setSmsPhone2] = useState("");
-  const [smsName1, setSmsName1] = useState("");
-  const [smsName2, setSmsName2] = useState("");
+  const [leadChasers, setLeadChasers] = useState<{ name: string; phone: string }[]>([{ name: "", phone: "" }]);
   const [smsSaving, setSmsSaving] = useState(false);
   const [smsSaved, setSmsSaved] = useState(false);
   const [smsError, setSmsError] = useState("");
@@ -4056,12 +4051,16 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         if (res.ok) {
           const data = await res.json();
           setSmsEnabled(data.smsAlertsEnabled ?? false);
-          // Display stored E.164 numbers in friendly format (strip +1)
-          const fmt = (p: string | null) => p ? p.replace(/^\+1/, "") : "";
-          setSmsPhone1(fmt(data.smsAlertPhone1));
-          setSmsPhone2(fmt(data.smsAlertPhone2));
-          setSmsName1(data.smsAgentName1 ?? "");
-          setSmsName2(data.smsAgentName2 ?? "");
+          if (data.leadChasers && data.leadChasers.length > 0) {
+            setLeadChasers(
+              data.leadChasers.map((c: { name: string; phone: string }) => ({
+                name: c.name,
+                phone: c.phone.replace(/^\+1/, ""),
+              }))
+            );
+          } else {
+            setLeadChasers([{ name: "", phone: "" }]);
+          }
         }
       } catch (e) {
         console.error("Failed to load SMS settings:", e);
@@ -4136,10 +4135,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           smsAlertsEnabled: smsEnabled,
-          smsAlertPhone1: smsPhone1 || null,
-          smsAlertPhone2: smsPhone2 || null,
-          smsAgentName1: smsName1 || null,
-          smsAgentName2: smsName2 || null,
+          leadChasers: leadChasers.filter(c => c.name.trim() && c.phone.trim()),
         }),
       });
       const data = await res.json();
@@ -4306,7 +4302,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             <div>
               <h4 className="text-sm font-semibold text-gray-800">Lead Alert SMS</h4>
               <p className="text-gray-500 text-xs mt-0.5">
-                Get a text the moment a provider submits a new lead. Up to 2 numbers.
+                Get a text the moment a provider submits a new lead. Add your full team — no limit.
               </p>
             </div>
             {/* Toggle switch */}
@@ -4328,46 +4324,52 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
           {smsEnabled && (
             <div className="mt-4 space-y-3">
-              {/* Agent 1 */}
-              <div className="space-y-1">
-                <label className="block text-gray-700 text-xs font-medium">Agent 1</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Name (e.g. Mike)"
-                    value={smsName1}
-                    onChange={e => setSmsName1(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="(215) 555-0100"
-                    value={smsPhone1}
-                    onChange={e => setSmsPhone1(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                  />
+              {leadChasers.map((chaser, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-gray-700 text-xs font-medium">
+                      Lead Chaser {idx + 1}
+                    </label>
+                    {leadChasers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setLeadChasers(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-red-400 hover:text-red-600 text-xs transition"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Name (e.g. Hunter)"
+                      value={chaser.name}
+                      onChange={e => setLeadChasers(prev => prev.map((c, i) => i === idx ? { ...c, name: e.target.value } : c))}
+                      className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="(215) 555-0100"
+                      value={chaser.phone}
+                      onChange={e => setLeadChasers(prev => prev.map((c, i) => i === idx ? { ...c, phone: e.target.value } : c))}
+                      className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
+                    />
+                  </div>
                 </div>
-              </div>
-              {/* Agent 2 */}
-              <div className="space-y-1">
-                <label className="block text-gray-700 text-xs font-medium">Agent 2 <span className="text-gray-400">(optional)</span></label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Name (e.g. Sarah)"
-                    value={smsName2}
-                    onChange={e => setSmsName2(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="(215) 555-0101"
-                    value={smsPhone2}
-                    onChange={e => setSmsPhone2(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 focus:border-[#E8822A] focus:outline-none transition text-sm"
-                  />
-                </div>
-              </div>
+              ))}
+
+              {/* Add Lead Chaser button */}
+              <button
+                type="button"
+                onClick={() => setLeadChasers(prev => [...prev, { name: "", phone: "" }])}
+                className="flex items-center gap-1.5 text-[#E8822A] text-xs font-medium hover:underline transition mt-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Lead Chaser
+              </button>
             </div>
           )}
 
@@ -4389,7 +4391,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             disabled={smsSaving}
             className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
-            {smsSaving ? "Saving..." : "Save Alert Settings"}
+            {smsSaving ? "Saving\u2026" : "Save Alert Settings"}
           </button>
         </div>
 

@@ -183,14 +183,14 @@ export async function POST(request: NextRequest) {
     // 8. Fire SMS lead alert to business (non-blocking — never fails the lead submission)
     try {
       const smsSettings = await getSmsAlertSettings(buyer.id);
-      if (smsSettings.smsAlertsEnabled && (smsSettings.smsAlertPhone1 || smsSettings.smsAlertPhone2)) {
+      const phones = smsSettings.leadChasers.map(c => c.phone).filter(Boolean);
+      if (smsSettings.smsAlertsEnabled && phones.length > 0) {
         const providerUser = await getUserById(session.user.id);
         const providerName = providerUser?.display_name || providerUser?.username || "A provider";
         const customerName = customerData?.name || customerData?.customerName || "Unknown";
         const customerPhone = customerData?.phone || "";
         const phoneSegment = customerPhone ? `, call at ${customerPhone}` : "";
         const messageBody = `WOML LEAD FROM ${providerName.toUpperCase()}: ${customerName}${phoneSegment}. View leads: https://womleads.com/business`;
-        const phones = [smsSettings.smsAlertPhone1, smsSettings.smsAlertPhone2].filter(Boolean) as string[];
         for (const phone of phones) {
           const result = await sendSms(phone, messageBody);
           if (!result.success) {
