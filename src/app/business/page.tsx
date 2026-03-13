@@ -1734,7 +1734,7 @@ function BusinessPortalContent() {
 
         {/* Leaderboard Tab */}
         {activeTab === "leaderboard" && (
-          <LeaderboardTab />
+          <LeaderboardTab smsAgents={smsAgents} />
         )}
 
         {/* Marketing Tab */}
@@ -3895,7 +3895,7 @@ function AnalyticsTab({
 }
 
 // Leaderboard Tab
-function LeaderboardTab() {
+function LeaderboardTab({ smsAgents }: { smsAgents: { name: string; phone: string }[] }) {
   const [rows, setRows] = useState<{ actor_name: string; to_value: string; count: number }[]>([]);
   const [uniqueLeads, setUniqueLeads] = useState<{ actor_name: string; unique_leads: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3913,8 +3913,11 @@ function LeaderboardTab() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Aggregate by actor_name
-  const agentNames = Array.from(new Set(rows.map(r => r.actor_name)));
+  // Only show agents configured in Settings
+  const configuredNames = smsAgents.map(a => a.name);
+  const agentNames = configuredNames.length > 0
+    ? configuredNames
+    : Array.from(new Set(rows.map(r => r.actor_name)));
   const agents = agentNames.map(name => {
     const mine = rows.filter(r => r.actor_name === name);
     const get = (stage: string) => mine.find(r => r.to_value === stage)?.count ?? 0;
@@ -3944,7 +3947,9 @@ function LeaderboardTab() {
 
       {!loading && agents.length === 0 && (
         <div className="bg-white rounded-xl p-8 text-center text-gray-400">
-          No activity yet. Assign agents to leads in the Pipeline and move them through stages to see rankings here.
+          {smsAgents.length === 0
+            ? "No agents configured yet. Go to Settings \u2192 Lead Alert SMS to add your team members."
+            : "No activity yet. Assign agents to leads in the Pipeline and move them through stages to start tracking performance."}
         </div>
       )}
 
