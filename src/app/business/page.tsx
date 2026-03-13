@@ -60,7 +60,7 @@ interface ApiLead {
   followUpDate: string | null;
 }
 
-type Tab = "dashboard" | "connections" | "pipeline" | "settings" | "invite";
+type Tab = "dashboard" | "pipeline" | "connections" | "marketing" | "invite" | "settings";
 
 // Error boundary to catch tab rendering errors and show message instead of white screen
 class TabErrorBoundary extends React.Component<
@@ -105,13 +105,13 @@ function BusinessPortalContent() {
 
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "connections", "pipeline", "settings", "invite"];
+  const validTabs: Tab[] = ["dashboard", "pipeline", "connections", "marketing", "invite", "settings"];
   const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
   const [pipelineNotesLocal, setPipelineNotesLocal] = useState<Record<string, string>>({});
   const [pipelineSearch, setPipelineSearch] = useState("");
-  const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest" | "followup" | "assigned">("newest");
+  const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest">("newest");
   const [activityDrawer, setActivityDrawer] = useState<string | null>(null);
   const [detailsDrawer, setDetailsDrawer] = useState<string | null>(null);
   const [activityCache, setActivityCache] = useState<Record<string, { actor_name: string; action: string; from_value: string | null; to_value: string | null; note: string | null; created_at: string }[]>>({});
@@ -528,7 +528,7 @@ function BusinessPortalContent() {
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "connections", "pipeline", "settings", "invite"] as Tab[]).map((tab) => (
+          {(["dashboard", "pipeline", "connections", "marketing", "invite", "settings"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -773,13 +773,6 @@ function BusinessPortalContent() {
           filtered = [...filtered].sort((a, b) => {
             if (pipelineSort === "newest") return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
             if (pipelineSort === "oldest") return new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
-            if (pipelineSort === "followup") {
-              if (!a.followUpDate && !b.followUpDate) return 0;
-              if (!a.followUpDate) return 1;
-              if (!b.followUpDate) return -1;
-              return a.followUpDate.localeCompare(b.followUpDate);
-            }
-            if (pipelineSort === "assigned") return (a.assignedTo || "zzz").localeCompare(b.assignedTo || "zzz");
             return 0;
           });
 
@@ -908,8 +901,6 @@ function BusinessPortalContent() {
                 >
                   <option value="newest" className="text-gray-800">Newest</option>
                   <option value="oldest" className="text-gray-800">Oldest</option>
-                  <option value="followup" className="text-gray-800">Follow-up</option>
-                  <option value="assigned" className="text-gray-800">Assigned</option>
                 </select>
                 {/* Search */}
                 <input
@@ -1275,6 +1266,11 @@ function BusinessPortalContent() {
           </div>
           );
         })()}
+
+        {/* Marketing Tab */}
+        {activeTab === "marketing" && (
+          <MarketingTab />
+        )}
 
         {/* Settings Tab */}
         {activeTab === "settings" && (
@@ -3424,6 +3420,106 @@ function AnalyticsTab({
 
         </div>
       )}
+    </div>
+  );
+}
+
+// Marketing Tab
+function MarketingTab() {
+  const defaultScript = {
+    title: "Quick note about your auto insurance",
+    body: `Hi [First Name],
+
+I wanted to follow up — I tried reaching you by phone but didn't want you to miss out on a quote we put together for you. It only takes a few minutes to review and could save you money on your coverage.
+
+Reply to this email or call me at [Your Number] when you get a chance. Looking forward to connecting!
+
+— [Your Name], Options Insurance Agency`,
+  };
+
+  const [scripts, setScripts] = useState<{ title: string; body: string }[]>([defaultScript]);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const handleSave = () => {
+    if (!newTitle.trim() || !newBody.trim()) return;
+    setScripts(prev => [...prev, { title: newTitle.trim(), body: newBody.trim() }]);
+    setNewTitle("");
+    setNewBody("");
+  };
+
+  const handleCopy = async (script: { title: string; body: string }, idx: number) => {
+    await navigator.clipboard.writeText(`Subject: ${script.title}\n\n${script.body}`);
+    setCopiedId(idx);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-xl font-bold text-white">Email Outreach Scripts</h2>
+        <p className="text-white/70 text-sm mt-1">Copy, personalize, and send to leads who aren&apos;t picking up the phone.</p>
+      </div>
+
+      {/* New Script Form */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Create New Script</h3>
+        <div className="space-y-3">
+          <input
+            type="text"
+            placeholder="Subject line..."
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30 focus:border-[#E8822A]"
+          />
+          <textarea
+            placeholder="Email body..."
+            value={newBody}
+            onChange={e => setNewBody(e.target.value)}
+            rows={6}
+            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30 focus:border-[#E8822A] resize-y"
+          />
+          <button
+            onClick={handleSave}
+            disabled={!newTitle.trim() || !newBody.trim()}
+            className="px-5 py-2 bg-[#E8822A] text-white rounded-lg text-sm font-medium hover:bg-[#d47424] transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Save Script
+          </button>
+        </div>
+      </div>
+
+      {/* Saved Scripts */}
+      <div className="space-y-4">
+        {scripts.map((script, idx) => (
+          <div key={idx} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h4 className="font-semibold text-gray-800 text-sm">{script.title}</h4>
+                <p className="text-gray-500 text-sm mt-2 whitespace-pre-line line-clamp-4">{script.body}</p>
+              </div>
+              <button
+                onClick={() => handleCopy(script, idx)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              >
+                {copiedId === idx ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    <span className="text-emerald-600">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    Copy to Clipboard
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
