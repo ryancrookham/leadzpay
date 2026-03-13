@@ -756,6 +756,22 @@ export async function updateSmsAlertSettings(
   }
 }
 
+export async function resetPipelineData(): Promise<void> {
+  const sql = getSql();
+  await sql`TRUNCATE TABLE lead_activity_log`;
+  await sql`
+    UPDATE leads SET
+      pipeline_status = 'new',
+      follow_up_date = NULL,
+      contacted_at = NULL,
+      quoted_at = NULL,
+      sold_at = NULL,
+      dead_at = NULL,
+      assigned_to = NULL
+    WHERE 1=1
+  `;
+}
+
 export async function getLeaderboardData(businessId: string): Promise<{
   rows: { actor_name: string; to_value: string; count: number }[];
   uniqueLeads: { actor_name: string; unique_leads: number }[];

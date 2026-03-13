@@ -28,6 +28,20 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
+    // Forward-only stage guard
+    const STAGE_ORDER: Record<string, number> = { new: 0, contacted: 1, quoted: 2, sold: 3, dead: 3 };
+    const TERMINAL = new Set(["sold", "dead"]);
+
+    if (body.pipeline_status) {
+      const currentStatus = lead.pipeline_status || "new";
+      if (TERMINAL.has(currentStatus)) {
+        return NextResponse.json({ error: "This lead is in a terminal state and cannot be changed." }, { status: 400 });
+      }
+      if ((STAGE_ORDER[body.pipeline_status] ?? 0) <= (STAGE_ORDER[currentStatus] ?? 0)) {
+        return NextResponse.json({ error: "Leads can only move forward in the pipeline." }, { status: 400 });
+      }
+    }
+
     // Handle quote_completed
     if (typeof body.quote_completed === "boolean") {
       await updateLeadQuoteCompleted(id, body.quote_completed);

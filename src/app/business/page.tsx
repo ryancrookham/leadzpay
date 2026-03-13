@@ -98,6 +98,24 @@ class TabErrorBoundary extends React.Component<
   }
 }
 
+// Stage ordering — higher number = further along. Terminal stages cannot be changed.
+const STAGE_ORDER: Record<string, number> = {
+  new: 0, contacted: 1, quoted: 2, sold: 3, dead: 3,
+};
+const TERMINAL_STAGES = new Set(["sold", "dead"]);
+
+function getAvailableStages(currentStatus: string): { value: string; label: string; color: string }[] {
+  const allStages = [
+    { value: "contacted", label: "Contacted", color: "#f97316" },
+    { value: "quoted",    label: "Quoted",    color: "#ca8a04" },
+    { value: "sold",      label: "Sold",      color: "#16a34a" },
+    { value: "dead",      label: "Dead",      color: "#111827" },
+  ];
+  if (TERMINAL_STAGES.has(currentStatus)) return [];
+  const currentOrder = STAGE_ORDER[currentStatus] ?? 0;
+  return allStages.filter(s => STAGE_ORDER[s.value] > currentOrder);
+}
+
 function BusinessPortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -165,7 +183,8 @@ function BusinessPortalContent() {
   } | null>(null);
   const [attrStage, setAttrStage] = useState<string>("");
   const [attrAgent, setAttrAgent] = useState<string>("");
-  const [attrStep, setAttrStep] = useState<1 | 2>(1);
+  const [attrStep, setAttrStep] = useState<1 | 2 | 3>(1);
+  const [attrDate, setAttrDate] = useState<string>("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -617,100 +636,144 @@ function BusinessPortalContent() {
           </div>
         )}
 
-        {/* Attribution Modal — Two-Step Flow */}
+        {/* Attribution Modal — 3-Step Flow */}
         {attributionModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-              <h3 className="text-base font-bold text-gray-900 mb-0.5">Log Activity</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                {attributionModal.leadName} &mdash; {new Date(attributionModal.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </p>
 
-              {attrStep === 1 ? (
-                <>
-                  {/* Step 1: Choose stage */}
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">What happened?</p>
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    {[
-                      { value: "contacted", label: "Contacted", color: "#f97316" },
-                      { value: "quoted",    label: "Quoted",    color: "#ca8a04" },
-                      { value: "sold",      label: "Sold",      color: "#16a34a" },
-                      { value: "dead",      label: "Dead",      color: "#111827" },
-                    ].map(s => (
-                      <button
-                        key={s.value}
-                        onClick={() => {
-                          setAttrStage(s.value);
-                          if (smsAgents.length > 0) {
+              {/* Step indicator */}
+              <div className="flex items-center gap-2 mb-4">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition ${
+                    attrStep === n ? "bg-[#E8822A] text-white" : attrStep > n ? "bg-green-500 text-white" : "bg-gray-100 text-gray-400"
+                  }`}>{attrStep > n ? "\u2713" : n}</div>
+                ))}
+                <span className="text-xs text-gray-500 ml-1">
+                  {attrStep === 1 ? "Select Stage" : attrStep === 2 ? "Select Date" : "Who gets credit?"}
+                </span>
+              </div>
+
+              <h3 className="text-base font-bold text-gray-900 mb-1">Log Activity</h3>
+              <p className="text-sm text-gray-500 mb-4">{attributionModal.leadName}</p>
+
+              {/* Step 1: Choose stage */}
+              {attrStep === 1 && (() => {
+                const lead = dbLeads.find(l => l.id === attributionModal.leadId);
+                const cs = lead?.pipelineStatus || "new";
+                const available = getAvailableStages(cs);
+                return (
+                  <>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">What stage is this lead entering?</p>
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      {available.map(s => (
+                        <button
+                          key={s.value}
+                          onClick={() => {
+                            setAttrStage(s.value);
                             setAttrStep(2);
-                          } else {
-                            // No agents configured — save immediately
-                            updateLeadField(attributionModal.leadId, {
-                              follow_up_date: attributionModal.date,
-                              pipeline_status: s.value,
-                            });
-                            setAttributionModal(null);
-                          }
-                        }}
-                        className="px-3 py-2 rounded-lg text-sm font-medium border-2 transition border-gray-200 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
-                      >
-                        {s.label}
+                          }}
+                          className="px-3 py-3 rounded-lg text-sm font-semibold border-2 transition border-gray-200 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex justify-end">
+                      <button onClick={() => setAttributionModal(null)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">
+                        Cancel
                       </button>
-                    ))}
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setAttributionModal(null)}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Step 2: Choose date */}
+              {attrStep === 2 && (
                 <>
-                  {/* Step 2: Choose agent */}
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Who gets credit?</p>
-                  <div className="flex flex-col gap-2 mb-4">
-                    {smsAgents.map(a => (
-                      <button
-                        key={a.phone}
-                        onClick={() => {
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">When did this happen?</p>
+                  <input
+                    type="date"
+                    value={attrDate}
+                    max={new Date().toISOString().split("T")[0]}
+                    onChange={e => setAttrDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-gray-900 text-sm focus:outline-none focus:border-[#E8822A] mb-4"
+                  />
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => setAttrStep(1)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">
+                      &larr; Back
+                    </button>
+                    <button
+                      disabled={!attrDate}
+                      onClick={() => {
+                        if (smsAgents.length > 0) {
+                          setAttrStep(3);
+                        } else {
                           updateLeadField(attributionModal.leadId, {
-                            follow_up_date: attributionModal.date,
+                            follow_up_date: attrDate,
                             pipeline_status: attrStage,
-                            actor_name: a.name,
                           });
                           setAttributionModal(null);
-                        }}
-                        className="px-3 py-2 rounded-lg text-sm font-medium border-2 transition text-left border-gray-200 text-gray-700 hover:border-[#E8822A] hover:bg-orange-50"
-                      >
-                        {a.name} <span className="text-gray-400 text-xs">{a.phone}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setAttrStep(1)}
-                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={() => {
-                        updateLeadField(attributionModal.leadId, {
-                          follow_up_date: attributionModal.date,
-                          pipeline_status: attrStage,
-                        });
-                        setAttributionModal(null);
+                        }
                       }}
-                      className="text-sm text-gray-400 hover:text-gray-600 transition"
+                      className="px-5 py-2 bg-[#E8822A] text-white text-sm font-medium rounded-lg hover:bg-[#d4721f] transition disabled:opacity-40"
                     >
-                      Skip &mdash; no agent
+                      Next &rarr;
                     </button>
                   </div>
                 </>
               )}
+
+              {/* Step 3: Choose Lead Chaser + Confirm */}
+              {attrStep === 3 && (
+                <>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Who&apos;s logging this?</p>
+                  <p className="text-xs text-gray-400 mb-3">Select the Lead Chaser responsible for this move.</p>
+                  <div className="flex flex-col gap-2 mb-4">
+                    {smsAgents.map(a => (
+                      <button
+                        key={a.phone}
+                        onClick={() => setAttrAgent(a.name)}
+                        className={`px-3 py-2.5 rounded-lg text-sm font-medium border-2 transition text-left ${
+                          attrAgent === a.name
+                            ? "border-[#E8822A] bg-orange-50 text-gray-900"
+                            : "border-gray-200 text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        {a.name}
+                        <span className="text-gray-400 text-xs ml-2">{a.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Summary */}
+                  <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs text-gray-600 space-y-1">
+                    <div><span className="font-medium">Stage:</span> {attrStage.charAt(0).toUpperCase() + attrStage.slice(1)}</div>
+                    <div><span className="font-medium">Date:</span> {new Date(attrDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                    {attrAgent && <div><span className="font-medium">Lead Chaser:</span> {attrAgent}</div>}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => setAttrStep(2)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition">
+                      &larr; Back
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateLeadField(attributionModal.leadId, {
+                          follow_up_date: attrDate,
+                          pipeline_status: attrStage,
+                          actor_name: attrAgent || undefined,
+                          assigned_to: attrAgent || undefined,
+                        });
+                        setAttributionModal(null);
+                      }}
+                      className="px-5 py-2 bg-[#E8822A] text-white text-sm font-semibold rounded-lg hover:bg-[#d4721f] transition"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </>
+              )}
+
             </div>
           </div>
         )}
@@ -1406,22 +1469,34 @@ function BusinessPortalContent() {
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
                         </button>
-                        {/* Follow-up date */}
-                        <input
-                          type="date"
-                          defaultValue={lead.followUpDate || ""}
-                          onChange={e => {
-                            if (!e.target.value) {
-                              updateLeadField(lead.id, { follow_up_date: null });
-                              return;
-                            }
-                            setAttrStep(1);
-                            setAttrStage("");
-                            setAttrAgent("");
-                            setAttributionModal({ leadId: lead.id, leadName: lead.customerName, date: e.target.value });
-                          }}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
-                        />
+                        {/* Change Lead Status button */}
+                        {(() => {
+                          const cs = lead.pipelineStatus || "new";
+                          const isTerminal = TERMINAL_STAGES.has(cs);
+                          const available = getAvailableStages(cs);
+                          return (
+                            <button
+                              disabled={isTerminal || available.length === 0}
+                              onClick={() => {
+                                const today = new Date().toISOString().split("T")[0];
+                                setAttrStep(1);
+                                setAttrStage("");
+                                setAttrDate(today);
+                                setAttrAgent("");
+                                setAttributionModal({ leadId: lead.id, leadName: lead.customerName, date: today });
+                              }}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
+                                isTerminal
+                                  ? "border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed"
+                                  : "border-[#E8822A] text-[#E8822A] hover:bg-orange-50 active:bg-orange-100"
+                              }`}
+                            >
+                              {isTerminal
+                                ? cs === "sold" ? "\u2713 Sold" : "\u2717 Dead"
+                                : "Change Lead Status"}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
 
