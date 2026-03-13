@@ -123,10 +123,19 @@ function BusinessPortalContent() {
   const { update: updateSession } = useSession();
   const currentBuyer = useCurrentBuyer();
 
+  // Portal role gate state
+  const [portalRole, setPortalRole] = useState<"owner" | "chaser" | null>(null);
+  const [pinEntry, setPinEntry] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinVerifying, setPinVerifying] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+
   // Get initial tab from URL query param
   const urlTab = searchParams.get("tab") as Tab | null;
-  const validTabs: Tab[] = ["dashboard", "pipeline", "connections", "leaderboard", "marketing", "invite", "settings"];
-  const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : "dashboard";
+  const allTabs: Tab[] = ["dashboard", "pipeline", "connections", "leaderboard", "marketing", "invite", "settings"];
+  const chaserTabs: Tab[] = ["pipeline", "leaderboard", "marketing"];
+  const validTabs: Tab[] = portalRole === "chaser" ? chaserTabs : allTabs;
+  const initialTab = urlTab && validTabs.includes(urlTab) ? urlTab : validTabs[0];
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
   const [pipelineSearch, setPipelineSearch] = useState("");
@@ -216,6 +225,21 @@ function BusinessPortalContent() {
       console.error("Failed to fetch leads:", err);
     }
   }, []);
+
+  // Restore portal role from sessionStorage
+  useEffect(() => {
+    const stored = sessionStorage.getItem("portalRole");
+    if (stored === "owner" || stored === "chaser") {
+      setPortalRole(stored);
+    }
+  }, []);
+
+  // Reset active tab when role changes and current tab is no longer valid
+  useEffect(() => {
+    if (portalRole && !validTabs.includes(activeTab)) {
+      setActiveTab(validTabs[0]);
+    }
+  }, [portalRole, validTabs, activeTab]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -375,6 +399,50 @@ function BusinessPortalContent() {
   }, [lightboxSrc, expandedModalLead]);
 
   const handleLogout = () => logout();
+
+  const handlePinVerify = async () => {
+    setPinError("");
+    if (!/^\d{4}$/.test(pinEntry)) {
+      setPinError("PIN must be 4 digits");
+      return;
+    }
+    setPinVerifying(true);
+    try {
+      const res = await fetch("/api/business/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinEntry }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setPortalRole("owner");
+        sessionStorage.setItem("portalRole", "owner");
+        setShowPinModal(false);
+        setPinEntry("");
+      } else {
+        setPinError("Incorrect PIN");
+      }
+    } catch {
+      setPinError("Verification failed. Try again.");
+    } finally {
+      setPinVerifying(false);
+    }
+  };
+
+  const handleSelectChaser = () => {
+    setPortalRole("chaser");
+    sessionStorage.setItem("portalRole", "chaser");
+    // Reset to first valid chaser tab
+    setActiveTab("pipeline");
+  };
+
+  const handleSwitchRole = () => {
+    setPortalRole(null);
+    sessionStorage.removeItem("portalRole");
+    setPinEntry("");
+    setPinError("");
+    setShowPinModal(false);
+  };
 
 
   // Show branded loading state during auth check
@@ -597,22 +665,116 @@ function BusinessPortalContent() {
             <span className="text-white/30">|</span>
             <span className="text-white font-medium">{currentBuyer?.businessName || "Business Dashboard"}</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-white/70 hover:text-white transition flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Sign Out
-          </button>
+          <div className="flex items-center gap-3">
+            {portalRole && (
+              <>
+                <span className="text-xs font-medium bg-white/20 text-white px-2 py-1 rounded">
+                  {portalRole === "owner" ? "Owner" : "Lead Chaser"}
+                </span>
+                <button
+                  onClick={handleSwitchRole}
+                  className="text-white/70 hover:text-white transition text-sm font-medium"
+                >
+                  Switch Role
+                </button>
+                <span className="text-white/30">|</span>
+              </>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-white/70 hover:text-white transition flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* Role Gate Overlay */}
+      {!portalRole && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          {!showPinModal ? (
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center">
+              <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Select Your Role</h2>
+              <p className="text-gray-500 text-sm mb-6">How are you accessing the portal today?</p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowPinModal(true)}
+                  className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition"
+                >
+                  Owner
+                </button>
+                <button
+                  onClick={handleSelectChaser}
+                  className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition"
+                >
+                  Lead Chaser
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center relative">
+              <button
+                onClick={() => { setShowPinModal(false); setPinEntry(""); setPinError(""); }}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">Enter Owner PIN</h2>
+              <p className="text-gray-500 text-sm mb-6">Enter your 4-digit PIN to access the full portal</p>
+              {pinError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{pinError}</div>
+              )}
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinEntry}
+                onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onKeyDown={(e) => { if (e.key === "Enter" && pinEntry.length === 4) handlePinVerify(); }}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition text-center text-2xl tracking-[0.5em] font-mono mb-4"
+                placeholder="----"
+                autoFocus
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowPinModal(false); setPinEntry(""); setPinError(""); }}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handlePinVerify}
+                  disabled={pinVerifying || pinEntry.length !== 4}
+                  className="flex-1 py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  {pinVerifying ? "Verifying..." : "Unlock"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto">
-          {(["dashboard", "pipeline", "connections", "leaderboard", "marketing", "invite", "settings"] as Tab[]).map((tab) => (
+          {validTabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

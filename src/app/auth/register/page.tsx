@@ -34,10 +34,14 @@ function RegisterContent() {
   const [buyerPhone, setBuyerPhone] = useState("");
   const [buyerSubmitting, setBuyerSubmitting] = useState(false);
   const [buyerError, setBuyerError] = useState("");
-  const [buyerFormStep, setBuyerFormStep] = useState<"account" | "stripe">("account");
+  const [buyerFormStep, setBuyerFormStep] = useState<"account" | "pin" | "stripe">("account");
   const [buyerStripeLoading, setBuyerStripeLoading] = useState(false);
   const [buyerStripeError, setBuyerStripeError] = useState<string | null>(null);
   const [agreementChecked, setAgreementChecked] = useState(false);
+  const [buyerPin, setBuyerPin] = useState("");
+  const [buyerPinConfirm, setBuyerPinConfirm] = useState("");
+  const [buyerPinError, setBuyerPinError] = useState("");
+  const [buyerPinSaving, setBuyerPinSaving] = useState(false);
 
   // Provider profile fields
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -253,7 +257,7 @@ function RegisterContent() {
         complianceAcknowledged: true,
       });
       if (result.success) {
-        setBuyerFormStep("stripe");
+        setBuyerFormStep("pin");
       } else {
         setPendingStripeConnect(false);
         setBuyerError(result.error || "Registration failed");
@@ -263,6 +267,36 @@ function RegisterContent() {
       setBuyerError("Registration failed. Please try again.");
     } finally {
       setBuyerSubmitting(false);
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    setBuyerPinError("");
+    if (!/^\d{4}$/.test(buyerPin)) {
+      setBuyerPinError("PIN must be exactly 4 digits");
+      return;
+    }
+    if (buyerPin !== buyerPinConfirm) {
+      setBuyerPinError("PINs do not match");
+      return;
+    }
+    setBuyerPinSaving(true);
+    try {
+      const res = await fetch("/api/business/set-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: buyerPin }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBuyerFormStep("stripe");
+      } else {
+        setBuyerPinError(data.error || "Failed to save PIN");
+      }
+    } catch {
+      setBuyerPinError("Failed to save PIN. Please try again.");
+    } finally {
+      setBuyerPinSaving(false);
     }
   };
 
@@ -327,14 +361,16 @@ function RegisterContent() {
               <Image src="/woml-alt-orange.png" alt="WOML" width={180} height={54} className="mx-auto mb-4 h-14 w-auto object-contain" />
             </Link>
             <h1 className="text-2xl font-bold text-[#E8822A] mb-2">
-              {buyerFormStep === "account" ? "Create Business Account" : "Connect Your Bank"}
+              {buyerFormStep === "account" ? "Create Business Account" : buyerFormStep === "pin" ? "Set Your Portal PIN" : "Connect Your Bank"}
             </h1>
             <p className="text-gray-500">
-              {buyerFormStep === "account" ? "Start receiving leads from your provider network" : "Link your business bank account to pay lead rewards"}
+              {buyerFormStep === "account" ? "Start receiving leads from your provider network" : buyerFormStep === "pin" ? "This PIN is required to access the Owner portal" : "Link your business bank account to pay lead rewards"}
             </p>
             {/* Step indicator */}
             <div className="flex items-center justify-center gap-2 mt-3">
               <div className={`w-2 h-2 rounded-full ${buyerFormStep === "account" ? "bg-[#E8822A]" : "bg-gray-300"}`} />
+              <div className="w-6 h-0.5 bg-gray-200" />
+              <div className={`w-2 h-2 rounded-full ${buyerFormStep === "pin" ? "bg-[#E8822A]" : "bg-gray-300"}`} />
               <div className="w-6 h-0.5 bg-gray-200" />
               <div className={`w-2 h-2 rounded-full ${buyerFormStep === "stripe" ? "bg-[#E8822A]" : "bg-gray-300"}`} />
             </div>
@@ -383,6 +419,48 @@ function RegisterContent() {
                 </button>
               </form>
             </>
+          )}
+
+          {buyerFormStep === "pin" && (
+            <div className="space-y-4">
+              {buyerPinError && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerPinError}</div>
+              )}
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-sm text-gray-600 leading-relaxed">
+                Your 4-digit PIN will be required each time an Owner logs into the business portal. Lead Chasers do not need a PIN.
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Create PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={buyerPin}
+                  onChange={(e) => setBuyerPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition text-center text-2xl tracking-[0.5em] font-mono"
+                  placeholder="----"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Confirm PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={buyerPinConfirm}
+                  onChange={(e) => setBuyerPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] transition text-center text-2xl tracking-[0.5em] font-mono"
+                  placeholder="----"
+                />
+              </div>
+              <button
+                onClick={handlePinSubmit}
+                disabled={buyerPinSaving || buyerPin.length !== 4 || buyerPinConfirm.length !== 4}
+                className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+              >
+                {buyerPinSaving ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Saving...</> : "Set PIN & Continue"}
+              </button>
+            </div>
           )}
 
           {buyerFormStep === "stripe" && (

@@ -665,6 +665,7 @@ export async function ensureSmsAlertColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_1_name TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_2_name TEXT`;
   await ensureLeadChasersTable();
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_pin_hash TEXT`;
 }
 
 export async function ensureLeadChasersTable(): Promise<void> {
@@ -754,6 +755,21 @@ export async function updateSmsAlertSettings(
       VALUES (${userId}, ${c.name}, ${c.phone}, ${i})
     `;
   }
+}
+
+// ── Business PIN ────────────────────────────────────────────────────────────
+
+export async function setBusinessPin(userId: string, pinHash: string): Promise<void> {
+  await ensureSmsAlertColumns();
+  const sql = getSql();
+  await sql`UPDATE users SET business_pin_hash = ${pinHash}, updated_at = NOW() WHERE id = ${userId}`;
+}
+
+export async function getBusinessPinHash(userId: string): Promise<string | null> {
+  await ensureSmsAlertColumns();
+  const sql = getSql();
+  const rows = await sql`SELECT business_pin_hash FROM users WHERE id = ${userId} LIMIT 1`;
+  return (rows[0] as any)?.business_pin_hash ?? null;
 }
 
 export async function resetPipelineData(): Promise<void> {
