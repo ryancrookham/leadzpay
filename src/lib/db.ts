@@ -959,25 +959,65 @@ export async function getActivityLog(leadId: string): Promise<ActivityLogEntry[]
 export interface BusinessSettings {
   business_id: string;
   dead_lead_window_days: number;
+  funnel_target_contacted: number;
+  funnel_target_quoted: number;
+  funnel_target_sold: number;
+  funnel_target_dead: number;
 }
 
 export async function getBusinessSettings(businessId: string): Promise<BusinessSettings> {
   const sql = getSql();
+  await sql`
+    ALTER TABLE business_settings
+      ADD COLUMN IF NOT EXISTS funnel_target_contacted integer NOT NULL DEFAULT 80,
+      ADD COLUMN IF NOT EXISTS funnel_target_quoted integer NOT NULL DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS funnel_target_sold integer NOT NULL DEFAULT 30,
+      ADD COLUMN IF NOT EXISTS funnel_target_dead integer NOT NULL DEFAULT 20
+  `;
   const result = await sql`SELECT * FROM business_settings WHERE business_id = ${businessId}`;
   const row = first<BusinessSettings>(result);
-  return row || { business_id: businessId, dead_lead_window_days: 30 };
+  return row || {
+    business_id: businessId,
+    dead_lead_window_days: 30,
+    funnel_target_contacted: 80,
+    funnel_target_quoted: 50,
+    funnel_target_sold: 30,
+    funnel_target_dead: 20,
+  };
 }
 
 export async function upsertBusinessSettings(
   businessId: string,
-  settings: { dead_lead_window_days: number }
+  settings: {
+    dead_lead_window_days?: number;
+    funnel_target_contacted?: number;
+    funnel_target_quoted?: number;
+    funnel_target_sold?: number;
+    funnel_target_dead?: number;
+  }
 ): Promise<void> {
   const sql = getSql();
   await sql`
-    INSERT INTO business_settings (business_id, dead_lead_window_days, updated_at)
-    VALUES (${businessId}, ${settings.dead_lead_window_days}, NOW())
+    INSERT INTO business_settings (
+      business_id, dead_lead_window_days,
+      funnel_target_contacted, funnel_target_quoted, funnel_target_sold, funnel_target_dead,
+      updated_at
+    )
+    VALUES (
+      ${businessId},
+      ${settings.dead_lead_window_days ?? 30},
+      ${settings.funnel_target_contacted ?? 80},
+      ${settings.funnel_target_quoted ?? 50},
+      ${settings.funnel_target_sold ?? 30},
+      ${settings.funnel_target_dead ?? 20},
+      NOW()
+    )
     ON CONFLICT (business_id) DO UPDATE SET
-      dead_lead_window_days = ${settings.dead_lead_window_days},
+      dead_lead_window_days = COALESCE(${settings.dead_lead_window_days ?? null}, business_settings.dead_lead_window_days),
+      funnel_target_contacted = COALESCE(${settings.funnel_target_contacted ?? null}, business_settings.funnel_target_contacted),
+      funnel_target_quoted = COALESCE(${settings.funnel_target_quoted ?? null}, business_settings.funnel_target_quoted),
+      funnel_target_sold = COALESCE(${settings.funnel_target_sold ?? null}, business_settings.funnel_target_sold),
+      funnel_target_dead = COALESCE(${settings.funnel_target_dead ?? null}, business_settings.funnel_target_dead),
       updated_at = NOW()
   `;
 }

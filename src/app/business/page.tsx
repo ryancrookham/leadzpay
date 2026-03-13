@@ -153,6 +153,7 @@ function BusinessPortalContent() {
   const [overlayAgreementChecked, setOverlayAgreementChecked] = useState(false);
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
+  const [funnelTargets, setFunnelTargets] = useState({ contacted: 80, quoted: 50, sold: 30, dead: 20 });
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -206,6 +207,23 @@ function BusinessPortalContent() {
         setStripeSetupChecked(true); // Allow through on error to avoid permanent lockout
       });
   }, [currentUser]);
+
+  // Fetch funnel targets from business settings
+  useEffect(() => {
+    fetch("/api/business/settings")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.settings) {
+          setFunnelTargets({
+            contacted: data.settings.funnel_target_contacted ?? 80,
+            quoted:    data.settings.funnel_target_quoted    ?? 50,
+            sold:      data.settings.funnel_target_sold      ?? 30,
+            dead:      data.settings.funnel_target_dead      ?? 20,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Re-fetch when tab regains focus
   useEffect(() => {
@@ -556,7 +574,7 @@ function BusinessPortalContent() {
                   : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "marketing" ? "Outreach" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -806,25 +824,37 @@ function BusinessPortalContent() {
             {/* This Year's Conversion */}
             {(() => {
               const yrLeads = leadsThisYear.length;
-              const pct = (n: number) => yrLeads > 0 ? `${((n / yrLeads) * 100).toFixed(1)}%` : "0%";
-              const conversionStats = [
-                { label: "Leads", color: "#ef4444", count: yrLeads, rate: "100% of leads" },
-                { label: "Contacted", color: "#f97316", count: yearContacted, rate: `${pct(yearContacted)} of leads` },
-                { label: "Quoted", color: "#ca8a04", count: yearQuoted, rate: `${pct(yearQuoted)} of leads` },
-                { label: "Sold", color: "#16a34a", count: yearSold, rate: `${pct(yearSold)} of leads` },
-                { label: "Dead", color: "#111827", count: yearDead, rate: `${pct(yearDead)} of leads` },
+              const pctNum = (n: number) => yrLeads > 0 ? (n / yrLeads) * 100 : 0;
+
+              const stages = [
+                { label: "Leads", color: "#ef4444", actual: 100, target: null as number | null, count: yrLeads },
+                { label: "Contacted", color: "#f97316", actual: pctNum(yearContacted), target: funnelTargets.contacted, count: yearContacted },
+                { label: "Quoted", color: "#ca8a04", actual: pctNum(yearQuoted), target: funnelTargets.quoted, count: yearQuoted },
+                { label: "Sold", color: "#16a34a", actual: pctNum(yearSold), target: funnelTargets.sold, count: yearSold },
+                { label: "Dead", color: "#111827", actual: pctNum(yearDead), target: funnelTargets.dead, count: yearDead },
               ];
+
               return (
                 <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                   <p className="text-gray-500 text-xs font-medium mb-3 uppercase tracking-wide">This Year&apos;s Conversion</p>
                   <div className="grid grid-cols-5 gap-4">
-                    {conversionStats.map(s => (
-                      <div key={s.label} className="text-center">
-                        <p className="text-2xl font-bold" style={{ color: s.color }}>{s.count}</p>
-                        <p className="text-sm font-medium text-gray-700">{s.label}</p>
-                        <p className="text-[11px] text-gray-400">{s.rate}</p>
-                      </div>
-                    ))}
+                    {stages.map(s => {
+                      const onTarget = s.target === null || s.actual >= s.target;
+                      return (
+                        <div key={s.label} className="text-center">
+                          <p className="text-2xl font-bold" style={{ color: s.color }}>
+                            {s.target === null ? "100%" : `${s.actual.toFixed(1)}%`}
+                          </p>
+                          <p className="text-sm font-medium text-gray-700">{s.label}</p>
+                          <p className="text-[11px] text-gray-400">{s.count} leads</p>
+                          {s.target !== null && (
+                            <p className={`text-[11px] font-medium mt-0.5 ${onTarget ? "text-emerald-600" : "text-red-500"}`}>
+                              {onTarget ? "\u2713" : "\u2193"} Target: {s.target}%
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -1664,7 +1694,7 @@ function ProvidersTab({
   const [enableLeadCaps, setEnableLeadCaps] = useState(false);
   const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
-  const [terminationDays, setTerminationDays] = useState(7);
+  const [terminationDays, setTerminationDays] = useState(0);
   const [inviteMessage, setInviteMessage] = useState("");
 
   // Edit terms modal state
@@ -1674,7 +1704,7 @@ function ProvidersTab({
   const [editEnableLeadCaps, setEditEnableLeadCaps] = useState(false);
   const [editWeeklyLeadCap, setEditWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [editMonthlyLeadCap, setEditMonthlyLeadCap] = useState<number | undefined>(undefined);
-  const [editTerminationDays, setEditTerminationDays] = useState(7);
+  const [editTerminationDays, setEditTerminationDays] = useState(0);
 
   // Invite new provider state
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -1687,7 +1717,7 @@ function ProvidersTab({
   const [inviteEnableLeadCaps, setInviteEnableLeadCaps] = useState(false);
   const [inviteWeeklyLeadCap, setInviteWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [inviteMonthlyLeadCap, setInviteMonthlyLeadCap] = useState<number | undefined>(undefined);
-  const [inviteTerminationDays, setInviteTerminationDays] = useState(7);
+  const [inviteTerminationDays, setInviteTerminationDays] = useState(0);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
 
@@ -1922,7 +1952,7 @@ function ProvidersTab({
     setEditEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
     setEditWeeklyLeadCap(connection.weekly_lead_cap || undefined);
     setEditMonthlyLeadCap(connection.monthly_lead_cap || undefined);
-    setEditTerminationDays(connection.termination_notice_days || 7);
+    setEditTerminationDays(connection.termination_notice_days ?? 0);
   };
 
   const handleUpdateTerms = async () => {
@@ -3819,10 +3849,7 @@ Reply to this email or call me at [Your Number] when you get a chance. Looking f
                     <span className="text-emerald-600">Copied!</span>
                   </>
                 ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                    Copy to Clipboard
-                  </>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 )}
               </button>
             </div>
@@ -4214,15 +4241,27 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
 function PipelineSettingsSection() {
   const [windowDays, setWindowDays] = useState(30);
+  const [fTargetContacted, setFTargetContacted] = useState(80);
+  const [fTargetQuoted, setFTargetQuoted] = useState(50);
+  const [fTargetSold, setFTargetSold] = useState(30);
+  const [fTargetDead, setFTargetDead] = useState(20);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [funnelSaving, setFunnelSaving] = useState(false);
+  const [funnelSaved, setFunnelSaved] = useState(false);
 
   useEffect(() => {
     fetch("/api/business/settings")
       .then(r => r.json())
       .then(data => {
-        if (data.success) setWindowDays(data.settings.dead_lead_window_days);
+        if (data.success) {
+          setWindowDays(data.settings.dead_lead_window_days);
+          setFTargetContacted(data.settings.funnel_target_contacted ?? 80);
+          setFTargetQuoted(data.settings.funnel_target_quoted ?? 50);
+          setFTargetSold(data.settings.funnel_target_sold ?? 30);
+          setFTargetDead(data.settings.funnel_target_dead ?? 20);
+        }
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
@@ -4245,9 +4284,32 @@ function PipelineSettingsSection() {
     }
   };
 
+  const handleFunnelSave = async () => {
+    setFunnelSaving(true);
+    try {
+      await fetch("/api/business/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          funnel_target_contacted: fTargetContacted,
+          funnel_target_quoted: fTargetQuoted,
+          funnel_target_sold: fTargetSold,
+          funnel_target_dead: fTargetDead,
+        }),
+      });
+      setFunnelSaved(true);
+      setTimeout(() => setFunnelSaved(false), 3000);
+    } catch {
+      // Ignore
+    } finally {
+      setFunnelSaving(false);
+    }
+  };
+
   if (!loaded) return null;
 
   return (
+    <>
     <div className="border-t border-gray-200 pt-6 mt-2">
       <h4 className="text-sm font-semibold text-gray-800 mb-1">Pipeline Settings</h4>
       <p className="text-gray-500 text-xs mb-4">
@@ -4273,6 +4335,49 @@ function PipelineSettingsSection() {
         {saved && <span className="text-emerald-600 text-sm font-medium">Saved!</span>}
       </div>
     </div>
+
+    {/* Funnel Targets */}
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mt-6">
+      <h3 className="text-base font-semibold text-gray-800 mb-1">Funnel Targets</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Set the percentage of leads you want to hit at each pipeline stage. These targets
+        appear on your Dashboard so you can track efficiency at a glance.
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        {[
+          { label: "Contacted", color: "#f97316", state: fTargetContacted, setter: setFTargetContacted },
+          { label: "Quoted",    color: "#ca8a04", state: fTargetQuoted,    setter: setFTargetQuoted    },
+          { label: "Sold",      color: "#16a34a", state: fTargetSold,      setter: setFTargetSold      },
+          { label: "Dead",      color: "#111827", state: fTargetDead,      setter: setFTargetDead      },
+        ].map(f => (
+          <div key={f.label}>
+            <label className="block text-xs font-medium mb-1" style={{ color: f.color }}>{f.label} Target</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={f.state}
+                onChange={e => f.setter(Math.min(100, Math.max(0, Number(e.target.value))))}
+                className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#E8822A]"
+              />
+              <span className="text-gray-500 text-sm">%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleFunnelSave}
+          disabled={funnelSaving}
+          className="px-4 py-2 bg-[#E8822A] text-white rounded-lg text-sm font-medium hover:bg-[#d4731f] transition disabled:opacity-50"
+        >
+          {funnelSaving ? "Saving..." : "Save Targets"}
+        </button>
+        {funnelSaved && <span className="text-emerald-600 text-sm font-medium">Saved!</span>}
+      </div>
+    </div>
+    </>
   );
 }
 
@@ -4471,7 +4576,7 @@ function ConnectionsTab({
   const [minimumPayout, setMinimumPayout] = useState<number | undefined>(undefined);
   const [leadTypes, setLeadTypes] = useState(["auto"]);
   const [exclusivity, setExclusivity] = useState(false);
-  const [terminationDays, setTerminationDays] = useState(7);
+  const [terminationDays, setTerminationDays] = useState(0);
   const [notes, setNotes] = useState("");
   const [enableLeadCaps, setEnableLeadCaps] = useState(false);
   const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);

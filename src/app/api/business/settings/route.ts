@@ -41,6 +41,22 @@ export async function PATCH(request: NextRequest) {
       await upsertBusinessSettings(session.user.id, { dead_lead_window_days: body.dead_lead_window_days });
     }
 
+    // Funnel targets
+    const funnelFields = ["funnel_target_contacted", "funnel_target_quoted", "funnel_target_sold", "funnel_target_dead"] as const;
+    const funnelUpdates: Record<string, number> = {};
+    for (const field of funnelFields) {
+      if (body[field] !== undefined) {
+        const val = Number(body[field]);
+        if (isNaN(val) || val < 0 || val > 100) {
+          return NextResponse.json({ error: `${field} must be 0-100` }, { status: 400 });
+        }
+        funnelUpdates[field] = val;
+      }
+    }
+    if (Object.keys(funnelUpdates).length > 0) {
+      await upsertBusinessSettings(session.user.id, funnelUpdates);
+    }
+
     const settings = await getBusinessSettings(session.user.id);
     return NextResponse.json({ success: true, settings });
   } catch (error) {
