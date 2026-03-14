@@ -709,28 +709,46 @@ export default function AdminPanel() {
                       const hasAnyData = fullTrend.some(d => d.leads > 0);
                       return (
                         <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
-                          <h3 className="text-sm font-semibold text-white mb-4">Lead Volume — Last 30 Days</h3>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-semibold text-white">Lead Volume — Last 30 Days</h3>
+                            <span className="text-sm text-gray-400">{fullTrend.reduce((s, d) => s + d.leads, 0)} leads total</span>
+                          </div>
                           {hasAnyData ? (
-                            <div className="h-32 flex items-end gap-0.5">
-                              {fullTrend.map(day => {
-                                const heightPct = (day.leads / maxLeads) * 100;
-                                const soldPct = (day.sold / maxLeads) * 100;
-                                return (
-                                  <div key={day.date} className="flex-1 flex flex-col justify-end" title={`${day.date}: ${day.leads} leads, ${day.sold} sold`}>
-                                    {day.leads > 0 ? (
-                                      <>
-                                        <div className="w-full rounded-t-sm" style={{ height: `${soldPct}%`, minHeight: day.sold > 0 ? 4 : 0, backgroundColor: "#16a34a" }} />
-                                        <div className="w-full" style={{ height: `${heightPct - soldPct}%`, minHeight: day.leads > 0 ? 4 : 0, backgroundColor: "#ef4444", opacity: 0.6 }} />
-                                      </>
-                                    ) : (
-                                      <div className="w-full" style={{ height: "2px", backgroundColor: "#374151" }} />
-                                    )}
+                            <>
+                              <div className="h-48 flex items-end gap-0.5">
+                                {fullTrend.map(day => {
+                                  const heightPct = (day.leads / maxLeads) * 100;
+                                  const soldPct = (day.sold / maxLeads) * 100;
+                                  const fmtDate = new Date(day.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                  return (
+                                    <div key={day.date} className="flex-1 flex flex-col justify-end" title={`${fmtDate}: ${day.leads} leads, ${day.sold} sold`}>
+                                      {day.leads > 0 ? (
+                                        <>
+                                          <div className="w-full rounded-t-sm" style={{ height: `${soldPct}%`, minHeight: day.sold > 0 ? 8 : 0, backgroundColor: "#16a34a" }} />
+                                          <div className="w-full" style={{ height: `${heightPct - soldPct}%`, minHeight: day.leads > 0 ? 8 : 0, backgroundColor: "#ef4444", opacity: 0.6 }} />
+                                        </>
+                                      ) : (
+                                        <div className="w-full" style={{ height: "2px", backgroundColor: "#374151" }} />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex gap-0.5 mt-1">
+                                {fullTrend.map((day, i) => (
+                                  <div key={day.date} className="flex-1 text-center">
+                                    {i % 5 === 0 ? (
+                                      <span className="text-[10px] text-gray-500">
+                                        {new Date(day.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                      </span>
+                                    ) : null}
                                   </div>
-                                );
-                              })}
-                            </div>
+                                ))}
+                              </div>
+                            </>
                           ) : (
-                            <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+                            <div className="h-48 flex flex-col items-center justify-center text-gray-500 text-sm gap-2">
+                              <span className="text-2xl">📊</span>
                               No lead activity in the last 30 days
                             </div>
                           )}
