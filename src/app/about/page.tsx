@@ -4,7 +4,7 @@ import Sidebar from "@/app/components/Sidebar";
 
 export const metadata = {
   title: "About — WOML",
-  description: "WOML connects businesses with trusted lead providers through a private, automated lead generation platform.",
+  description: "WOML connects businesses with their trusted referral partners through a private, automated account notification platform.",
 };
 
 export default function AboutPage() {
@@ -33,7 +33,7 @@ export default function AboutPage() {
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
         <h1 className="text-3xl font-bold text-[#152238] mb-4">About WOML</h1>
         <p className="text-gray-600 leading-relaxed mb-6">
-          WOML — Word of Mouth Leads — is a private lead generation platform built for businesses that run on relationships. We connect businesses directly with the trusted people in their network who can generate qualified leads, creating a streamlined, private channel for lead flow and automatic payouts.
+          WOML — Word of Mouth Leads — is a private referral network platform built for businesses that run on relationships. We connect businesses directly with the trusted people in their network who send qualified referrals, creating a streamlined, private channel for referral flow and automatic payouts.
         </p>
         <p className="text-gray-600 leading-relaxed mb-6">
           Unlike open lead marketplaces, every WOML channel is completely private. A business creates their account, sets their lead criteria and payout rate, and personally invites their own network of providers. Providers can only see and interact with the businesses that have invited them — nothing else on the platform is visible to them.

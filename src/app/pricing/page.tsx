@@ -4,7 +4,7 @@ import Sidebar from "@/app/components/Sidebar";
 
 export const metadata = {
   title: "Pricing — WOML",
-  description: "Transparent pricing for WOML lead generation platform.",
+  description: "Transparent pricing for the WOML private referral network platform.",
 };
 
 export default function PricingPage() {
