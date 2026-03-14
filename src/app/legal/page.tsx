@@ -12,13 +12,13 @@ const docs = [
     id: "business",
     label: "Business Agreement & Terms of Service",
     description: "Terms governing insurance agency accounts, lead channels, and payout structures.",
-    url: "/WOML_Business_Agreement.pdf",
+    url: "/WOML_Business_Agreement_and_Terms_of_Service.pdf",
   },
   {
     id: "provider",
     label: "Provider Agreement & Terms of Service",
     description: "Terms for lead providers — submissions, earnings, and platform conduct.",
-    url: "/WOML_Provider_Agreement.pdf",
+    url: "/WOML_Provider_Agreement_and_Terms_of_Service.pdf",
   },
   {
     id: "privacy",
