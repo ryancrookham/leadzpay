@@ -806,7 +806,7 @@ function BusinessPortalContent() {
                   : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
-              {tab === "marketing" ? "Outreach" : tab === "leaderboard" ? "Leaderboard" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "marketing" ? "Outreach" : tab === "leaderboard" ? "Leaderboard" : tab === "pipeline" ? "Leads" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -1513,7 +1513,7 @@ function BusinessPortalContent() {
 
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-xl font-bold text-white">Pipeline</h2>
+              <h2 className="text-xl font-bold text-white">Leads</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Filter pills */}
                 {[{ key: "all", label: "All" }, ...pipeStages.map(s => ({ key: s, label: stageLabels[s] || s }))].map(f => (
