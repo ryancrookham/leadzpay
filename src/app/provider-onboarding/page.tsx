@@ -670,6 +670,11 @@ function ProviderOnboardingContent() {
                 <p className="text-xs text-gray-400">Must be 8+ characters with at least one letter and one number.</p>
               </div>
 
+              <p className="text-xs text-gray-400 mt-4">
+                By creating your account, you agree to receive SMS notifications from WOML related to your account activity and leads. Msg &amp; Data rates may apply. Reply STOP to opt out at any time. See our{' '}
+                <a href="/legal" target="_blank" rel="noopener noreferrer" className="text-[#E8822A] hover:underline">Privacy Policy</a>.
+              </p>
+
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setCurrentStep(2)}
