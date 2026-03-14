@@ -114,8 +114,8 @@ export default function Home() {
           <Image
             src="/WOMLmockup.png"
             alt="WOML on Desktop and Mobile"
-            width={2090}
-            height={1060}
+            width={2320}
+            height={1180}
             className="mx-auto w-full h-auto object-contain"
             priority
           />
