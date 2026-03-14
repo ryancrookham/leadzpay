@@ -468,6 +468,28 @@ function BusinessPortalContent() {
     setShowPinModal(false);
   };
 
+  // Pending leads computed at component level (used by payment bar + batch logic)
+  // CRITICAL: These useMemo hooks MUST be above early returns to avoid React hook ordering violations
+  const pendingLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "pending"), [dbLeads]);
+
+  // Group pending leads by provider for batch payment
+  const pendingByProvider = useMemo(() => {
+    const map = new Map<string, { providerId: string; providerName: string; leads: ApiLead[]; totalBuyerAmount: number }>();
+    pendingLeadsAll.forEach(l => {
+      const existing = map.get(l.providerId) || { providerId: l.providerId, providerName: l.providerName || "Unknown", leads: [], totalBuyerAmount: 0 };
+      existing.leads.push(l);
+      existing.totalBuyerAmount += calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal;
+      map.set(l.providerId, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.leads.length - a.leads.length);
+  }, [pendingLeadsAll, feeSettings]);
+
+  // Unique providers for dropdown filter
+  const uniqueProviders = useMemo(() => {
+    const map = new Map<string, string>();
+    dbLeads.forEach(l => { if (!map.has(l.providerId)) map.set(l.providerId, l.providerName || "Unknown"); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [dbLeads]);
 
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser) || !stripeSetupChecked) {
@@ -605,28 +627,6 @@ function BusinessPortalContent() {
     });
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
-
-  // Pending leads computed at component level (used by payment bar + batch logic)
-  const pendingLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "pending"), [dbLeads]);
-
-  // Group pending leads by provider for batch payment
-  const pendingByProvider = useMemo(() => {
-    const map = new Map<string, { providerId: string; providerName: string; leads: ApiLead[]; totalBuyerAmount: number }>();
-    pendingLeadsAll.forEach(l => {
-      const existing = map.get(l.providerId) || { providerId: l.providerId, providerName: l.providerName || "Unknown", leads: [], totalBuyerAmount: 0 };
-      existing.leads.push(l);
-      existing.totalBuyerAmount += calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal;
-      map.set(l.providerId, existing);
-    });
-    return Array.from(map.values()).sort((a, b) => b.leads.length - a.leads.length);
-  }, [pendingLeadsAll, feeSettings]);
-
-  // Unique providers for dropdown filter
-  const uniqueProviders = useMemo(() => {
-    const map = new Map<string, string>();
-    dbLeads.forEach(l => { if (!map.has(l.providerId)) map.set(l.providerId, l.providerName || "Unknown"); });
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [dbLeads]);
 
   // Stripe payment handler (used by Pipeline tab)
   const handleStripePayment = async (ids: string[]) => {
