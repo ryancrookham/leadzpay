@@ -96,7 +96,7 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <main className="flex-1 flex flex-col items-center justify-center -mt-20 pb-16">
+      <main className="flex-1 flex flex-col items-center pt-8 pb-16">
         {/* Logo */}
         <div className="text-center">
           <Image
