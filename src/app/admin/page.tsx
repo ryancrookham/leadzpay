@@ -70,7 +70,22 @@ interface StripeStatus {
   email: string | null;
 }
 
-type Tab = "users" | "data" | "platform";
+type Tab = "users" | "data" | "platform" | "health";
+
+interface SystemHealthCheck {
+  name: string;
+  status: "pass" | "warn" | "fail";
+  message: string;
+  details?: any;
+  fixable?: boolean;
+}
+
+interface SystemHealth {
+  status: "healthy" | "degraded" | "critical";
+  timestamp: string;
+  summary: { pass: number; warn: number; fail: number; fixable: number };
+  checks: SystemHealthCheck[];
+}
 
 interface HardDeleteTarget {
   id: string;
@@ -185,6 +200,13 @@ export default function AdminPanel() {
   }>({ funnel: null, trend: [], businesses: [], providers: [], revenue: null, growth: null });
   const [healthLoading, setHealthLoading] = useState(false);
 
+  // System health state (Health tab)
+  const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
+  const [systemHealthLoading, setSystemHealthLoading] = useState(false);
+  const [systemHealthError, setSystemHealthError] = useState("");
+  const [fixLoading, setFixLoading] = useState<string | null>(null);
+  const [fixResults, setFixResults] = useState<string[]>([]);
+
   useEffect(() => {
     if (!isAuthenticated || !currentUser || currentUser.role !== "admin") return;
     const fetchData = async () => {
@@ -259,6 +281,48 @@ export default function AdminPanel() {
       .catch(() => {})
       .finally(() => setHealthLoading(false));
   }, [activeTab, isAuthenticated, currentUser, platformHealth.funnel]);
+
+  // Fetch system health when Health tab is active
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser || currentUser.role !== "admin") return;
+    if (activeTab !== "health") return;
+    fetchSystemHealth();
+  }, [activeTab, isAuthenticated, currentUser]);
+
+  const fetchSystemHealth = async () => {
+    setSystemHealthLoading(true);
+    setSystemHealthError("");
+    try {
+      const res = await fetch("/api/admin/health", { cache: "no-store" });
+      const data = await res.json();
+      setSystemHealth(data);
+    } catch (e: any) {
+      setSystemHealthError("Failed to run health checks");
+    } finally {
+      setSystemHealthLoading(false);
+    }
+  };
+
+  const runFix = async (action: string) => {
+    setFixLoading(action);
+    try {
+      const res = await fetch("/api/admin/health", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFixResults(data.results);
+        // Re-run health checks after fix
+        await fetchSystemHealth();
+      }
+    } catch {
+      setFixResults(["Fix failed — check console"]);
+    } finally {
+      setFixLoading(null);
+    }
+  };
 
   const handleToggleUser = async (userId: string, isActive: boolean) => {
     try {
@@ -432,7 +496,7 @@ export default function AdminPanel() {
           <>
             {/* Tabs */}
             <div className="flex gap-2 mb-8">
-              {(["users", "data", "platform"] as const).map((tab) => (
+              {(["users", "data", "platform", "health"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1042,6 +1106,192 @@ export default function AdminPanel() {
                     <p className="text-gray-500 text-xs mt-4">
                       To change fee structure, update directly in the database (platform_settings table)
                     </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== HEALTH TAB ===== */}
+            {activeTab === "health" && (
+              <div className="space-y-6">
+                {/* Header with refresh */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">System Health</h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                      Real-time diagnostics for Stripe, database, webhooks, and data integrity
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchSystemHealth}
+                    disabled={systemHealthLoading}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
+                  >
+                    {systemHealthLoading ? "Scanning..." : "Re-scan"}
+                  </button>
+                </div>
+
+                {/* Overall Status Banner */}
+                {systemHealth && (
+                  <div className={`p-4 rounded-xl border ${
+                    systemHealth.status === "healthy"
+                      ? "bg-green-500/10 border-green-500/30"
+                      : systemHealth.status === "degraded"
+                      ? "bg-yellow-500/10 border-yellow-500/30"
+                      : "bg-red-500/10 border-red-500/30"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full ${
+                          systemHealth.status === "healthy"
+                            ? "bg-green-400"
+                            : systemHealth.status === "degraded"
+                            ? "bg-yellow-400"
+                            : "bg-red-400"
+                        }`} />
+                        <span className="text-white font-bold text-lg capitalize">{systemHealth.status}</span>
+                      </div>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-green-400">{systemHealth.summary.pass} passed</span>
+                        {systemHealth.summary.warn > 0 && (
+                          <span className="text-yellow-400">{systemHealth.summary.warn} warnings</span>
+                        )}
+                        {systemHealth.summary.fail > 0 && (
+                          <span className="text-red-400">{systemHealth.summary.fail} failures</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-gray-400 text-xs mt-2">
+                      Last scan: {new Date(systemHealth.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+
+                {systemHealthLoading && !systemHealth && (
+                  <div className="text-center py-16">
+                    <div className="text-white/50 animate-pulse">Running health checks...</div>
+                  </div>
+                )}
+
+                {systemHealthError && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">
+                    {systemHealthError}
+                  </div>
+                )}
+
+                {/* Fix Results */}
+                {fixResults.length > 0 && (
+                  <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                    <div className="text-blue-400 font-medium mb-2">Fix Results</div>
+                    {fixResults.map((r, i) => (
+                      <div key={i} className="text-gray-300 text-sm">{r}</div>
+                    ))}
+                    <button
+                      onClick={() => setFixResults([])}
+                      className="text-blue-400 text-xs mt-2 hover:underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
+                {/* Auto-Fix Buttons */}
+                {systemHealth && systemHealth.summary.fixable > 0 && (
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                    <div className="text-white font-medium mb-3">Quick Fixes</div>
+                    <div className="flex flex-wrap gap-2">
+                      {systemHealth.checks.some(c => c.name === "Broken Stripe References" && c.status !== "pass") && (
+                        <button
+                          onClick={() => runFix("fix_broken_refs")}
+                          disabled={fixLoading !== null}
+                          className="px-3 py-1.5 bg-yellow-600/20 border border-yellow-600/40 text-yellow-400 rounded-lg text-xs font-medium hover:bg-yellow-600/30 transition disabled:opacity-50"
+                        >
+                          {fixLoading === "fix_broken_refs" ? "Fixing..." : "Fix Broken Stripe Refs"}
+                        </button>
+                      )}
+                      {systemHealth.checks.some(c => c.name === "Stuck Processing Leads" && c.status !== "pass") && (
+                        <button
+                          onClick={() => runFix("fix_stuck_processing")}
+                          disabled={fixLoading !== null}
+                          className="px-3 py-1.5 bg-yellow-600/20 border border-yellow-600/40 text-yellow-400 rounded-lg text-xs font-medium hover:bg-yellow-600/30 transition disabled:opacity-50"
+                        >
+                          {fixLoading === "fix_stuck_processing" ? "Fixing..." : "Reset Stuck Leads"}
+                        </button>
+                      )}
+                      {systemHealth.checks.some(c => c.name === "Webhook Processing" && c.status !== "pass") && (
+                        <button
+                          onClick={() => runFix("ensure_tables")}
+                          disabled={fixLoading !== null}
+                          className="px-3 py-1.5 bg-yellow-600/20 border border-yellow-600/40 text-yellow-400 rounded-lg text-xs font-medium hover:bg-yellow-600/30 transition disabled:opacity-50"
+                        >
+                          {fixLoading === "ensure_tables" ? "Creating..." : "Create Missing Tables"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Individual Checks */}
+                {systemHealth && (
+                  <div className="space-y-2">
+                    {/* Failures first, then warnings, then passes */}
+                    {[...systemHealth.checks]
+                      .sort((a, b) => {
+                        const order = { fail: 0, warn: 1, pass: 2 };
+                        return order[a.status] - order[b.status];
+                      })
+                      .map((check, i) => (
+                        <div
+                          key={i}
+                          className={`p-4 rounded-xl border ${
+                            check.status === "pass"
+                              ? "bg-white/5 border-white/10"
+                              : check.status === "warn"
+                              ? "bg-yellow-500/5 border-yellow-500/20"
+                              : "bg-red-500/5 border-red-500/20"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-3 flex-1">
+                              <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                                check.status === "pass"
+                                  ? "bg-green-400"
+                                  : check.status === "warn"
+                                  ? "bg-yellow-400"
+                                  : "bg-red-400"
+                              }`} />
+                              <div className="flex-1">
+                                <div className="text-white font-medium text-sm">{check.name}</div>
+                                <div className="text-gray-400 text-sm mt-0.5">{check.message}</div>
+                                {check.details && typeof check.details === "object" && !Array.isArray(check.details) && check.details.example && (
+                                  <div className="text-gray-500 text-xs mt-1 font-mono">{check.details.example}</div>
+                                )}
+                                {check.details && Array.isArray(check.details) && check.details.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {check.details.slice(0, 5).map((d: any, j: number) => (
+                                      <div key={j} className="text-gray-500 text-xs font-mono">
+                                        {d.email || d.id || JSON.stringify(d)}
+                                      </div>
+                                    ))}
+                                    {check.details.length > 5 && (
+                                      <div className="text-gray-600 text-xs">+{check.details.length - 5} more</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded flex-shrink-0 ${
+                              check.status === "pass"
+                                ? "bg-green-500/20 text-green-400"
+                                : check.status === "warn"
+                                ? "bg-yellow-500/20 text-yellow-400"
+                                : "bg-red-500/20 text-red-400"
+                            }`}>
+                              {check.status === "pass" ? "OK" : check.status === "warn" ? "WARN" : "FAIL"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>

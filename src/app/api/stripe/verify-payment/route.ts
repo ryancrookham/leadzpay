@@ -66,24 +66,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No leads found" }, { status: 404 });
     }
 
-    // If all leads are already completed (webhook ran first), nothing to do
-    const stillPending = leads.filter((l) => l.payout_status !== "completed" && !l.stripe_transfer_id);
-    if (stillPending.length === 0) {
+    // With destination charges, Stripe already routed the money to the provider.
+    // Atomic claim: only update leads still in pending/processing (prevents race with webhook)
+    const platformFees = await getPlatformSettings();
+    const paymentIntentId = checkoutSession.payment_intent as string;
+    const allLeadIds = leads.map((l) => l.id);
+
+    const claimedIds = await batchUpdateLeadStripeTransfer(allLeadIds, paymentIntentId, "completed");
+    if (claimedIds.length === 0) {
       return NextResponse.json({
         status: "already_processed",
         message: "Leads already updated (webhook likely processed this)",
       });
     }
 
-    // With destination charges, Stripe already routed the money to the provider.
-    // We just record the transactions and mark leads complete.
-    const platformFees = await getPlatformSettings();
-    const paymentIntentId = checkoutSession.payment_intent as string;
-    const stillPendingIds = stillPending.map((l) => l.id);
+    const claimedSet = new Set(claimedIds);
+    const claimedLeads = leads.filter((l) => claimedSet.has(l.id));
 
-    await batchUpdateLeadStripeTransfer(stillPendingIds, paymentIntentId, "completed");
-
-    for (const lead of stillPending) {
+    for (const lead of claimedLeads) {
       const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
 
       await createTransaction({
@@ -115,12 +115,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[VERIFY-PAYMENT] ${stillPending.length} lead(s) marked paid for checkout ${checkoutSession.id}`);
+    console.log(`[VERIFY-PAYMENT] ${claimedLeads.length} lead(s) marked paid for checkout ${checkoutSession.id}`);
 
     return NextResponse.json({
       status: "processed",
       message: "Payment verified and leads updated",
-      leadsUpdated: stillPending.length,
+      leadsUpdated: claimedLeads.length,
     });
   } catch (error) {
     console.error("[VERIFY-PAYMENT] error:", error);

@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
   business_name VARCHAR(255),
   business_type VARCHAR(50),
   licensed_states TEXT[],
+  stripe_customer_id VARCHAR(255),
+  buyer_stripe_setup_complete BOOLEAN NOT NULL DEFAULT FALSE,
 
   -- Status
   is_active BOOLEAN DEFAULT TRUE,
@@ -144,6 +146,14 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+
+-- ===========================================
+-- PROCESSED WEBHOOKS TABLE (idempotency)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS processed_webhooks (
+  event_id VARCHAR(255) PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- ===========================================
 -- UPDATE TIMESTAMP TRIGGER

@@ -109,10 +109,10 @@ export async function GET(request: NextRequest) {
 
     // Get pending/processing leads and transactions
     const pendingLeads = await sql`
-      SELECT id, provider_id, buyer_id, payout_status, stripe_transfer_id, created_at
+      SELECT id, provider_id, buyer_id, payout_status, stripe_transfer_id, submitted_at
       FROM leads
       WHERE payout_status IN ('pending', 'processing')
-      ORDER BY created_at DESC
+      ORDER BY submitted_at DESC
     `;
 
     const recentTransactions = await sql`

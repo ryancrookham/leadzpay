@@ -1857,18 +1857,18 @@ export async function getProvidersByIds(ids: string[]): Promise<DbUser[]> {
   return result as unknown as DbUser[];
 }
 
-export async function batchUpdateLeadStripeTransfer(leadIds: string[], stripeTransferId: string, payoutStatus: 'completed' | 'failed'): Promise<number> {
-  if (leadIds.length === 0) return 0;
+export async function batchUpdateLeadStripeTransfer(leadIds: string[], stripeTransferId: string, payoutStatus: 'completed' | 'failed'): Promise<string[]> {
+  if (leadIds.length === 0) return [];
   const sql = getSql();
   const result = await sql`
     UPDATE leads SET
       stripe_transfer_id = ${stripeTransferId},
       payout_status = ${payoutStatus},
       payout_completed_at = CASE WHEN ${payoutStatus === 'completed'} THEN NOW() ELSE payout_completed_at END
-    WHERE id = ANY(${leadIds})
+    WHERE id = ANY(${leadIds}) AND payout_status IN ('pending', 'processing')
     RETURNING id
   `;
-  return result.length;
+  return result.map((r: any) => r.id as string);
 }
 
 export async function batchUpdateLeadPayoutStatus(leadIds: string[], payoutStatus: 'pending' | 'processing' | 'completed' | 'failed'): Promise<number> {
@@ -2002,7 +2002,21 @@ export async function cancelInvite(inviteId: string, buyerId: string): Promise<D
 }
 
 // Webhook idempotency
+let webhookTableEnsured = false;
+async function ensureProcessedWebhooksTable(): Promise<void> {
+  if (webhookTableEnsured) return;
+  const sql = getSql();
+  await sql`
+    CREATE TABLE IF NOT EXISTS processed_webhooks (
+      event_id VARCHAR(255) PRIMARY KEY,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `;
+  webhookTableEnsured = true;
+}
+
 export async function hasWebhookBeenProcessed(eventId: string): Promise<boolean> {
+  await ensureProcessedWebhooksTable();
   const sql = getSql();
   const result = await sql`
     SELECT 1 FROM processed_webhooks WHERE event_id = ${eventId} LIMIT 1
@@ -2011,6 +2025,7 @@ export async function hasWebhookBeenProcessed(eventId: string): Promise<boolean>
 }
 
 export async function markWebhookProcessed(eventId: string): Promise<void> {
+  await ensureProcessedWebhooksTable();
   const sql = getSql();
   await sql`
     INSERT INTO processed_webhooks (event_id) VALUES (${eventId})

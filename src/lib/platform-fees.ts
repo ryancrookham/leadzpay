@@ -38,7 +38,7 @@ export function calculateFeeBreakdown(
     totalFee = Math.round((rate * pct / 100) * 100) / 100;
     const buyerShare = (fees?.fee_percent_buyer_share ?? PLATFORM_FEE_BUYER_SHARE) / 100;
     buyerFee = Math.round(totalFee * buyerShare * 100) / 100;
-    providerFee = Math.round((totalFee - buyerFee) * 100) / 100;
+    providerFee = totalFee - buyerFee;
   } else if (feeType === 'mixed') {
     const flatPortion = fees?.fee_mixed_flat ?? 0;
     const pctPortion = fees?.fee_mixed_percent ?? 0;
@@ -46,7 +46,7 @@ export function calculateFeeBreakdown(
     totalFee = Math.round((flatPortion + percentAmount) * 100) / 100;
     const buyerShare = (fees?.fee_mixed_buyer_share ?? 50) / 100;
     buyerFee = Math.round(totalFee * buyerShare * 100) / 100;
-    providerFee = Math.round((totalFee - buyerFee) * 100) / 100;
+    providerFee = totalFee - buyerFee;
   } else {
     // flat (default) — existing behavior
     providerFee = fees?.fee_provider ?? PLATFORM_FEE_PROVIDER;

@@ -119,22 +119,21 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // Skip leads already completed (verify-payment may have run before this webhook arrived)
-  const unprocessedLeads = leads.filter(l => l.payout_status !== 'completed' && !l.stripe_transfer_id);
-  if (unprocessedLeads.length === 0) {
+  const platformFees = await getPlatformSettings();
+  const paymentIntentId = session.payment_intent as string;
+
+  // Atomic claim: only update leads still in pending/processing (prevents race with verify-payment)
+  const allLeadIds = leads.map(l => l.id);
+  const claimedIds = await batchUpdateLeadStripeTransfer(allLeadIds, paymentIntentId, "completed");
+  if (claimedIds.length === 0) {
     console.log(`[WEBHOOK] All leads already completed for checkout ${session.id} — skipping`);
     return;
   }
 
-  const platformFees = await getPlatformSettings();
-  const paymentIntentId = session.payment_intent as string;
+  const claimedSet = new Set(claimedIds);
+  const claimedLeads = leads.filter(l => claimedSet.has(l.id));
 
-  // With destination charges, Stripe already routed the money to the provider.
-  // We just need to mark leads as completed and record the transactions.
-  const leadIdList = unprocessedLeads.map(l => l.id);
-  await batchUpdateLeadStripeTransfer(leadIdList, paymentIntentId, "completed");
-
-  for (const lead of unprocessedLeads) {
+  for (const lead of claimedLeads) {
     const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
     const pid = lead.provider_id || providerId || null;
 
@@ -169,7 +168,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     });
   }
 
-  console.log(`[WEBHOOK] checkout ${session.id} — ${unprocessedLeads.length} lead(s) marked paid, payment_intent ${paymentIntentId}`);
+  console.log(`[WEBHOOK] checkout ${session.id} — ${claimedLeads.length} lead(s) marked paid, payment_intent ${paymentIntentId}`);
 }
 
 async function handleTransferReversed(transfer: Stripe.Transfer) {
