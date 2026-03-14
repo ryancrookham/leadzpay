@@ -109,16 +109,56 @@ export default function Home() {
           />
         </div>
 
-        {/* Device Mockup */}
+        {/* Device Mockup — CSS-based */}
         <div className="mt-20 w-full max-w-5xl px-6">
-          <Image
-            src="/WOMLmockup.png"
-            alt="WOML on Desktop and Mobile"
-            width={2320}
-            height={1180}
-            className="mx-auto w-full h-auto object-contain"
-            priority
-          />
+          <div className="flex items-end justify-center gap-6 md:gap-10">
+
+            {/* Laptop */}
+            <div className="relative w-[70%] max-w-[700px]">
+              {/* Screen bezel */}
+              <div className="relative rounded-t-xl border-[3px] border-[#333] bg-[#333] overflow-hidden" style={{ paddingBottom: '62.5%' }}>
+                {/* Orange screen with logo */}
+                <div className="absolute inset-[3px] rounded-[4px] bg-[#E77500] flex items-center justify-center">
+                  <Image
+                    src="/woml-icon-white.png"
+                    alt="WOML"
+                    width={200}
+                    height={200}
+                    className="w-[35%] h-auto object-contain opacity-90"
+                  />
+                </div>
+                {/* Camera notch */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#1a1a1a] rounded-full z-10" style={{ top: '6px' }} />
+              </div>
+              {/* Keyboard base */}
+              <div className="relative mx-auto w-[108%] -ml-[4%]">
+                {/* Hinge strip */}
+                <div className="h-[6px] bg-gradient-to-b from-[#999] to-[#bbb] rounded-b-sm mx-[8%]" />
+                {/* Keyboard body */}
+                <div className="h-[12px] bg-gradient-to-b from-[#c0c0c0] to-[#a8a8a8] rounded-b-lg shadow-md" />
+              </div>
+            </div>
+
+            {/* iPhone */}
+            <div className="relative w-[18%] max-w-[160px] mb-1">
+              {/* Phone frame */}
+              <div className="relative rounded-[20px] border-[3px] border-[#333] bg-[#333] overflow-hidden" style={{ paddingBottom: '200%' }}>
+                {/* Orange screen with logo */}
+                <div className="absolute inset-[3px] rounded-[17px] bg-[#E77500] flex items-center justify-center">
+                  <Image
+                    src="/woml-icon-white.png"
+                    alt="WOML"
+                    width={100}
+                    height={100}
+                    className="w-[50%] h-auto object-contain opacity-90"
+                  />
+                </div>
+                {/* Dynamic Island */}
+                <div className="absolute top-[8px] left-1/2 -translate-x-1/2 w-[30%] h-[6%] bg-[#1a1a1a] rounded-full z-10" />
+              </div>
+            </div>
+
+          </div>
         </div>
       </main>
 
