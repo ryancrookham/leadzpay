@@ -10,13 +10,13 @@ export const metadata = {
 const docs = [
   {
     id: "business",
-    label: "Business Agreement",
+    label: "Business Agreement & Terms of Service",
     description: "Terms governing insurance agency accounts, lead channels, and payout structures.",
     url: "/WOML_Business_Agreement.pdf",
   },
   {
     id: "provider",
-    label: "Provider Agreement",
+    label: "Provider Agreement & Terms of Service",
     description: "Terms for lead providers — submissions, earnings, and platform conduct.",
     url: "/WOML_Provider_Agreement.pdf",
   },
