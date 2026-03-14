@@ -1614,7 +1614,7 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     fee_provider: 0.0,
     fee_type: 'percent',
     fee_percent: 12.5,
-    fee_percent_buyer_share: 0,  // 0% from buyer — provider absorbs the full 12.5%
+    fee_percent_buyer_share: 50,  // 50% from buyer, 50% from provider — even split of 12.5%
     fee_mixed_flat: 0,
     fee_mixed_percent: 0,
     fee_mixed_buyer_share: 0,

@@ -65,6 +65,16 @@ export async function POST(request: NextRequest) {
         await handleTransferReversed(event.data.object as Stripe.Transfer);
         break;
 
+      // Informational events — log and acknowledge (no action needed)
+      case "charge.succeeded":
+      case "charge.updated":
+      case "payment_intent.succeeded":
+      case "payment_intent.created":
+      case "transfer.created":
+      case "application_fee.created":
+        console.log(`[WEBHOOK] Informational event: ${event.type}`);
+        break;
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }

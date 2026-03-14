@@ -1,7 +1,7 @@
 // Platform fee defaults (fallback if DB unavailable)
 // WOML charges 12.5% of lead value, deducted from provider payout
 export const PLATFORM_FEE_PERCENT = 12.5;
-export const PLATFORM_FEE_BUYER_SHARE = 0; // 0% from buyer (provider absorbs full fee)
+export const PLATFORM_FEE_BUYER_SHARE = 50; // 50% from buyer, 50% from provider (even split)
 
 // Legacy flat fee constants (kept for reference, no longer used as defaults)
 export const PLATFORM_FEE_TOTAL = 2.0;
