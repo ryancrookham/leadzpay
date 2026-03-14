@@ -268,6 +268,28 @@ function ProviderOnboardingContent() {
         return;
       }
 
+      // Wait for the session cookie to be readable before advancing.
+      // signIn() with redirect:false resolves before the cookie is fully
+      // written — without this wait, the next step may see no session.
+      let sessionReady = false;
+      for (let i = 0; i < 10; i++) {
+        try {
+          const res = await fetch("/api/auth/session", { cache: "no-store" });
+          const data = await res.json();
+          if (data?.user?.role) {
+            sessionReady = true;
+            break;
+          }
+        } catch { /* retry */ }
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      if (!sessionReady) {
+        // Session never became readable — send to login as fallback
+        router.push("/auth/login?registered=true");
+        return;
+      }
+
       // Advance to step 4 (Stripe)
       setCurrentStep(4);
       setMode("resume");

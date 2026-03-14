@@ -295,10 +295,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: result.error || "Registration failed" };
         }
 
-        // Auto login after registration
+        // Auto login after registration — login() internally fetches /api/auth/session
+        // to confirm the session is readable, which helps mitigate the cookie race condition.
         const loginResult = await login(data.email, data.password);
         if (!loginResult.success) {
           return { success: true, loginFailed: true };
+        }
+
+        // Double-check: wait until /api/auth/session returns valid data.
+        // This closes the gap where signIn resolves before the cookie is set.
+        for (let i = 0; i < 8; i++) {
+          try {
+            const sessionRes = await fetch("/api/auth/session", { cache: "no-store" });
+            const sessionData = await sessionRes.json();
+            if (sessionData?.user?.role) break;
+          } catch { /* retry */ }
+          await new Promise(r => setTimeout(r, 250));
         }
 
         return { success: true };

@@ -219,7 +219,28 @@ function RegisterContent() {
         if ((result as { loginFailed?: boolean }).loginFailed) {
           window.location.href = "/auth/login?registered=true";
         } else {
-          window.location.href = "/provider-dashboard";
+          // Wait for the session cookie to be readable before redirecting.
+          // signIn() with redirect:false resolves before the cookie is fully
+          // written, so an immediate redirect causes the dashboard to see no
+          // session and bounce back to login.
+          let attempts = 0;
+          const waitForSession = async () => {
+            while (attempts < 10) {
+              try {
+                const res = await fetch("/api/auth/session", { cache: "no-store" });
+                const data = await res.json();
+                if (data?.user?.role) {
+                  window.location.href = "/provider-dashboard";
+                  return;
+                }
+              } catch { /* retry */ }
+              attempts++;
+              await new Promise(r => setTimeout(r, 300));
+            }
+            // Fallback — redirect anyway (dashboard will do its own server check)
+            window.location.href = "/provider-dashboard";
+          };
+          waitForSession();
         }
       } else {
         setPendingStripeConnect(false);

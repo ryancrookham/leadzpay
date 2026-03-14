@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -120,13 +120,48 @@ export default function ProviderDashboard() {
   } = useConnections();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
+  // Track whether we've given the session enough time to hydrate after a fresh sign-in.
+  // After a redirect from signup, the JWT cookie exists but useSession() may still
+  // report "loading" or "unauthenticated" for a brief moment. We verify against the
+  // server session endpoint before kicking the user back to login.
+  const [sessionVerified, setSessionVerified] = useState(false);
+  const sessionCheckRef = useRef(false);
+
+  useEffect(() => {
+    if (isSigningOut) return;
+    if (isLoading) return; // still loading — wait
+    if (isAuthenticated && currentUser) {
+      setSessionVerified(true);
+      return;
+    }
+    // Not authenticated according to client — but the cookie may just not be hydrated yet.
+    // Check the server session endpoint once before giving up.
+    if (sessionCheckRef.current) return; // already checking
+    sessionCheckRef.current = true;
+
+    const verifySession = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const data = await res.json();
+        if (data?.user?.role) {
+          // Session exists on the server — force a full page reload so useSession picks it up
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // Server check failed — fall through to redirect
+      }
+      // Truly not authenticated — redirect to login
+      router.push("/auth/login?role=provider");
+    };
+    verifySession();
+  }, [isLoading, isAuthenticated, isSigningOut, currentUser, router]);
+
   // Redirect to login if not authenticated or not a provider.
   // Guard: skip entirely while signing out — NextAuth's callbackUrl redirect wins.
   useEffect(() => {
     if (isSigningOut) return;
-    if (!isLoading && (!isAuthenticated || !currentUser)) {
-      router.push("/auth/login?role=provider");
-    } else if (!isLoading && currentUser && !isProvider(currentUser)) {
+    if (!isLoading && isAuthenticated && currentUser && !isProvider(currentUser)) {
       router.push("/business");
     } else if (!isLoading && currentUser && isProvider(currentUser) && session?.user?.onboardingComplete === false) {
       // Session may be stale — verify against DB before bouncing provider back to onboarding
