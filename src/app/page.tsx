@@ -98,7 +98,7 @@ export default function Home() {
       {/* Hero Section */}
       <main className="flex-1 flex flex-col items-center justify-center pb-16">
         {/* Logo */}
-        <div className="text-center w-full max-w-4xl px-6">
+        <div className="text-center w-full px-6">
           <Image
             src="/woml-alt-orange.png"
             alt="WOML - Word of Mouth Leads"
