@@ -96,7 +96,7 @@ export default function Home() {
       </nav>
 
       {/* Center Logo */}
-      <main className="flex-1 flex items-center justify-center">
+      <main className="flex-1 flex items-center justify-center -mt-16">
         <div className="text-center">
           <Image
             src="/woml-alt-orange.png"
