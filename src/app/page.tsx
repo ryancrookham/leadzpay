@@ -109,17 +109,6 @@ export default function Home() {
           />
         </div>
 
-        {/* Device Mockup */}
-        <div className="mt-20 w-full max-w-5xl px-6">
-          <Image
-            src="/WOMLmockup.png"
-            alt="WOML on Desktop and Mobile"
-            width={2320}
-            height={1180}
-            className="mx-auto w-full h-auto object-contain"
-            priority
-          />
-        </div>
       </main>
 
       <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
