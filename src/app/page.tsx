@@ -109,14 +109,14 @@ export default function Home() {
           />
         </div>
 
-        {/* Desktop Visual */}
+        {/* Device Mockup */}
         <div className="mt-20 w-full max-w-5xl px-6">
           <Image
-            src="/WOMLdesktopvisual.png"
-            alt="WOML Dashboard Preview"
-            width={1600}
-            height={1000}
-            className="mx-auto w-full h-auto object-contain rounded-xl"
+            src="/WOMLmockup.png"
+            alt="WOML on Desktop and Mobile"
+            width={2090}
+            height={1060}
+            className="mx-auto w-full h-auto object-contain"
             priority
           />
         </div>
