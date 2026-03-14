@@ -181,7 +181,8 @@ export default function AdminPanel() {
     businesses: BusinessHealth[];
     providers: ProviderHealth[];
     revenue: PlatformRevenue | null;
-  }>({ funnel: null, trend: [], businesses: [], providers: [], revenue: null });
+    growth: { leads_this_month: number; leads_last_month: number } | null;
+  }>({ funnel: null, trend: [], businesses: [], providers: [], revenue: null, growth: null });
   const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
@@ -251,6 +252,7 @@ export default function AdminPanel() {
             businesses: d.businesses,
             providers: d.providers,
             revenue: d.revenue,
+            growth: d.growth ?? null,
           });
         }
       })
@@ -636,6 +638,29 @@ export default function AdminPanel() {
                       <MetricCard label="Active Businesses" value={stats.activeBuyers} />
                     </div>
 
+                    {/* ── Month-over-Month Growth ───────────────────────────── */}
+                    {platformHealth.growth && (() => {
+                      const curr = platformHealth.growth!.leads_this_month;
+                      const prev = platformHealth.growth!.leads_last_month;
+                      const pctChange = prev === 0 ? (curr > 0 ? 100 : 0) : Math.round(((curr - prev) / prev) * 100);
+                      const isUp = pctChange > 0;
+                      const isFlat = pctChange === 0;
+                      return (
+                        <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
+                          <div>
+                            <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Month-over-Month Growth</p>
+                            <p className="text-white text-sm">
+                              <span className="font-semibold text-white">{curr} leads</span> this month vs{" "}
+                              <span className="font-semibold text-white">{prev} leads</span> last month
+                            </p>
+                          </div>
+                          <div className={`text-2xl font-bold ${isFlat ? "text-gray-400" : isUp ? "text-green-400" : "text-red-400"}`}>
+                            {isFlat ? "—" : `${isUp ? "+" : ""}${pctChange}%`}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* ── Platform Funnel ───────────────────────────── */}
                     {platformHealth.funnel && (() => {
                       const f = platformHealth.funnel!;
@@ -670,28 +695,52 @@ export default function AdminPanel() {
                     })()}
 
                     {/* ── 30-Day Trend Chart ───────────────────────────── */}
-                    {platformHealth.trend.length > 0 && (
-                      <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
-                        <h3 className="text-sm font-semibold text-white mb-4">Lead Volume — Last 30 Days</h3>
-                        <div className="h-32 flex items-end gap-1">
-                          {platformHealth.trend.map(day => {
-                            const maxLeads = Math.max(...platformHealth.trend.map(d => d.leads), 1);
-                            const heightPct = (day.leads / maxLeads) * 100;
-                            const soldPct = (day.sold / maxLeads) * 100;
-                            return (
-                              <div key={day.date} className="flex-1 flex flex-col justify-end gap-0.5" title={`${day.date}: ${day.leads} leads, ${day.sold} sold`}>
-                                <div className="w-full rounded-sm" style={{ height: `${soldPct}%`, minHeight: day.sold > 0 ? 3 : 0, backgroundColor: "#16a34a" }} />
-                                <div className="w-full rounded-sm" style={{ height: `${heightPct - soldPct}%`, minHeight: day.leads > 0 ? 3 : 0, backgroundColor: "#ef4444", opacity: 0.6 }} />
-                              </div>
-                            );
-                          })}
+                    {(() => {
+                      // Build a full 30-day array, filling in zeros for days with no activity
+                      const today = new Date();
+                      const allDays = Array.from({ length: 30 }, (_, i) => {
+                        const d = new Date(today);
+                        d.setDate(d.getDate() - (29 - i));
+                        return d.toISOString().split("T")[0];
+                      });
+                      const trendMap = new Map(platformHealth.trend.map(d => [d.date, d]));
+                      const fullTrend = allDays.map(date => trendMap.get(date) || { date, leads: 0, contacted: 0, sold: 0 });
+                      const maxLeads = Math.max(...fullTrend.map(d => d.leads), 1);
+                      const hasAnyData = fullTrend.some(d => d.leads > 0);
+                      return (
+                        <div className="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                          <h3 className="text-sm font-semibold text-white mb-4">Lead Volume — Last 30 Days</h3>
+                          {hasAnyData ? (
+                            <div className="h-32 flex items-end gap-0.5">
+                              {fullTrend.map(day => {
+                                const heightPct = (day.leads / maxLeads) * 100;
+                                const soldPct = (day.sold / maxLeads) * 100;
+                                return (
+                                  <div key={day.date} className="flex-1 flex flex-col justify-end" title={`${day.date}: ${day.leads} leads, ${day.sold} sold`}>
+                                    {day.leads > 0 ? (
+                                      <>
+                                        <div className="w-full rounded-t-sm" style={{ height: `${soldPct}%`, minHeight: day.sold > 0 ? 4 : 0, backgroundColor: "#16a34a" }} />
+                                        <div className="w-full" style={{ height: `${heightPct - soldPct}%`, minHeight: day.leads > 0 ? 4 : 0, backgroundColor: "#ef4444", opacity: 0.6 }} />
+                                      </>
+                                    ) : (
+                                      <div className="w-full" style={{ height: "2px", backgroundColor: "#374151" }} />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+                              No lead activity in the last 30 days
+                            </div>
+                          )}
+                          <div className="flex items-center gap-4 mt-3">
+                            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-red-500/60 inline-block" /> Leads</span>
+                            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Sold</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 mt-2">
-                          <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-red-500/60 inline-block" /> Leads</span>
-                          <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Sold</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* ── Per-Business Health Cards ───────────────────────────── */}
                     <div>

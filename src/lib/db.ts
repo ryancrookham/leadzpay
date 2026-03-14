@@ -1328,12 +1328,21 @@ export async function getAdminPlatformHealth() {
     FROM transactions
   `;
 
+  // Month-over-month growth
+  const [growthStats] = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE submitted_at >= DATE_TRUNC('month', NOW()))::int as leads_this_month,
+      COUNT(*) FILTER (WHERE submitted_at >= DATE_TRUNC('month', NOW() - INTERVAL '1 month') AND submitted_at < DATE_TRUNC('month', NOW()))::int as leads_last_month
+    FROM leads
+  `;
+
   return {
     funnel: funnelStats,
     trend: trendRows,
     businesses,
     providers: providerStats,
     revenue: revenueStats,
+    growth: growthStats,
   };
 }
 
