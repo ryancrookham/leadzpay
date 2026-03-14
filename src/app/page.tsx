@@ -95,8 +95,9 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Center Logo */}
-      <main className="flex-1 flex items-center justify-center -mt-40">
+      {/* Hero Section */}
+      <main className="flex-1 flex flex-col items-center justify-center -mt-20 pb-16">
+        {/* Logo */}
         <div className="text-center">
           <Image
             src="/woml-alt-orange.png"
@@ -104,6 +105,18 @@ export default function Home() {
             width={4480}
             height={1260}
             className="mx-auto w-full h-auto object-contain"
+            priority
+          />
+        </div>
+
+        {/* Desktop Visual */}
+        <div className="mt-20 w-full max-w-5xl px-6">
+          <Image
+            src="/WOMLdesktopvisual.png"
+            alt="WOML Dashboard Preview"
+            width={1600}
+            height={1000}
+            className="mx-auto w-full h-auto object-contain rounded-xl"
             priority
           />
         </div>
