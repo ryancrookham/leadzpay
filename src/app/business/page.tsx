@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -139,7 +139,7 @@ function BusinessPortalContent() {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [pipelineFilter, setPipelineFilter] = useState<string>("all");
   const [pipelineSearch, setPipelineSearch] = useState("");
-  const [providerSearch, setProviderSearch] = useState("");
+  const [providerFilter, setProviderFilter] = useState<string>("all");
   const [providerInfoDrawer, setProviderInfoDrawer] = useState<string | null>(null);
   const [pipelineSort, setPipelineSort] = useState<"newest" | "oldest">("newest");
   const [activityDrawer, setActivityDrawer] = useState<string | null>(null);
@@ -313,31 +313,55 @@ function BusinessPortalContent() {
   useEffect(() => {
     const payment = searchParams.get("payment");
     if (payment === "success") {
-      setPaymentNotice("Payment successful! Leads are being processed.");
       setActiveTab("pipeline");
 
       // Call verify-payment to process lead status + trigger provider transfer
-      // even if the Stripe webhook hasn't fired yet
       const sessionId = searchParams.get("session_id");
-      if (sessionId) {
-        fetch("/api/stripe/verify-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId }),
-        })
-          .then(() => fetchLeads())
-          .catch(() => fetchLeads());
-      } else {
-        fetchLeads();
-      }
+      const verifyAndContinue = async () => {
+        if (sessionId) {
+          try {
+            await fetch("/api/stripe/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId }),
+            });
+          } catch { /* webhook will handle it */ }
+        }
+        await fetchLeads();
+
+        // Check for remaining batch queue (Pay All Providers chaining)
+        const batchQueue = sessionStorage.getItem("woml_batch_queue");
+        if (batchQueue) {
+          try {
+            const remaining = JSON.parse(batchQueue) as { providerId: string; providerName: string; leadIds: string[] }[];
+            if (remaining.length > 0) {
+              const next = remaining[0];
+              sessionStorage.setItem("woml_batch_queue", JSON.stringify(remaining.slice(1)));
+              setPaymentNotice(`Payment successful! Redirecting to pay ${next.providerName} (${remaining.length} provider${remaining.length !== 1 ? "s" : ""} remaining)...`);
+              // Clear query params before redirect
+              const url = new URL(window.location.href);
+              url.searchParams.delete("payment");
+              url.searchParams.delete("session_id");
+              window.history.replaceState({}, "", url.toString());
+              setTimeout(() => handleStripePayment(next.leadIds), 2000);
+              return;
+            }
+          } catch { /* invalid JSON, clear it */ }
+          sessionStorage.removeItem("woml_batch_queue");
+        }
+
+        setPaymentNotice("Payment successful! Leads are being processed.");
+        setTimeout(() => setPaymentNotice(null), 8000);
+      };
+      verifyAndContinue();
 
       // Clear the query params
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
-      setTimeout(() => setPaymentNotice(null), 8000);
     } else if (payment === "cancelled") {
+      sessionStorage.removeItem("woml_batch_queue");
       setPaymentNotice("Payment was cancelled. No charges were made.");
       setActiveTab("pipeline");
       const url = new URL(window.location.href);
@@ -582,6 +606,28 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
+  // Pending leads computed at component level (used by payment bar + batch logic)
+  const pendingLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "pending"), [dbLeads]);
+
+  // Group pending leads by provider for batch payment
+  const pendingByProvider = useMemo(() => {
+    const map = new Map<string, { providerId: string; providerName: string; leads: ApiLead[]; totalBuyerAmount: number }>();
+    pendingLeadsAll.forEach(l => {
+      const existing = map.get(l.providerId) || { providerId: l.providerId, providerName: l.providerName || "Unknown", leads: [], totalBuyerAmount: 0 };
+      existing.leads.push(l);
+      existing.totalBuyerAmount += calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal;
+      map.set(l.providerId, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.leads.length - a.leads.length);
+  }, [pendingLeadsAll, feeSettings]);
+
+  // Unique providers for dropdown filter
+  const uniqueProviders = useMemo(() => {
+    const map = new Map<string, string>();
+    dbLeads.forEach(l => { if (!map.has(l.providerId)) map.set(l.providerId, l.providerName || "Unknown"); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [dbLeads]);
+
   // Stripe payment handler (used by Pipeline tab)
   const handleStripePayment = async (ids: string[]) => {
     setBatchMarkingPaid(true);
@@ -606,6 +652,20 @@ function BusinessPortalContent() {
     } finally {
       setBatchMarkingPaid(false);
     }
+  };
+
+  // Pay All Providers — chains Stripe Checkout sessions via sessionStorage
+  const handlePayAllProviders = async () => {
+    const groups = pendingByProvider.map(g => ({ providerId: g.providerId, providerName: g.providerName, leadIds: g.leads.map(l => l.id) }));
+    if (groups.length === 0) return;
+
+    // Store remaining groups (after first) in sessionStorage for chaining
+    if (groups.length > 1) {
+      sessionStorage.setItem("woml_batch_queue", JSON.stringify(groups.slice(1)));
+    }
+
+    // Pay first provider group
+    await handleStripePayment(groups[0].leadIds);
   };
 
   // Optimistic lead field update
@@ -1391,14 +1451,9 @@ function BusinessPortalContent() {
             );
           }
 
-          // Search providers
-          if (providerSearch.trim()) {
-            const pq = providerSearch.toLowerCase();
-            filtered = filtered.filter(l =>
-              (l.providerName || "").toLowerCase().includes(pq) ||
-              (l.providerEmail || "").toLowerCase().includes(pq) ||
-              (l.providerPhone || "").toLowerCase().includes(pq)
-            );
+          // Filter by provider
+          if (providerFilter !== "all") {
+            filtered = filtered.filter(l => l.providerId === providerFilter);
           }
 
           // Sort
@@ -1424,8 +1479,7 @@ function BusinessPortalContent() {
 
           const paidOutLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
           const totalPaidOut = paidOutLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-          const pendingLeads = dbLeads.filter(l => l.payoutStatus === "pending");
-          const amountPending = pendingLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const amountPending = pendingLeadsAll.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
           const avgPayout = paidOutLeads.length > 0 ? totalPaidOut / paidOutLeads.length : 0;
 
           const stageLabels: Record<string, string> = { new: "Lead", contacted: "Contacted", quoted: "Quoted", sold: "Sold", dead: "Dead" };
@@ -1465,49 +1519,50 @@ function BusinessPortalContent() {
               </div>
             )}
 
-            {/* Pending Payment Bar */}
-            {pendingLeads.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
-                <span className="text-amber-800 text-sm font-medium">
-                  {pendingLeads.length} unpaid lead{pendingLeads.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} pending
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const pendingIds = pendingLeads.map(l => l.id);
-                      setSelectedLeads(prev => {
-                        const next = new Set(prev);
-                        const allSelected = pendingIds.every(id => next.has(id));
-                        if (allSelected) {
-                          pendingIds.forEach(id => next.delete(id));
-                        } else {
-                          pendingIds.forEach(id => next.add(id));
-                        }
-                        return next;
-                      });
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
-                  >
-                    {pendingLeads.every(l => selectedLeads.has(l.id)) ? "Deselect All Pending" : "Select All Pending"}
-                  </button>
-                  {selectedLeads.size > 0 && (() => {
-                    const selectedPendingIds = pendingLeads.filter(l => selectedLeads.has(l.id)).map(l => l.id);
-                    const selectedTotal = selectedPendingIds.reduce((sum, id) => {
-                      const lead = dbLeads.find(l => l.id === id);
-                      return sum + (lead ? calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal : 0);
-                    }, 0);
-                    return selectedPendingIds.length > 0 ? (
+            {/* Pending Payments — Provider-Grouped */}
+            {pendingLeadsAll.length > 0 && (
+              <div className="space-y-2">
+                {/* Summary bar */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-amber-800 text-sm font-medium">
+                    {pendingLeadsAll.length} unpaid lead{pendingLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {pendingByProvider.length > 1 && (
                       <button
-                        onClick={() => handleStripePayment(selectedPendingIds)}
+                        onClick={handlePayAllProviders}
                         disabled={batchMarkingPaid}
                         className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
                       >
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
-                        {batchMarkingPaid ? "Processing..." : `Pay $${selectedTotal.toFixed(2)} via Stripe`}
+                        {batchMarkingPaid ? "Processing..." : `Pay All Providers ($${amountPending.toFixed(2)})`}
                       </button>
-                    ) : null;
-                  })()}
+                    )}
+                  </div>
                 </div>
+
+                {/* Per-provider cards */}
+                {pendingByProvider.map(group => (
+                  <div key={group.providerId} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2 shadow-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#E8822A]/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-[#E8822A]">{(group.providerName || "?")[0].toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{group.providerName}</p>
+                        <p className="text-xs text-gray-500">{group.leads.length} lead{group.leads.length !== 1 ? "s" : ""} &middot; ${group.totalBuyerAmount.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleStripePayment(group.leads.map(l => l.id))}
+                      disabled={batchMarkingPaid}
+                      className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                      {batchMarkingPaid ? "Processing..." : `Pay $${group.totalBuyerAmount.toFixed(2)}`}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1542,14 +1597,17 @@ function BusinessPortalContent() {
                   onChange={e => setPipelineSearch(e.target.value)}
                   className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-36"
                 />
-                {/* Search providers */}
-                <input
-                  type="text"
-                  placeholder="Search providers..."
-                  value={providerSearch}
-                  onChange={e => setProviderSearch(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-40"
-                />
+                {/* Provider filter */}
+                <select
+                  value={providerFilter}
+                  onChange={e => setProviderFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white border border-white/20 focus:outline-none w-40"
+                >
+                  <option value="all" className="text-gray-800">All Providers</option>
+                  {uniqueProviders.map(([id, name]) => (
+                    <option key={id} value={id} className="text-gray-800">{name}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
