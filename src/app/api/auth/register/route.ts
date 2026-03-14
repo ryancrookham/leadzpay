@@ -10,8 +10,9 @@ import {
   getActiveBusinessCriteria,
   updateProviderOnboardingStep,
 } from "@/lib/db";
+import { withRateLimit } from "@/lib/server/api-auth";
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = await request.json();
 
@@ -191,3 +192,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withRateLimit(_POST, { limit: 5, windowMs: 3600000, keyPrefix: "register" });

@@ -2089,7 +2089,7 @@ export async function createBusinessCriteria(data: {
   return first<DbBusinessLeadCriteria>(result)!;
 }
 
-export async function updateBusinessCriteria(id: string, updates: {
+export async function updateBusinessCriteria(id: string, businessId: string, updates: {
   payout_per_lead?: number;
   weekly_cap?: number | null;
   monthly_cap?: number | null;
@@ -2105,7 +2105,7 @@ export async function updateBusinessCriteria(id: string, updates: {
       payment_timing = CASE WHEN ${updates.payment_timing !== undefined} THEN ${updates.payment_timing ?? null} ELSE payment_timing END,
       termination_notice_days = CASE WHEN ${updates.termination_notice_days !== undefined} THEN ${updates.termination_notice_days ?? null} ELSE termination_notice_days END,
       updated_at = NOW()
-    WHERE id = ${id}
+    WHERE id = ${id} AND business_id = ${businessId}
     RETURNING *
   `;
   return first<DbBusinessLeadCriteria>(result);

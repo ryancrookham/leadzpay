@@ -50,7 +50,7 @@ function generateIV(): Uint8Array {
 
 // Get encryption key from environment or derive from session
 async function getEncryptionKey(): Promise<CryptoKey> {
-  const keyHex = process.env.ENCRYPTION_KEY || process.env.NEXT_PUBLIC_ENCRYPTION_KEY;
+  const keyHex = process.env.ENCRYPTION_KEY;
 
   if (!keyHex) {
     throw new Error("ENCRYPTION_KEY not configured");
@@ -139,7 +139,7 @@ export async function decryptJSON<T>(encrypted: string, iv: string): Promise<T> 
  * Check if encryption is configured
  */
 export function isEncryptionConfigured(): boolean {
-  const key = process.env.ENCRYPTION_KEY || process.env.NEXT_PUBLIC_ENCRYPTION_KEY;
+  const key = process.env.ENCRYPTION_KEY;
   return !!key && key.length === 64;
 }
 

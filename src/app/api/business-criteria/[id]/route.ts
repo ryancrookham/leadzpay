@@ -28,7 +28,7 @@ export async function PATCH(
   if (paymentTiming !== undefined) updates.payment_timing = paymentTiming || null;
   if (terminationNoticeDays !== undefined) updates.termination_notice_days = terminationNoticeDays ?? null;
 
-  const criteria = await updateBusinessCriteria(id, updates);
+  const criteria = await updateBusinessCriteria(id, session.user.id, updates);
   if (!criteria) {
     return NextResponse.json({ error: 'Criteria not found' }, { status: 404 });
   }
