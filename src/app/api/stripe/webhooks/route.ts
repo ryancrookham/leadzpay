@@ -20,11 +20,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
     const signature = request.headers.get("stripe-signature");
-    console.log("[WEBHOOK] Full signature header:", signature);
+    const webhookId = request.headers.get("webhook-id");
+    const webhookTimestamp = request.headers.get("webhook-timestamp");
+    const webhookSignature = request.headers.get("webhook-signature");
 
-    if (!signature) {
-      return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
-    }
+    console.log("[WEBHOOK] stripe-signature:", signature ? "present" : "missing");
+    console.log("[WEBHOOK] webhook-id:", webhookId ? "present" : "missing");
 
     if (!STRIPE_WEBHOOK_SECRET) {
       console.error("STRIPE_WEBHOOK_SECRET is not configured");
@@ -32,12 +33,44 @@ export async function POST(request: NextRequest) {
     }
 
     let event: Stripe.Event;
-    try {
-      event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
-    } catch (err: any) {
-      console.error("[WEBHOOK] Signature verification failed:", err.message);
-      console.error("[WEBHOOK] Secret starts with:", STRIPE_WEBHOOK_SECRET?.substring(0, 10));
-      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+
+    // Try V1 classic webhook verification first
+    if (signature) {
+      try {
+        event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
+        console.log("[WEBHOOK] V1 signature verified successfully");
+      } catch (v1Err: any) {
+        console.log("[WEBHOOK] V1 verification failed:", v1Err.message);
+
+        // V1 failed — try V2 Event Destination (thin event) verification
+        try {
+          const thinEvent = stripe.parseThinEvent(body, signature, STRIPE_WEBHOOK_SECRET);
+          console.log("[WEBHOOK] V2 thin event parsed:", thinEvent.id, thinEvent.type);
+
+          // Thin events only have id/type — fetch the full V1 event object
+          const fullEvent = await stripe.events.retrieve(thinEvent.id);
+          event = fullEvent;
+          console.log("[WEBHOOK] Full event fetched:", event.id, event.type);
+        } catch (v2Err: any) {
+          console.error("[WEBHOOK] V1 error:", v1Err.message);
+          console.error("[WEBHOOK] V2 error:", v2Err.message);
+          console.error("[WEBHOOK] Secret starts with:", STRIPE_WEBHOOK_SECRET?.substring(0, 10));
+          return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+        }
+      }
+    } else if (webhookSignature) {
+      // Some V2 destinations use Standard Webhooks headers instead of stripe-signature
+      try {
+        const thinEvent = stripe.parseThinEvent(body, webhookSignature, STRIPE_WEBHOOK_SECRET);
+        console.log("[WEBHOOK] V2 (standard headers) thin event:", thinEvent.id);
+        const fullEvent = await stripe.events.retrieve(thinEvent.id);
+        event = fullEvent;
+      } catch (err: any) {
+        console.error("[WEBHOOK] Standard webhook verification failed:", err.message);
+        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      }
+    } else {
+      return NextResponse.json({ error: "Missing signature headers" }, { status: 400 });
     }
 
     // Idempotency check — skip if already processed
