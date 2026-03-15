@@ -35,6 +35,9 @@ function RegisterContent() {
   const [buyerSubmitting, setBuyerSubmitting] = useState(false);
   const [buyerError, setBuyerError] = useState("");
   const [buyerFormStep, setBuyerFormStep] = useState<"account" | "pin" | "stripe">("account");
+  const [buyerStripeLoading, setBuyerStripeLoading] = useState(false);
+  const [buyerStripeError, setBuyerStripeError] = useState<string | null>(null);
+  const [agreementChecked, setAgreementChecked] = useState(false);
   const [buyerPin, setBuyerPin] = useState("");
   const [buyerPinConfirm, setBuyerPinConfirm] = useState("");
   const [buyerPinError, setBuyerPinError] = useState("");
@@ -318,6 +321,27 @@ function RegisterContent() {
     }
   };
 
+  const handleConnectBuyerStripe = async () => {
+    setBuyerStripeLoading(true);
+    setBuyerStripeError(null);
+    try {
+      // Record business agreement acceptance first
+      await fetch("/api/stripe/record-agreement", { method: "POST" });
+
+      const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
+      const data = await res.json();
+      if (data.setupUrl) {
+        window.location.href = data.setupUrl;
+      } else {
+        setBuyerStripeError(data.error || "Failed to connect. Please try again.");
+        setBuyerStripeLoading(false);
+      }
+    } catch {
+      setBuyerStripeError("Failed to connect Stripe. Please try again.");
+      setBuyerStripeLoading(false);
+    }
+  };
+
   // Block generic /auth/register (no role, no invite, no token) — redirect to homepage
   const hasValidParam = requestedRole || inviteCodeParam || tokenParam;
   useEffect(() => {
@@ -461,23 +485,75 @@ function RegisterContent() {
           )}
 
           {buyerFormStep === "stripe" && (
-            <div className="space-y-6 text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
-                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  Link your business bank account to pay lead providers securely through Stripe.
+                </p>
               </div>
-              <h3 className="text-xl font-bold text-gray-900">Account Created!</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                Your business account is ready. You can set up your payment method
-                in Settings when you&apos;re ready to start paying providers.
-              </p>
+
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Secure bank-level encryption via Stripe
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  All transactions tracked for tax documentation
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Takes about 2 minutes to set up
+                </div>
+              </div>
+
+              {buyerStripeError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{buyerStripeError}</div>
+              )}
+
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="business-agreement"
+                  checked={agreementChecked}
+                  onChange={(e) => setAgreementChecked(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-[#E8822A] cursor-pointer flex-shrink-0"
+                />
+                <label htmlFor="business-agreement" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
+                  I have read and agree to the{" "}
+                  <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-[#E8822A] hover:underline font-medium">
+                    WOML Business Agreement
+                  </a>
+                  . I understand this is a binding legal agreement governing my use of the platform.
+                </label>
+              </div>
+
               <button
-                onClick={() => router.push("/business")}
-                className="w-full py-3 rounded-lg text-white font-semibold text-lg transition hover:opacity-90"
-                style={{ backgroundColor: "#E8822A" }}
+                onClick={handleConnectBuyerStripe}
+                disabled={buyerStripeLoading || !agreementChecked}
+                className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Go to Business Portal
+                {buyerStripeLoading ? (
+                  <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Connecting...</>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    Connect Business Bank Account
+                  </>
+                )}
               </button>
             </div>
           )}
