@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS users (
   licensed_states TEXT[],
   stripe_customer_id VARCHAR(255),
   buyer_stripe_setup_complete BOOLEAN NOT NULL DEFAULT FALSE,
+  stripe_default_payment_method VARCHAR(255),
+  stripe_payment_method_set_at TIMESTAMP WITH TIME ZONE,
 
   -- Status
   is_active BOOLEAN DEFAULT TRUE,

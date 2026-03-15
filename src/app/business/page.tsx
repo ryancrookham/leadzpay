@@ -12,9 +12,13 @@ import { isBuyer } from "@/lib/auth-types";
 import { ContractTerms, getDefaultContractTerms, formatPaymentTiming } from "@/lib/connection-types";
 import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import dynamic from "next/dynamic";
+import { loadStripe } from "@stripe/stripe-js";
 import InviteTab, { type InviteToken, type SavedCriteria, type SavedField } from "./components/InviteTab";
 
 const DashboardChart = dynamic(() => import("./components/DashboardChart"), { ssr: false });
+
+// Module-level Stripe.js promise (NOT a hook — safe outside component)
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
 // Type for leads returned by GET /api/leads
 interface ApiLead {
@@ -309,13 +313,12 @@ function BusinessPortalContent() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [currentUser, fetchDashboard]);
 
-  // Handle Stripe payment return
+  // Handle Stripe payment return (legacy Checkout Session flow)
   useEffect(() => {
     const payment = searchParams.get("payment");
     if (payment === "success") {
       setActiveTab("pipeline");
 
-      // Call verify-payment to process lead status + trigger provider transfer
       const sessionId = searchParams.get("session_id");
       const verifyAndContinue = async () => {
         if (sessionId) {
@@ -328,40 +331,16 @@ function BusinessPortalContent() {
           } catch { /* webhook will handle it */ }
         }
         await fetchLeads();
-
-        // Check for remaining batch queue (Pay All Providers chaining)
-        const batchQueue = sessionStorage.getItem("woml_batch_queue");
-        if (batchQueue) {
-          try {
-            const remaining = JSON.parse(batchQueue) as { providerId: string; providerName: string; leadIds: string[] }[];
-            if (remaining.length > 0) {
-              const next = remaining[0];
-              sessionStorage.setItem("woml_batch_queue", JSON.stringify(remaining.slice(1)));
-              setPaymentNotice(`Payment successful! Redirecting to pay ${next.providerName} (${remaining.length} provider${remaining.length !== 1 ? "s" : ""} remaining)...`);
-              // Clear query params before redirect
-              const url = new URL(window.location.href);
-              url.searchParams.delete("payment");
-              url.searchParams.delete("session_id");
-              window.history.replaceState({}, "", url.toString());
-              setTimeout(() => handleStripePayment(next.leadIds), 2000);
-              return;
-            }
-          } catch { /* invalid JSON, clear it */ }
-          sessionStorage.removeItem("woml_batch_queue");
-        }
-
         setPaymentNotice("Payment successful! Leads are being processed.");
         setTimeout(() => setPaymentNotice(null), 8000);
       };
       verifyAndContinue();
 
-      // Clear the query params
       const url = new URL(window.location.href);
       url.searchParams.delete("payment");
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
     } else if (payment === "cancelled") {
-      sessionStorage.removeItem("woml_batch_queue");
       setPaymentNotice("Payment was cancelled. No charges were made.");
       setActiveTab("pipeline");
       const url = new URL(window.location.href);
@@ -628,7 +607,104 @@ function BusinessPortalContent() {
     return Array.from(providerMap.values()).sort((a, b) => b.leadCount - a.leadCount);
   })();
 
-  // Stripe payment handler (used by Pipeline tab)
+  // Batch payment handler — charges saved payment method server-side
+  const handleBatchPayment = async (leadIds: string[]) => {
+    if (leadIds.length === 0) return;
+    setBatchMarkingPaid(true);
+    setPaymentNotice(null);
+
+    try {
+      const res = await fetch("/api/stripe/batch-pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds }),
+      });
+
+      const data = await res.json();
+
+      // No saved payment method — redirect to setup
+      if (data.needsSetup) {
+        setPaymentNotice(data.error || "Please connect a payment method first.");
+        setTimeout(() => setPaymentNotice(null), 8000);
+        // Redirect to Stripe setup
+        try {
+          const setupRes = await fetch("/api/stripe/setup-customer", { method: "POST" });
+          const setupData = await setupRes.json();
+          if (setupData.setupUrl) {
+            window.location.href = setupData.setupUrl;
+            return;
+          }
+        } catch { /* fall through */ }
+        setBatchMarkingPaid(false);
+        return;
+      }
+
+      if (!res.ok) {
+        setPaymentNotice(data.error || "Payment failed. Please try again.");
+        setTimeout(() => setPaymentNotice(null), 8000);
+        setBatchMarkingPaid(false);
+        return;
+      }
+
+      const results: { providerId: string; providerName: string; status: string; leadCount: number; amountCents: number; clientSecret?: string; paymentIntentId?: string; error?: string }[] = data.results || [];
+
+      // Handle 3D Secure if any require action
+      const requires3ds = results.filter(r => r.status === "requires_action");
+      if (requires3ds.length > 0) {
+        const stripeInstance = await stripePromise;
+        if (stripeInstance) {
+          for (const r of requires3ds) {
+            if (!r.clientSecret) continue;
+            setPaymentNotice(`Confirming payment for ${r.providerName}...`);
+            const { error } = await stripeInstance.confirmCardPayment(r.clientSecret);
+            if (error) {
+              r.status = "failed";
+              r.error = error.message || "3D Secure authentication failed";
+            } else {
+              // Confirm on server — claim leads + create transactions
+              try {
+                await fetch("/api/stripe/confirm-payment-intent", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ paymentIntentId: r.paymentIntentId }),
+                });
+                r.status = "succeeded";
+              } catch {
+                r.status = "failed";
+                r.error = "Server confirmation failed (webhook will retry)";
+              }
+            }
+          }
+        }
+      }
+
+      // Refresh leads
+      await fetchLeads();
+
+      // Show summary
+      const succeeded = results.filter(r => r.status === "succeeded").length;
+      const failed = results.filter(r => r.status === "failed").length;
+      const totalProviders = results.length;
+
+      if (failed === 0) {
+        setPaymentNotice(`All ${succeeded} provider${succeeded !== 1 ? "s" : ""} paid successfully!`);
+      } else if (succeeded > 0) {
+        setPaymentNotice(`${succeeded} of ${totalProviders} providers paid. ${failed} failed — please retry.`);
+      } else {
+        const errorMsg = results.find(r => r.error)?.error || "All payments failed";
+        setPaymentNotice(`Payment failed: ${errorMsg}`);
+      }
+      setTimeout(() => setPaymentNotice(null), 8000);
+    } catch (e) {
+      console.error("Batch payment failed:", e);
+      setPaymentNotice("Payment failed. Please try again.");
+      setTimeout(() => setPaymentNotice(null), 8000);
+    } finally {
+      setBatchMarkingPaid(false);
+    }
+  };
+
+  // Legacy Stripe Checkout redirect (fallback for single-provider pay via redirect)
   const handleStripePayment = async (ids: string[]) => {
     setBatchMarkingPaid(true);
     try {
@@ -652,20 +728,6 @@ function BusinessPortalContent() {
     } finally {
       setBatchMarkingPaid(false);
     }
-  };
-
-  // Pay All Providers — chains Stripe Checkout sessions via sessionStorage
-  const handlePayAllProviders = async () => {
-    const groups = pendingByProvider.map(g => ({ providerId: g.providerId, providerName: g.providerName, leadIds: g.leads.map(l => l.id) }));
-    if (groups.length === 0) return;
-
-    // Store remaining groups (after first) in sessionStorage for chaining
-    if (groups.length > 1) {
-      sessionStorage.setItem("woml_batch_queue", JSON.stringify(groups.slice(1)));
-    }
-
-    // Pay first provider group
-    await handleStripePayment(groups[0].leadIds);
   };
 
   // Optimistic lead field update
@@ -1530,7 +1592,7 @@ function BusinessPortalContent() {
                   <div className="flex items-center gap-2">
                     {pendingByProvider.length > 1 && (
                       <button
-                        onClick={handlePayAllProviders}
+                        onClick={() => handleBatchPayment(pendingLeadsAll.map(l => l.id))}
                         disabled={batchMarkingPaid}
                         className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
                       >
@@ -1554,7 +1616,7 @@ function BusinessPortalContent() {
                       </div>
                     </div>
                     <button
-                      onClick={() => handleStripePayment(group.leads.map(l => l.id))}
+                      onClick={() => handleBatchPayment(group.leads.map(l => l.id))}
                       disabled={batchMarkingPaid}
                       className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 shrink-0"
                     >

@@ -47,6 +47,8 @@ export interface DbUser {
   onboarding_complete: boolean;
   // Buyer Stripe setup
   buyer_stripe_setup_complete: boolean;
+  stripe_default_payment_method: string | null;
+  stripe_payment_method_set_at: string | null;
   business_agreement_accepted_at: string | null;
   disabled_at: string | null;
   // SMS lead alert settings (buyer only)
@@ -666,6 +668,51 @@ export async function ensureSmsAlertColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_agent_2_name TEXT`;
   await ensureLeadChasersTable();
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_pin_hash TEXT`;
+}
+
+// Idempotent migration: adds payment method columns to users table if missing.
+export async function ensurePaymentMethodColumns(): Promise<void> {
+  const sql = getSql();
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_default_payment_method VARCHAR(255)`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payment_method_set_at TIMESTAMPTZ`;
+}
+
+export async function updatePaymentMethodId(userId: string, paymentMethodId: string): Promise<void> {
+  const sql = getSql();
+  await ensurePaymentMethodColumns();
+  await sql`
+    UPDATE users
+    SET stripe_default_payment_method = ${paymentMethodId},
+        stripe_payment_method_set_at = NOW(),
+        updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+}
+
+export async function getPaymentMethodId(userId: string): Promise<string | null> {
+  const sql = getSql();
+  await ensurePaymentMethodColumns();
+  const rows = await sql`
+    SELECT stripe_default_payment_method FROM users WHERE id = ${userId}
+  `;
+  return rows[0]?.stripe_default_payment_method || null;
+}
+
+export async function clearPaymentMethodId(userId: string): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE users
+    SET stripe_default_payment_method = NULL,
+        stripe_payment_method_set_at = NULL,
+        updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+}
+
+export async function getUserByStripeCustomerId(customerId: string): Promise<DbUser | null> {
+  const sql = getSql();
+  const rows = await sql`SELECT * FROM users WHERE stripe_customer_id = ${customerId} LIMIT 1`;
+  return (rows[0] as DbUser) || null;
 }
 
 export async function ensureLeadChasersTable(): Promise<void> {

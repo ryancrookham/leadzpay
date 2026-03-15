@@ -65,10 +65,13 @@ export async function POST(request: NextRequest) {
         await handleTransferReversed(event.data.object as Stripe.Transfer);
         break;
 
+      case "payment_intent.succeeded":
+        await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+        break;
+
       // Informational events — log and acknowledge (no action needed)
       case "charge.succeeded":
       case "charge.updated":
-      case "payment_intent.succeeded":
       case "payment_intent.created":
       case "transfer.created":
       case "application_fee.created":
@@ -102,6 +105,37 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         const sql = neon(process.env.DATABASE_URL!);
         await sql`UPDATE users SET buyer_stripe_setup_complete = true, updated_at = NOW() WHERE stripe_customer_id = ${session.customer as string}`;
         console.log(`Buyer Stripe setup complete for customer ${session.customer}`);
+
+        // Capture payment method ID from the SetupIntent
+        if (session.setup_intent) {
+          const setupIntent = await stripe.setupIntents.retrieve(session.setup_intent as string);
+          if (setupIntent.payment_method) {
+            const pmId = typeof setupIntent.payment_method === 'string'
+              ? setupIntent.payment_method
+              : setupIntent.payment_method.id;
+
+            await sql`
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_default_payment_method VARCHAR(255)
+            `;
+            await sql`
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payment_method_set_at TIMESTAMPTZ
+            `;
+            await sql`
+              UPDATE users
+              SET stripe_default_payment_method = ${pmId},
+                  stripe_payment_method_set_at = NOW(),
+                  updated_at = NOW()
+              WHERE stripe_customer_id = ${session.customer as string}
+            `;
+
+            // Set as default on the Stripe Customer object
+            await stripe.customers.update(session.customer as string, {
+              invoice_settings: { default_payment_method: pmId },
+            });
+
+            console.log(`Payment method ${pmId} saved for customer ${session.customer}`);
+          }
+        }
       } catch (err) {
         console.error('Failed to mark buyer_stripe_setup_complete:', err);
       }
@@ -297,4 +331,72 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
 
   // Leads should still be in "pending" status since checkout wasn't completed
   // Log for monitoring but no state change needed
+}
+
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+  // Only process off-session batch payments — Checkout Session payments
+  // are handled by checkout.session.completed
+  if (paymentIntent.metadata?.payment_type !== "batch_off_session") {
+    return;
+  }
+
+  const leadIdsStr = paymentIntent.metadata?.lead_ids;
+  const buyerId = paymentIntent.metadata?.buyer_id;
+  const providerId = paymentIntent.metadata?.provider_id;
+
+  if (!leadIdsStr || !buyerId) {
+    console.log("[WEBHOOK] payment_intent.succeeded without lead metadata:", paymentIntent.id);
+    return;
+  }
+
+  const leadIds = leadIdsStr.split(",");
+  const leads = await getLeadsByIds(leadIds);
+
+  if (leads.length === 0) return;
+
+  const platformFees = await getPlatformSettings();
+
+  // Atomic claim — only update leads not already completed
+  const claimedIds = await batchUpdateLeadStripeTransfer(leadIds, paymentIntent.id, "completed");
+  if (claimedIds.length === 0) {
+    console.log(`[WEBHOOK] payment_intent ${paymentIntent.id} — leads already processed`);
+    return;
+  }
+
+  const claimedSet = new Set(claimedIds);
+  const claimedLeads = leads.filter(l => claimedSet.has(l.id));
+
+  for (const lead of claimedLeads) {
+    const breakdown = calculateFeeBreakdown(lead.payout_amount, platformFees);
+
+    await createTransaction({
+      type: "platform_fee",
+      status: "completed",
+      amount: breakdown.totalPlatformFee,
+      fee_amount: 0,
+      net_amount: breakdown.totalPlatformFee,
+      from_account_id: buyerId,
+      to_account_id: null,
+      lead_id: lead.id,
+      connection_id: lead.connection_id || undefined,
+      stripe_payment_id: paymentIntent.id,
+      description: `WOML platform fee (webhook safety net)`,
+    });
+
+    await createTransaction({
+      type: "lead_payout",
+      status: "completed",
+      amount: breakdown.providerNet,
+      fee_amount: breakdown.providerFee,
+      net_amount: breakdown.providerNet,
+      from_account_id: null,
+      to_account_id: lead.provider_id || providerId || null,
+      lead_id: lead.id,
+      connection_id: lead.connection_id || undefined,
+      stripe_payment_id: paymentIntent.id,
+      description: `Provider payout via Stripe (off-session, webhook)`,
+    });
+  }
+
+  console.log(`[WEBHOOK] payment_intent ${paymentIntent.id} — ${claimedLeads.length} leads claimed via safety net`);
 }
