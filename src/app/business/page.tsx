@@ -403,16 +403,35 @@ function BusinessPortalContent() {
       try {
         const res = await fetch("/api/auth/session", { cache: "no-store" });
         const data = await res.json();
-        if (data?.user?.role === "buyer") {
-          // Session exists on server — reload so useSession picks it up
-          window.location.reload();
+        if (data?.user) {
+          if (data.user.role === "buyer") {
+            window.location.reload();
+            return;
+          }
+          // Wrong role — redirect appropriately
+          router.push(data.user.role === "admin" ? "/admin" : "/provider-dashboard");
           return;
         }
       } catch {
-        // Server check failed — fall through to redirect
+        // Server check failed — fall through
       }
-      // Truly not authenticated — redirect to login
-      router.push("/auth/login?role=buyer");
+
+      // If returning from Stripe, cookie may need a moment to propagate
+      if (searchParams.get("stripe")) {
+        setTimeout(async () => {
+          try {
+            const res = await fetch("/api/auth/session", { cache: "no-store" });
+            const data = await res.json();
+            if (data?.user?.role === "buyer") {
+              window.location.reload();
+              return;
+            }
+          } catch {}
+          router.push("/auth/login?role=buyer");
+        }, 1500);
+      } else {
+        router.push("/auth/login?role=buyer");
+      }
     };
     verifySession();
   }, [isLoading, isAuthenticated, isSigningOut, currentUser, router, searchParams]);
@@ -505,76 +524,6 @@ function BusinessPortalContent() {
         <div className="text-center">
           <Image src="/woml-alt-white.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Block dashboard access if Stripe setup is not complete
-  if (!stripeSetupComplete) {
-    const handleOverlayConnect = async () => {
-      setStripeOverlayLoading(true);
-      try {
-        await fetch("/api/stripe/record-agreement", { method: "POST" });
-        const res = await fetch("/api/stripe/setup-customer", { method: "POST" });
-        const data = await res.json();
-        if (data.setupUrl) {
-          window.location.href = data.setupUrl;
-        } else {
-          setStripeOverlayLoading(false);
-        }
-      } catch {
-        setStripeOverlayLoading(false);
-      }
-    };
-
-    return (
-      <div className="min-h-screen bg-[#E77500] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 max-w-md w-full p-8 text-center">
-          <Image src="/woml-alt-white.png" alt="WOML" width={180} height={54} className="mx-auto mb-6" priority />
-          <div className="w-16 h-16 bg-[#E8822A]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">One more step</h2>
-          <p className="text-gray-600 text-sm mb-6 leading-relaxed">
-            Connect your bank to start receiving leads and paying providers.
-          </p>
-
-          <div className="flex items-start gap-3 text-left mb-6">
-            <input
-              type="checkbox"
-              id="overlay-agreement"
-              checked={overlayAgreementChecked}
-              onChange={(e) => setOverlayAgreementChecked(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-[#E8822A] cursor-pointer flex-shrink-0"
-            />
-            <label htmlFor="overlay-agreement" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
-              I have read and agree to the{" "}
-              <a href="/WOML_Business_Agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-[#E8822A] hover:underline font-medium">
-                WOML Business Agreement
-              </a>
-              . I understand this is a binding legal agreement governing my use of the platform.
-            </label>
-          </div>
-
-          <button
-            onClick={handleOverlayConnect}
-            disabled={stripeOverlayLoading || !overlayAgreementChecked}
-            className="w-full py-3 bg-[#E8822A] hover:bg-[#D47526] text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {stripeOverlayLoading ? (
-              <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Connecting...</>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                Connect Business Bank Account
-              </>
-            )}
-          </button>
         </div>
       </div>
     );
@@ -958,6 +907,30 @@ function BusinessPortalContent() {
             toast.type === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
           }`}>
             {toast.message}
+          </div>
+        )}
+
+        {/* Payment method setup banner (non-blocking) */}
+        {!stripeSetupComplete && (
+          <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-[#E8822A]/10 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-[#E8822A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">Set up your payment method</p>
+                <p className="text-xs text-gray-600">Connect a card or bank account to start paying your providers.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab("settings")}
+              className="px-4 py-2 rounded-lg text-white font-medium text-sm shrink-0 transition hover:opacity-90"
+              style={{ backgroundColor: "#E8822A" }}
+            >
+              Go to Settings
+            </button>
           </div>
         )}
 

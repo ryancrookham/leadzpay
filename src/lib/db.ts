@@ -1356,7 +1356,9 @@ export async function getAdminPlatformHealth() {
       COUNT(l.id)::int as total_leads,
       COUNT(l.id) FILTER (WHERE l.submitted_at >= NOW() - INTERVAL '30 days')::int as leads_this_month,
       COUNT(l.id) FILTER (WHERE l.submitted_at >= NOW() - INTERVAL '7 days')::int as leads_this_week,
-      COALESCE(SUM(l.payout_amount), 0)::numeric as total_earnings,
+      COALESCE(SUM(l.payout_amount), 0)::numeric as gross_earnings,
+      COALESCE(SUM(CASE WHEN l.payout_amount > 0 THEN ROUND(l.payout_amount * 0.0625, 2) ELSE 0 END), 0)::numeric as fees_paid,
+      COALESCE(SUM(CASE WHEN l.payout_amount > 0 THEN ROUND(l.payout_amount * 0.9375, 2) ELSE 0 END), 0)::numeric as net_earnings,
       MAX(l.submitted_at)::text as last_submission
     FROM users u
     LEFT JOIN leads l ON l.provider_id = u.id

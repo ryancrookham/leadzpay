@@ -120,7 +120,9 @@ interface ProviderHealth {
   total_leads: number;
   leads_this_month: number;
   leads_this_week: number;
-  total_earnings: number;
+  gross_earnings: number;
+  fees_paid: number;
+  net_earnings: number;
   last_submission: string | null;
 }
 
@@ -904,7 +906,9 @@ export default function AdminPanel() {
                               <th className="pb-2 pr-4">This Week</th>
                               <th className="pb-2 pr-4">This Month</th>
                               <th className="pb-2 pr-4">All Time</th>
-                              <th className="pb-2 pr-4">Earnings</th>
+                              <th className="pb-2 pr-4">Gross</th>
+                              <th className="pb-2 pr-4">Fees (6.25%)</th>
+                              <th className="pb-2 pr-4">Net Earnings</th>
                               <th className="pb-2 pr-4">Last Submission</th>
                               <th className="pb-2">Status</th>
                             </tr>
@@ -925,7 +929,9 @@ export default function AdminPanel() {
                                   <td className="py-2 pr-4 text-white">{p.leads_this_week}</td>
                                   <td className="py-2 pr-4 text-white">{p.leads_this_month}</td>
                                   <td className="py-2 pr-4 text-white">{p.total_leads}</td>
-                                  <td className="py-2 pr-4 text-[#E8822A]">${Number(p.total_earnings).toFixed(2)}</td>
+                                  <td className="py-2 pr-4 text-gray-400">${Number(p.gross_earnings).toFixed(2)}</td>
+                                  <td className="py-2 pr-4 text-red-400">-${Number(p.fees_paid).toFixed(2)}</td>
+                                  <td className="py-2 pr-4 text-[#E8822A] font-semibold">${Number(p.net_earnings).toFixed(2)}</td>
                                   <td className={`py-2 pr-4 ${activityColor}`}>
                                     {p.last_submission ? `${daysSince}d ago` : "Never"}
                                   </td>
