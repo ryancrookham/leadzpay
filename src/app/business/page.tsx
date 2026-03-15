@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -199,6 +199,9 @@ function BusinessPortalContent() {
   const [attrStep, setAttrStep] = useState<1 | 2 | 3>(1);
   const [attrDate, setAttrDate] = useState<string>("");
 
+  // Session recovery ref — prevents infinite reload loop after cross-site redirect
+  const sessionCheckRef = useRef(false);
+
   const fetchDashboard = useCallback(async () => {
     try {
       const res = await fetch("/api/business/dashboard", { cache: "no-store" });
@@ -378,16 +381,41 @@ function BusinessPortalContent() {
   // Active connections (finalized, terms accepted)
   const activeConnections = myConnections.filter(c => c.status === "active");
 
-  // Redirect to login if not authenticated or not a buyer.
-  // Guard: skip entirely while signing out — NextAuth's callbackUrl redirect wins.
+  // Session recovery + auth redirect.
+  // After cross-site redirect from Stripe, the session cookie may not be hydrated yet.
+  // Verify against the server session endpoint before kicking user to login.
   useEffect(() => {
     if (isSigningOut) return;
-    if (!isLoading && (!isAuthenticated || !currentUser)) {
-      router.push("/auth/login?role=buyer");
-    } else if (!isLoading && currentUser && !isBuyer(currentUser) && !searchParams.get("stripe")) {
-      router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
+    if (isLoading) return;
+    if (isAuthenticated && currentUser) {
+      // Authenticated — check role
+      if (!isBuyer(currentUser) && !searchParams.get("stripe")) {
+        router.push(currentUser.role === "admin" ? "/admin" : "/provider-dashboard");
+      }
+      return;
     }
-  }, [isLoading, isAuthenticated, isSigningOut, currentUser, router]);
+    // Not authenticated according to client — but cookie may not be hydrated yet.
+    // Check server session endpoint once before giving up.
+    if (sessionCheckRef.current) return;
+    sessionCheckRef.current = true;
+
+    const verifySession = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const data = await res.json();
+        if (data?.user?.role === "buyer") {
+          // Session exists on server — reload so useSession picks it up
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // Server check failed — fall through to redirect
+      }
+      // Truly not authenticated — redirect to login
+      router.push("/auth/login?role=buyer");
+    };
+    verifySession();
+  }, [isLoading, isAuthenticated, isSigningOut, currentUser, router, searchParams]);
 
   // Escape key closes lightbox and modal
   useEffect(() => {
@@ -622,19 +650,10 @@ function BusinessPortalContent() {
 
       const data = await res.json();
 
-      // No saved payment method — redirect to setup
+      // No saved payment method — tell user to set up via Settings (DON'T redirect to Stripe)
       if (data.needsSetup) {
-        setPaymentNotice(data.error || "Please connect a payment method first.");
-        setTimeout(() => setPaymentNotice(null), 8000);
-        // Redirect to Stripe setup
-        try {
-          const setupRes = await fetch("/api/stripe/setup-customer", { method: "POST" });
-          const setupData = await setupRes.json();
-          if (setupData.setupUrl) {
-            window.location.href = setupData.setupUrl;
-            return;
-          }
-        } catch { /* fall through */ }
+        setPaymentNotice("No payment method on file. Please go to the Settings tab to connect your card or bank account, then try again.");
+        setTimeout(() => setPaymentNotice(null), 12000);
         setBatchMarkingPaid(false);
         return;
       }

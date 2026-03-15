@@ -11,6 +11,7 @@ import {
   createTransaction,
   getPaymentMethodId,
   clearPaymentMethodId,
+  updatePaymentMethodId,
 } from "@/lib/db";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
 
@@ -99,11 +100,11 @@ export async function POST(request: NextRequest) {
       await updateUserStripeCustomer(buyer.id, customerId);
     }
 
-    // Get saved payment method — DB first, then Stripe fallback
+    // Get saved payment method — DB first, then Stripe fallbacks
     let paymentMethodId = await getPaymentMethodId(session.user.id);
 
     if (!paymentMethodId) {
-      // Fallback: check Stripe Customer's default payment method
+      // Fallback 1: check Stripe Customer's default payment method
       const customer = await stripe.customers.retrieve(customerId);
       if (!customer.deleted) {
         const defaultPm = customer.invoice_settings?.default_payment_method;
@@ -114,8 +115,36 @@ export async function POST(request: NextRequest) {
     }
 
     if (!paymentMethodId) {
-      // No saved payment method — buyer needs to set one up
-      return NextResponse.json({ needsSetup: true, error: "No saved payment method. Please connect a payment method first." }, { status: 200 });
+      // Fallback 2: list ALL payment methods attached to this customer
+      const methods = await stripe.paymentMethods.list({
+        customer: customerId,
+        limit: 1,
+      });
+      if (methods.data.length > 0) {
+        paymentMethodId = methods.data[0].id;
+      }
+    }
+
+    // If we found a payment method via Stripe fallback, save it to our DB for next time
+    if (paymentMethodId && !(await getPaymentMethodId(session.user.id))) {
+      try {
+        await updatePaymentMethodId(session.user.id, paymentMethodId);
+        // Also set as default on Stripe Customer for future consistency
+        await stripe.customers.update(customerId, {
+          invoice_settings: { default_payment_method: paymentMethodId },
+        });
+      } catch (e) {
+        console.warn("[batch-pay] Failed to cache payment method:", e);
+        // Non-fatal — continue with payment
+      }
+    }
+
+    if (!paymentMethodId) {
+      // Truly no payment method — buyer needs to set one up
+      return NextResponse.json({
+        needsSetup: true,
+        error: "No saved payment method. Please go to Settings and connect a payment method first.",
+      }, { status: 200 });
     }
 
     // Group leads by provider
