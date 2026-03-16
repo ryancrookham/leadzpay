@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
       mode: "setup",
       customer: customerId,
       payment_method_types: ["card", "us_bank_account"],
-      success_url: `${APP_URL}/business?tab=settings&stripe=success`,
-      cancel_url: `${APP_URL}/business?tab=settings&stripe=cancel`,
+      success_url: `${APP_URL}/api/stripe/callback?status=success&tab=settings`,
+      cancel_url: `${APP_URL}/api/stripe/callback?status=cancel&tab=settings`,
     });
 
     return NextResponse.json({ setupUrl: checkoutSession.url });
