@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
     }
 
-    let event: Stripe.Event;
+    let event!: Stripe.Event;
 
     // Try signature verification first (preferred, most secure)
     let verified = false;
