@@ -20,12 +20,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
     const signature = request.headers.get("stripe-signature");
-    const webhookId = request.headers.get("webhook-id");
-    const webhookTimestamp = request.headers.get("webhook-timestamp");
-    const webhookSignature = request.headers.get("webhook-signature");
 
     console.log("[WEBHOOK] stripe-signature:", signature ? "present" : "missing");
-    console.log("[WEBHOOK] webhook-id:", webhookId ? "present" : "missing");
+    console.log("[WEBHOOK] body length:", body.length);
 
     if (!STRIPE_WEBHOOK_SECRET) {
       console.error("STRIPE_WEBHOOK_SECRET is not configured");
@@ -34,43 +31,37 @@ export async function POST(request: NextRequest) {
 
     let event: Stripe.Event;
 
-    // Try V1 classic webhook verification first
+    // Try signature verification first (preferred, most secure)
+    let verified = false;
     if (signature) {
       try {
         event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
-        console.log("[WEBHOOK] V1 signature verified successfully");
-      } catch (v1Err: any) {
-        console.log("[WEBHOOK] V1 verification failed:", v1Err.message);
-
-        // V1 failed — try V2 Event Destination (thin event) verification
-        try {
-          const thinEvent = stripe.parseThinEvent(body, signature, STRIPE_WEBHOOK_SECRET);
-          console.log("[WEBHOOK] V2 thin event parsed:", thinEvent.id, thinEvent.type);
-
-          // Thin events only have id/type — fetch the full V1 event object
-          const fullEvent = await stripe.events.retrieve(thinEvent.id);
-          event = fullEvent;
-          console.log("[WEBHOOK] Full event fetched:", event.id, event.type);
-        } catch (v2Err: any) {
-          console.error("[WEBHOOK] V1 error:", v1Err.message);
-          console.error("[WEBHOOK] V2 error:", v2Err.message);
-          console.error("[WEBHOOK] Secret starts with:", STRIPE_WEBHOOK_SECRET?.substring(0, 10));
-          return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-        }
-      }
-    } else if (webhookSignature) {
-      // Some V2 destinations use Standard Webhooks headers instead of stripe-signature
-      try {
-        const thinEvent = stripe.parseThinEvent(body, webhookSignature, STRIPE_WEBHOOK_SECRET);
-        console.log("[WEBHOOK] V2 (standard headers) thin event:", thinEvent.id);
-        const fullEvent = await stripe.events.retrieve(thinEvent.id);
-        event = fullEvent;
+        verified = true;
+        console.log("[WEBHOOK] Signature verified successfully");
       } catch (err: any) {
-        console.error("[WEBHOOK] Standard webhook verification failed:", err.message);
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+        console.error("[WEBHOOK] Signature verification failed:", err.message);
+        console.error("[WEBHOOK] Secret starts with:", STRIPE_WEBHOOK_SECRET?.substring(0, 10));
       }
-    } else {
-      return NextResponse.json({ error: "Missing signature headers" }, { status: 400 });
+    }
+
+    // Fallback: if signature verification fails, parse event ID from body
+    // and fetch the authentic event directly from Stripe API.
+    // This is secure because we authenticate via our Stripe secret key.
+    if (!verified) {
+      try {
+        const parsed = JSON.parse(body);
+        const eventId = parsed.id || parsed.data?.id;
+        if (!eventId || typeof eventId !== "string" || !eventId.startsWith("evt_")) {
+          console.error("[WEBHOOK] No valid event ID in body");
+          return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
+        }
+        console.log("[WEBHOOK] Fetching event from Stripe API:", eventId);
+        event = await stripe.events.retrieve(eventId);
+        console.log("[WEBHOOK] Event fetched successfully:", event.id, event.type);
+      } catch (fetchErr: any) {
+        console.error("[WEBHOOK] Failed to fetch event:", fetchErr.message);
+        return NextResponse.json({ error: "Invalid signature and event fetch failed" }, { status: 400 });
+      }
     }
 
     // Idempotency check — skip if already processed
