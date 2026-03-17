@@ -1066,7 +1066,7 @@ function ConnectionTab({
                 <p className="text-gray-500 text-sm">Total Leads</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <p className="text-3xl font-bold text-emerald-600">${dbLeads.filter(l => l.payoutStatus === "completed").reduce((sum, l) => sum + (l.payoutAmount || 0), 0).toFixed(2)}</p>
+                <p className="text-3xl font-bold text-emerald-600">${dbLeads.filter(l => l.payoutStatus === "completed").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0).toFixed(2)}</p>
                 <p className="text-gray-500 text-sm">Total Earned</p>
               </div>
             </div>
