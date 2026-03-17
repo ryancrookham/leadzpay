@@ -1,23 +1,17 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #152238;
-  --primary: #E77500;
-  --primary-hover: #D47526;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: #ffffff;
+  --color-foreground: #152238;
+  --color-primary: #E77500;
+  --color-primary-hover: #D47526;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #ffffff;
+  color: #152238;
 }
 
 ::-webkit-scrollbar {
@@ -40,6 +34,6 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid #E77500;
   outline-offset: 2px;
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
-import "./globals.css";
+import "./globals.css"; // Font loaded via next/font/google
 import { Providers } from "@/lib/providers";
 import CookieBanner from "@/app/components/CookieBanner";
 
