@@ -241,7 +241,7 @@ export default function ProviderDashboard() {
   // Calculate stats from DB leads (net amounts after platform fee)
   const totalLeads = dbLeads.length;
   const paidLeads = dbLeads.filter(l => l.payoutStatus === "completed").length;
-  const totalEarnings = dbLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0);
+  const totalEarnings = dbLeads.filter(l => l.payoutStatus !== "rejected").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0);
   const pendingEarnings = dbLeads.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "processing").reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).providerNet, 0);
   const providerFeeDisplay = feeSettings ? calculateFeeBreakdown(activeConnection?.rate_per_lead || 50, feeSettings).providerFee : 1;
 
@@ -611,7 +611,7 @@ function DashboardTab({
                         <p className="text-red-600 text-xs mt-1 font-medium">Reason: {lead.rejectionReason}</p>
                       )}
                     </td>
-                    <td className="py-4 text-[#E8822A] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
+                    <td className={`py-4 font-medium ${lead.payoutStatus === "rejected" ? "text-gray-400 line-through" : "text-[#E8822A]"}`}>${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                     <td className="py-4 text-gray-500 text-sm">
                       {new Date(lead.submittedAt).toLocaleDateString()}
                     </td>
@@ -1549,7 +1549,7 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                       <p className="text-red-600 text-xs mt-1 font-medium">Reason: {lead.rejectionReason}</p>
                     )}
                   </td>
-                  <td className="py-4 text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
+                  <td className={`py-4 font-bold ${lead.payoutStatus === "rejected" ? "text-gray-400 line-through" : "text-[#E8822A]"}`}>${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1595,7 +1595,7 @@ function EarningsTab({
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
           <p className="text-3xl font-bold text-[#E8822A]">
-            ${(totalLeads > 0 ? (totalEarnings / totalLeads) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet : 0).toFixed(2)}
+            ${(() => { const nonRejected = dbLeads.filter(l => l.payoutStatus !== "rejected").length; return nonRejected > 0 ? (totalEarnings / nonRejected) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet : 0; })().toFixed(2)}
           </p>
         </div>
       </div>
@@ -1612,7 +1612,7 @@ function EarningsTab({
                   <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
+                  <p className={`font-bold ${lead.payoutStatus === "rejected" ? "text-gray-400 line-through" : "text-[#E8822A]"}`}>${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
                     lead.payoutStatus === "rejected" ? "bg-red-100 text-red-700" :
