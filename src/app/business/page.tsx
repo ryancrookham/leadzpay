@@ -1751,7 +1751,7 @@ function BusinessPortalContent() {
                 {/* Payment status filter */}
                 <div className="flex items-center gap-1 ml-1 border-l border-white/20 pl-2">
                   {([
-                    { key: "all", label: "All Pay" },
+                    { key: "all", label: "All" },
                     { key: "pending", label: "Unpaid" },
                     { key: "completed", label: "Paid" },
                     { key: "rejected", label: "Rejected" },

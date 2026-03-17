@@ -608,7 +608,7 @@ function DashboardTab({
                         {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                       </span>
                       {lead.payoutStatus === "rejected" && lead.rejectionReason && (
-                        <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                        <p className="text-red-600 text-xs mt-1 font-medium">Reason: {lead.rejectionReason}</p>
                       )}
                     </td>
                     <td className="py-4 text-[#E8822A] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
@@ -1546,7 +1546,7 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                       {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                     </span>
                     {lead.payoutStatus === "rejected" && lead.rejectionReason && (
-                      <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                      <p className="text-red-600 text-xs mt-1 font-medium">Reason: {lead.rejectionReason}</p>
                     )}
                   </td>
                   <td className="py-4 text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
@@ -1623,7 +1623,7 @@ function EarningsTab({
                     {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                   </span>
                   {lead.payoutStatus === "rejected" && lead.rejectionReason && (
-                    <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                    <p className="text-red-600 text-xs mt-1 font-medium">Reason: {lead.rejectionReason}</p>
                   )}
                 </div>
               </div>
