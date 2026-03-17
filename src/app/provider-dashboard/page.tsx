@@ -1598,7 +1598,7 @@ function EarningsTab({
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <p className="text-gray-500 text-sm mb-1">Avg per Lead</p>
           <p className="text-3xl font-bold text-[#E8822A]">
-            ${(() => { const nonRejected = dbLeads.filter(l => l.payoutStatus !== "rejected").length; return nonRejected > 0 ? (totalEarnings / nonRejected) : activeConnection ? calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet : 0; })().toFixed(2)}
+            {(() => { const nonRejected = dbLeads.filter(l => l.payoutStatus !== "rejected").length; return nonRejected > 0 ? `$${(totalEarnings / nonRejected).toFixed(2)}` : "—"; })()}
           </p>
         </div>
       </div>
