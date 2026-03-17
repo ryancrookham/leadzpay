@@ -287,6 +287,7 @@ export async function GET() {
         buyerName: lead.buyer_name || null,
         buyerBusinessName: lead.buyer_business_name || null,
         criteriaFieldsData: role === "buyer" ? lead.criteria_fields_data : undefined,
+        rejectionReason: lead.rejection_reason ?? null,
       };
     }));
 

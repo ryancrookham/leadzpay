@@ -38,7 +38,7 @@ interface ApiLead {
   vehicleMake: string | null;
   vehicleModel: string | null;
   payoutAmount: number;
-  payoutStatus: "pending" | "processing" | "completed" | "failed";
+  payoutStatus: "pending" | "approved" | "processing" | "completed" | "failed" | "rejected";
   payoutCompletedAt: string | null;
   submittedAt: string;
   providerName: string | null;
@@ -64,6 +64,9 @@ interface ApiLead {
   deadReason: string | null;
   assignedTo: string | null;
   followUpDate: string | null;
+  rejectionReason: string | null;
+  rejectedAt: string | null;
+  rejectedBy: string | null;
 }
 
 type Tab = "dashboard" | "pipeline" | "connections" | "leaderboard" | "marketing" | "invite" | "settings";
@@ -501,17 +504,23 @@ function BusinessPortalContent() {
   // CRITICAL: These useMemo hooks MUST be above early returns to avoid React hook ordering violations
   const pendingLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "pending"), [dbLeads]);
 
-  // Group pending leads by provider for batch payment
+  // Approved leads (auto-approved, ready for payment)
+  const approvedLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "approved"), [dbLeads]);
+
+  // Payable leads = pending + approved (both can be paid)
+  const payableLeadsAll = useMemo(() => dbLeads.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "approved"), [dbLeads]);
+
+  // Group payable leads (pending + approved) by provider for batch payment
   const pendingByProvider = useMemo(() => {
     const map = new Map<string, { providerId: string; providerName: string; leads: ApiLead[]; totalBuyerAmount: number }>();
-    pendingLeadsAll.forEach(l => {
+    payableLeadsAll.forEach(l => {
       const existing = map.get(l.providerId) || { providerId: l.providerId, providerName: l.providerName || "Unknown", leads: [], totalBuyerAmount: 0 };
       existing.leads.push(l);
       existing.totalBuyerAmount += calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal;
       map.set(l.providerId, existing);
     });
     return Array.from(map.values()).sort((a, b) => b.leads.length - a.leads.length);
-  }, [pendingLeadsAll, feeSettings]);
+  }, [payableLeadsAll, feeSettings]);
 
   // Unique providers for dropdown filter
   const uniqueProviders = useMemo(() => {
@@ -519,6 +528,13 @@ function BusinessPortalContent() {
     dbLeads.forEach(l => { if (!map.has(l.providerId)) map.set(l.providerId, l.providerName || "Unknown"); });
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [dbLeads]);
+
+  // Lead rejection state
+  const [rejectModal, setRejectModal] = useState<{ leadId: string; leadName: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectCustomReason, setRejectCustomReason] = useState("");
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "pending" | "completed" | "rejected">("all");
 
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser) || !stripeSetupChecked) {
@@ -698,6 +714,38 @@ function BusinessPortalContent() {
       alert("Failed to create payment session. Please try again.");
     } finally {
       setBatchMarkingPaid(false);
+    }
+  };
+
+  // Reject a lead
+  const handleRejectLead = async () => {
+    if (!rejectModal) return;
+    const finalReason = rejectReason === "Other" ? rejectCustomReason.trim() : rejectReason;
+    if (!finalReason) return;
+    setRejectLoading(true);
+    try {
+      const res = await fetch(`/api/leads/${rejectModal.leadId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: rejectReason, customReason: rejectReason === "Other" ? rejectCustomReason.trim() : undefined }),
+      });
+      if (res.ok) {
+        setToast({ message: "Lead rejected", type: "success" });
+        setTimeout(() => setToast(null), 3000);
+        fetchDashboard();
+      } else {
+        const data = await res.json();
+        setToast({ message: data.error || "Failed to reject lead", type: "error" });
+        setTimeout(() => setToast(null), 5000);
+      }
+    } catch {
+      setToast({ message: "Failed to reject lead", type: "error" });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setRejectLoading(false);
+      setRejectModal(null);
+      setRejectReason("");
+      setRejectCustomReason("");
     }
   };
 
@@ -1051,6 +1099,56 @@ function BusinessPortalContent() {
                 </>
               )}
 
+            </div>
+          </div>
+        )}
+
+        {/* Rejection Modal */}
+        {rejectModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setRejectModal(null); setRejectReason(""); setRejectCustomReason(""); }}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">Reject Lead</h3>
+              <p className="text-sm text-gray-500 mb-4">Rejecting <span className="font-medium text-gray-700">{rejectModal.leadName}</span>. This cannot be undone.</p>
+              <div className="space-y-2 mb-4">
+                {["Unresponsive number", "Bad/fake data", "Duplicate lead", "Wrong area/state", "Incomplete information", "Other"].map(reason => (
+                  <label key={reason} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition">
+                    <input
+                      type="radio"
+                      name="rejectReason"
+                      value={reason}
+                      checked={rejectReason === reason}
+                      onChange={() => setRejectReason(reason)}
+                      className="w-4 h-4 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-gray-700">{reason}</span>
+                  </label>
+                ))}
+              </div>
+              {rejectReason === "Other" && (
+                <textarea
+                  value={rejectCustomReason}
+                  onChange={e => setRejectCustomReason(e.target.value)}
+                  placeholder="Describe the reason (required, max 200 chars)"
+                  maxLength={200}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm mb-4 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                  rows={2}
+                />
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setRejectModal(null); setRejectReason(""); setRejectCustomReason(""); }}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRejectLead}
+                  disabled={rejectLoading || !rejectReason || (rejectReason === "Other" && !rejectCustomReason.trim())}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {rejectLoading ? "Rejecting..." : "Confirm Reject"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1489,6 +1587,15 @@ function BusinessPortalContent() {
             filtered = filtered.filter(l => l.providerId === providerFilter);
           }
 
+          // Filter by payment status
+          if (paymentFilter === "pending") {
+            filtered = filtered.filter(l => l.payoutStatus === "pending" || l.payoutStatus === "approved");
+          } else if (paymentFilter === "completed") {
+            filtered = filtered.filter(l => l.payoutStatus === "completed");
+          } else if (paymentFilter === "rejected") {
+            filtered = filtered.filter(l => l.payoutStatus === "rejected");
+          }
+
           // Sort
           filtered = [...filtered].sort((a, b) => {
             if (pipelineSort === "newest") return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
@@ -1512,7 +1619,7 @@ function BusinessPortalContent() {
 
           const paidOutLeads = dbLeads.filter(l => l.payoutStatus === "completed" || l.payoutStatus === "processing");
           const totalPaidOut = paidOutLeads.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
-          const amountPending = pendingLeadsAll.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+          const amountPending = payableLeadsAll.reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
           const avgPayout = paidOutLeads.length > 0 ? totalPaidOut / paidOutLeads.length : 0;
 
           const stageLabels: Record<string, string> = { new: "Lead", contacted: "Contacted", quoted: "Quoted", sold: "Sold", dead: "Dead" };
@@ -1553,17 +1660,17 @@ function BusinessPortalContent() {
             )}
 
             {/* Pending Payments — Provider-Grouped */}
-            {pendingLeadsAll.length > 0 && (
+            {payableLeadsAll.length > 0 && (
               <div className="space-y-2">
                 {/* Summary bar */}
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
                   <span className="text-amber-800 text-sm font-medium">
-                    {pendingLeadsAll.length} unpaid lead{pendingLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
+                    {payableLeadsAll.length} unpaid lead{payableLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
                   </span>
                   <div className="flex items-center gap-2">
                     {pendingByProvider.length > 1 && (
                       <button
-                        onClick={() => handleBatchPayment(pendingLeadsAll.map(l => l.id))}
+                        onClick={() => handleBatchPayment(payableLeadsAll.map(l => l.id))}
                         disabled={batchMarkingPaid}
                         className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
                       >
@@ -1641,6 +1748,23 @@ function BusinessPortalContent() {
                     <option key={id} value={id} className="text-gray-800">{name}</option>
                   ))}
                 </select>
+                {/* Payment status filter */}
+                <div className="flex items-center gap-1 ml-1 border-l border-white/20 pl-2">
+                  {([
+                    { key: "all", label: "All Pay" },
+                    { key: "pending", label: "Unpaid" },
+                    { key: "completed", label: "Paid" },
+                    { key: "rejected", label: "Rejected" },
+                  ] as const).map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setPaymentFilter(f.key)}
+                      className={`px-2 py-1 rounded text-[10px] font-medium transition ${
+                        paymentFilter === f.key ? "bg-white text-[#E77500] shadow-sm" : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                    >{f.label}</button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1689,24 +1813,44 @@ function BusinessPortalContent() {
                         <p className="text-xs text-gray-400 mt-0.5">{relTime(lead.submittedAt)}</p>
                       </div>
 
-                      {/* Pending payment checkbox */}
-                      {lead.payoutStatus === "pending" && (
-                        <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                          <input
-                            type="checkbox"
-                            checked={selectedLeads.has(lead.id)}
-                            onChange={() => {
-                              setSelectedLeads(prev => {
-                                const next = new Set(prev);
-                                if (next.has(lead.id)) next.delete(lead.id);
-                                else next.add(lead.id);
-                                return next;
-                              });
-                            }}
-                            className="w-4 h-4 rounded border-gray-300 text-[#E8822A] focus:ring-[#E8822A]"
-                          />
-                          <span className="text-xs text-amber-600 font-medium">Pending</span>
-                        </label>
+                      {/* Payment status badge + actions */}
+                      {(lead.payoutStatus === "pending" || lead.payoutStatus === "approved") && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedLeads.has(lead.id)}
+                              onChange={() => {
+                                setSelectedLeads(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(lead.id)) next.delete(lead.id);
+                                  else next.add(lead.id);
+                                  return next;
+                                });
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-[#E8822A] focus:ring-[#E8822A]"
+                            />
+                            <span className={`text-xs font-medium ${lead.payoutStatus === "approved" ? "text-blue-600" : "text-amber-600"}`}>
+                              {lead.payoutStatus === "approved" ? "Approved" : "Pending"}
+                            </span>
+                          </label>
+                          {lead.payoutStatus === "pending" && portalRole === "owner" && (
+                            <button
+                              onClick={() => setRejectModal({ leadId: lead.id, leadName: lead.customerName })}
+                              className="text-[10px] text-red-500 hover:text-red-700 font-medium transition"
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {lead.payoutStatus === "rejected" && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">Rejected</span>
+                          {lead.rejectionReason && (
+                            <span className="text-[10px] text-red-400 max-w-[120px] truncate" title={lead.rejectionReason}>{lead.rejectionReason}</span>
+                          )}
+                        </div>
                       )}
 
                       {/* Middle: Progress Bar */}
@@ -1919,6 +2063,23 @@ function BusinessPortalContent() {
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                               Completed
                             </span>
+                          ) : lead.payoutStatus === "rejected" ? (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">Rejected</span>
+                              {lead.rejectionReason && <span className="text-[10px] text-red-400">{lead.rejectionReason}</span>}
+                            </div>
+                          ) : lead.payoutStatus === "approved" ? (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">Approved</span>
+                              <button
+                                onClick={() => handleStripePayment([lead.id])}
+                                disabled={batchMarkingPaid}
+                                className="inline-flex items-center gap-1 text-white bg-[#635BFF] hover:bg-[#5248e5] px-2.5 py-1 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                                {batchMarkingPaid ? "..." : "Pay via Stripe"}
+                              </button>
+                            </div>
                           ) : lead.payoutStatus === "processing" ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700">Processing</span>
                           ) : (
@@ -4380,6 +4541,14 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
   const [smsSaved, setSmsSaved] = useState(false);
   const [smsError, setSmsError] = useState("");
 
+  // Auto-pay state
+  const [autoPayEnabled, setAutoPayEnabled] = useState(false);
+  const [autoPaySchedule, setAutoPaySchedule] = useState("biweekly");
+  const [reviewWindowDays, setReviewWindowDays] = useState(3);
+  const [nextAutoPayDate, setNextAutoPayDate] = useState<string | null>(null);
+  const [autoPaySaving, setAutoPaySaving] = useState(false);
+  const [autoPaySaved, setAutoPaySaved] = useState(false);
+
   // PIN state
   const [pinHasExisting, setPinHasExisting] = useState<boolean | null>(null);
   const [pinCurrentInput, setPinCurrentInput] = useState("");
@@ -4425,8 +4594,23 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         console.error("Failed to load SMS settings:", e);
       }
     }
+    async function loadAutoPaySettings() {
+      try {
+        const res = await fetch("/api/business/auto-pay-settings");
+        if (res.ok) {
+          const data = await res.json();
+          setAutoPayEnabled(data.autoPayEnabled ?? false);
+          setAutoPaySchedule(data.autoPaySchedule || "biweekly");
+          setReviewWindowDays(data.reviewWindowDays ?? 3);
+          setNextAutoPayDate(data.nextAutoPayDate || null);
+        }
+      } catch (e) {
+        console.error("Failed to load auto-pay settings:", e);
+      }
+    }
     loadProfile();
     loadSmsSettings();
+    loadAutoPaySettings();
     fetch("/api/business/pin-status")
       .then(r => r.json())
       .then(d => setPinHasExisting(d.hasPin ?? false))
@@ -4793,6 +4977,111 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
             {smsSaving ? "Saving\u2026" : "Save Alert Settings"}
+          </button>
+        </div>
+
+        {/* ── Auto-Pay Settings ─────────────────────────────────────────── */}
+        <div className="border-t border-gray-200 pt-6 mt-2">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-800">Auto-Pay</h4>
+              <p className="text-gray-500 text-xs mt-0.5">
+                Automatically approve and pay leads on a schedule. Leads you don&apos;t reject within the review window are auto-approved.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAutoPayEnabled(v => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                autoPayEnabled ? "bg-[#E8822A]" : "bg-gray-200"
+              }`}
+              aria-pressed={autoPayEnabled}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  autoPayEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {autoPayEnabled && (
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4 max-w-md">
+                <div className="space-y-1">
+                  <label className="block text-gray-700 text-xs font-medium">Pay Schedule</label>
+                  <select
+                    value={autoPaySchedule}
+                    onChange={e => setAutoPaySchedule(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-gray-700 text-xs font-medium">Review Window (days)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={14}
+                    value={reviewWindowDays}
+                    onChange={e => setReviewWindowDays(Math.min(14, Math.max(1, parseInt(e.target.value) || 1)))}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
+                  />
+                </div>
+              </div>
+              <p className="text-gray-400 text-xs">
+                You have {reviewWindowDays} day{reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve. Approved leads are paid on the {autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.
+              </p>
+              {nextAutoPayDate && (
+                <p className="text-blue-600 text-xs font-medium">
+                  Next auto-pay: {new Date(nextAutoPayDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              )}
+            </div>
+          )}
+
+          {autoPaySaved && (
+            <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Auto-pay settings saved!
+            </div>
+          )}
+
+          <button
+            onClick={async () => {
+              setAutoPaySaving(true);
+              setAutoPaySaved(false);
+              try {
+                const res = await fetch("/api/business/auto-pay-settings", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    autoPayEnabled,
+                    autoPaySchedule,
+                    reviewWindowDays,
+                  }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setNextAutoPayDate(data.nextAutoPayDate || null);
+                  setAutoPaySaved(true);
+                  setTimeout(() => setAutoPaySaved(false), 3000);
+                }
+              } catch (e) {
+                console.error("Failed to save auto-pay settings:", e);
+              } finally {
+                setAutoPaySaving(false);
+              }
+            }}
+            disabled={autoPaySaving}
+            className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+          >
+            {autoPaySaving ? "Saving\u2026" : "Save Auto-Pay Settings"}
           </button>
         </div>
 

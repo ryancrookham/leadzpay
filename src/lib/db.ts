@@ -120,7 +120,7 @@ export interface DbLead {
   vehicle_make: string | null;
   vehicle_model: string | null;
   payout_amount: number;
-  payout_status: 'pending' | 'processing' | 'completed' | 'failed';
+  payout_status: 'pending' | 'approved' | 'processing' | 'completed' | 'failed' | 'rejected';
   stripe_payment_id: string | null;
   stripe_transfer_id: string | null;
   submitted_at: string;
@@ -139,6 +139,9 @@ export interface DbLead {
   dead_reason: string | null;
   assigned_to: string | null;
   follow_up_date: string | null;
+  rejection_reason: string | null;
+  rejected_at: string | null;
+  rejected_by: string | null;
   // Joined fields (from user table JOINs)
   provider_name?: string | null;
   provider_venmo?: string | null;
@@ -1914,7 +1917,7 @@ export async function batchUpdateLeadStripeTransfer(leadIds: string[], stripeTra
       stripe_transfer_id = ${stripeTransferId},
       payout_status = ${payoutStatus},
       payout_completed_at = CASE WHEN ${payoutStatus === 'completed'} THEN NOW() ELSE payout_completed_at END
-    WHERE id = ANY(${leadIds}) AND payout_status IN ('pending', 'processing')
+    WHERE id = ANY(${leadIds}) AND payout_status IN ('pending', 'approved', 'processing')
     RETURNING id
   `;
   return result.map((r: any) => r.id as string);
@@ -1938,6 +1941,94 @@ export async function updateLeadStripePayment(leadId: string, stripePaymentId: s
   await sql`
     UPDATE leads SET stripe_payment_id = ${stripePaymentId}
     WHERE id = ${leadId}
+  `;
+}
+
+// ============================================
+// Lead rejection
+// ============================================
+
+export async function rejectLead(leadId: string, buyerId: string, reason: string): Promise<DbLead | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET
+      payout_status = 'rejected',
+      rejection_reason = ${reason},
+      rejected_at = NOW(),
+      rejected_by = ${buyerId}
+    WHERE id = ${leadId} AND buyer_id = ${buyerId} AND payout_status = 'pending'
+    RETURNING *
+  `;
+  return first<DbLead>(result);
+}
+
+// ============================================
+// Auto-pay functions
+// ============================================
+
+export async function autoApproveLeads(buyerId: string, reviewWindowDays: number): Promise<string[]> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE leads SET payout_status = 'approved'
+    WHERE buyer_id = ${buyerId}
+      AND payout_status = 'pending'
+      AND submitted_at < NOW() - (${reviewWindowDays} || ' days')::interval
+    RETURNING id
+  `;
+  return result.map((r: any) => r.id as string);
+}
+
+export async function getApprovedLeadsByBuyerId(buyerId: string): Promise<DbLead[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT l.*, u.display_name as provider_name, u.email as provider_email, u.phone as provider_phone
+    FROM leads l
+    LEFT JOIN users u ON l.provider_id = u.id
+    WHERE l.buyer_id = ${buyerId} AND l.payout_status = 'approved'
+    ORDER BY l.submitted_at DESC
+  `;
+  return result as unknown as DbLead[];
+}
+
+export async function getAutoPayBuyers(): Promise<Array<{id: string; auto_pay_schedule: string; review_window_days: number; next_auto_pay_date: string | null}>> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT id, auto_pay_schedule, review_window_days, next_auto_pay_date::text
+    FROM users
+    WHERE role = 'buyer' AND auto_pay_enabled = TRUE AND next_auto_pay_date <= NOW()
+  `;
+  return result as any[];
+}
+
+export async function updateNextAutoPayDate(userId: string, nextDate: Date): Promise<void> {
+  const sql = getSql();
+  await sql`UPDATE users SET next_auto_pay_date = ${nextDate.toISOString()} WHERE id = ${userId}`;
+}
+
+export async function getAutoPaySettings(userId: string): Promise<{auto_pay_enabled: boolean; auto_pay_schedule: string; review_window_days: number; next_auto_pay_date: string | null}> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT auto_pay_enabled, auto_pay_schedule, review_window_days, next_auto_pay_date::text
+    FROM users WHERE id = ${userId}
+  `;
+  const row = first<any>(result);
+  return {
+    auto_pay_enabled: row?.auto_pay_enabled ?? false,
+    auto_pay_schedule: row?.auto_pay_schedule ?? 'biweekly',
+    review_window_days: row?.review_window_days ?? 3,
+    next_auto_pay_date: row?.next_auto_pay_date ?? null,
+  };
+}
+
+export async function updateAutoPaySettings(userId: string, settings: {auto_pay_enabled: boolean; auto_pay_schedule: string; review_window_days: number; next_auto_pay_date: Date | null}): Promise<void> {
+  const sql = getSql();
+  await sql`
+    UPDATE users SET
+      auto_pay_enabled = ${settings.auto_pay_enabled},
+      auto_pay_schedule = ${settings.auto_pay_schedule},
+      review_window_days = ${settings.review_window_days},
+      next_auto_pay_date = ${settings.next_auto_pay_date ? settings.next_auto_pay_date.toISOString() : null}
+    WHERE id = ${userId}
   `;
 }
 

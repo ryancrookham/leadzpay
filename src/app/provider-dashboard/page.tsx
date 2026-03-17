@@ -20,12 +20,13 @@ interface ApiLead {
   vehicleMake: string | null;
   vehicleModel: string | null;
   payoutAmount: number;
-  payoutStatus: "pending" | "processing" | "completed" | "failed";
+  payoutStatus: "pending" | "approved" | "processing" | "completed" | "failed" | "rejected";
   payoutCompletedAt: string | null;
   submittedAt: string;
   providerName: string | null;
   buyerName: string | null;
   buyerBusinessName: string | null;
+  rejectionReason?: string | null;
 }
 import { useConnections, type ApiConnection } from "@/lib/connection-context";
 import { isProvider } from "@/lib/auth-types";
@@ -599,11 +600,16 @@ function DashboardTab({
                     <td className="py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                        lead.payoutStatus === "rejected" ? "bg-red-100 text-red-700" :
+                        lead.payoutStatus === "approved" ? "bg-blue-100 text-blue-700" :
                         lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                         "bg-amber-100 text-amber-700"
                       }`}>
-                        {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
+                        {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                       </span>
+                      {lead.payoutStatus === "rejected" && lead.rejectionReason && (
+                        <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                      )}
                     </td>
                     <td className="py-4 text-[#E8822A] font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                     <td className="py-4 text-gray-500 text-sm">
@@ -1532,11 +1538,16 @@ function LeadsTab({ dbLeads, dbLeadsLoading, activeConnection, onNavigateToConne
                   <td className="py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                      lead.payoutStatus === "rejected" ? "bg-red-100 text-red-700" :
+                      lead.payoutStatus === "approved" ? "bg-blue-100 text-blue-700" :
                       lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                       "bg-amber-100 text-amber-700"
                     }`}>
-                      {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
+                      {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                     </span>
+                    {lead.payoutStatus === "rejected" && lead.rejectionReason && (
+                      <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                    )}
                   </td>
                   <td className="py-4 text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</td>
                 </tr>
@@ -1604,11 +1615,16 @@ function EarningsTab({
                   <p className="text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
+                    lead.payoutStatus === "rejected" ? "bg-red-100 text-red-700" :
+                    lead.payoutStatus === "approved" ? "bg-blue-100 text-blue-700" :
                     lead.payoutStatus === "processing" ? "bg-orange-100 text-orange-700" :
                     "bg-amber-100 text-amber-700"
                   }`}>
-                    {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
+                    {lead.payoutStatus === "completed" ? "Paid" : lead.payoutStatus === "rejected" ? "Rejected" : lead.payoutStatus === "approved" ? "Approved" : lead.payoutStatus === "processing" ? "Processing" : "Pending"}
                   </span>
+                  {lead.payoutStatus === "rejected" && lead.rejectionReason && (
+                    <p className="text-red-400 text-[10px] mt-1">{lead.rejectionReason}</p>
+                  )}
                 </div>
               </div>
             ))}

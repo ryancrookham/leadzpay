@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS users (
   stripe_default_payment_method VARCHAR(255),
   stripe_payment_method_set_at TIMESTAMP WITH TIME ZONE,
 
+  -- Auto-pay settings (buyer)
+  auto_pay_enabled BOOLEAN DEFAULT FALSE,
+  auto_pay_schedule VARCHAR(20) DEFAULT 'biweekly',
+  review_window_days INTEGER DEFAULT 3,
+  next_auto_pay_date TIMESTAMP WITH TIME ZONE,
+
   -- Status
   is_active BOOLEAN DEFAULT TRUE,
 
@@ -102,8 +108,13 @@ CREATE TABLE IF NOT EXISTS leads (
   -- Payment tracking
   payout_amount DECIMAL(10,2) NOT NULL,
   payout_status VARCHAR(20) DEFAULT 'pending'
-    CHECK (payout_status IN ('pending', 'processing', 'completed', 'failed')),
+    CHECK (payout_status IN ('pending', 'approved', 'processing', 'completed', 'failed', 'rejected')),
   stripe_transfer_id VARCHAR(255),
+
+  -- Rejection tracking
+  rejection_reason TEXT,
+  rejected_at TIMESTAMP WITH TIME ZONE,
+  rejected_by UUID REFERENCES users(id),
 
   -- Timestamps
   submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

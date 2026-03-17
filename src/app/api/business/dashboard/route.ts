@@ -44,6 +44,18 @@ async function ensureMigrations() {
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   )`;
+  // Lead rejection columns
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS rejection_reason TEXT`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS rejected_by UUID`;
+  // Expand payout_status CHECK to include 'rejected' and 'approved'
+  await sql`ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_payout_status_check`;
+  await sql`ALTER TABLE leads ADD CONSTRAINT leads_payout_status_check CHECK (payout_status IN ('pending', 'approved', 'processing', 'completed', 'failed', 'rejected'))`;
+  // Auto-pay columns on users table
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_pay_enabled BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_pay_schedule VARCHAR(20) DEFAULT 'biweekly'`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS review_window_days INTEGER DEFAULT 3`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS next_auto_pay_date TIMESTAMPTZ`;
   migrationRan = true;
 }
 
@@ -130,6 +142,9 @@ export async function GET() {
         deadReason: lead.dead_reason ?? null,
         assignedTo: lead.assigned_to ?? null,
         followUpDate: lead.follow_up_date ?? null,
+        rejectionReason: lead.rejection_reason ?? null,
+        rejectedAt: lead.rejected_at ?? null,
+        rejectedBy: lead.rejected_by ?? null,
       };
     }));
 
