@@ -60,7 +60,7 @@ export default function Home() {
       </div>
 
       {/* ─── NAVIGATION ─────────────────────────────────────────────────── */}
-      <nav className="flex items-center px-8 py-3 bg-[#0d1b2e] border-b border-white/10 relative z-50 sticky top-0">
+      <nav className="flex items-center px-8 py-4 bg-white border-b border-gray-100 relative z-50 sticky top-0">
         <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
@@ -69,11 +69,11 @@ export default function Home() {
           className="cursor-pointer"
         >
           <Image
-            src="/woml-alt-white.png"
+            src="/woml-alt-orange.png"
             alt="WOML"
-            width={480}
-            height={144}
-            className="h-[72px] w-auto object-contain"
+            width={360}
+            height={108}
+            className="h-[120px] w-auto object-contain"
           />
         </button>
         <div className="flex-1 flex items-center justify-end gap-3">
@@ -90,7 +90,7 @@ export default function Home() {
               </Link>
               <button
                 onClick={async () => { await logout(); window.location.reload(); }}
-                className="text-white/50 hover:text-red-400 px-2 py-2 rounded-lg transition"
+                className="text-[#152238]/50 hover:text-red-400 px-2 py-2 rounded-lg transition"
                 title="Log Out"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,11 +100,11 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <Link href="/auth/login" className="text-white/70 hover:text-white px-3 py-2 font-medium transition text-sm">
+              <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition text-sm">
                 Sign In
               </Link>
               <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-5 py-2 rounded-lg font-medium transition text-sm">
-                Get Started
+                Business Sign Up
               </Link>
             </>
           )}

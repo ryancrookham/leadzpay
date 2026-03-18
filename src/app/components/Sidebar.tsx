@@ -15,14 +15,13 @@ const tabs: { label: string; href: string; external?: boolean }[] = [
   { label: "Legal", href: "/legal" },
 ];
 
-// Nav bar height — py-3 (24px top+bottom) + h-10 logo (40px) = 64px
-const NAV_H = 64;
+// Nav bar height — py-4 (32px top+bottom) + h-[120px] logo = 152px
+const NAV_H = 152;
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const isHome = pathname === "/";
-  const barColor = isHome ? "bg-white" : "bg-[#0d1b2e]";
+  const barColor = "bg-[#0d1b2e]";
 
   return (
     <>
