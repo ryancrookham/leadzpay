@@ -227,74 +227,13 @@ export default function Home() {
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
 
-          {/* Growth chart mountain — strong upward trend left to right */}
+          {/* Mountain climber watermark */}
           <div className="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
-            <svg
-              viewBox="0 0 1440 320"
-              preserveAspectRatio="xMidYMid slice"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="w-full h-full"
-            >
-              {/* Ridge: starts low-left, climbs hard with jagged volatility, stays high on right */}
-              <path
-                d="
-                  M0,295
-                  L40,288 L65,292 L90,280
-                  L120,272 L140,276 L165,262
-                  L195,252 L215,256 L240,242
-                  L268,230 L285,234 L308,218
-                  L335,204 L352,208 L375,192
-                  L402,176 L418,180 L442,162
-                  L468,146 L484,150 L508,132
-                  L535,115 L550,119 L572,100
-                  L598,82 L614,87 L638,68
-                  L664,50 L678,55 L702,36
-                  L728,20 L742,25 L765,10
-                  L785,4 L802,8 L820,2
-                  L840,6 L858,3 L878,8
-                  L900,14 L918,10 L940,18
-                  L962,12 L982,8 L1005,16
-                  L1028,10 L1050,6 L1075,12
-                  L1100,8 L1125,4 L1155,10
-                  L1188,6 L1220,3 L1260,8
-                  L1305,5 L1355,4 L1440,2
-                  L1440,320 L0,320 Z
-                "
-                fill="#212121"
-                opacity="0.05"
-              />
-              {/* Orange outline — traces the exact ridge */}
-              <path
-                d="
-                  M0,295
-                  L40,288 L65,292 L90,280
-                  L120,272 L140,276 L165,262
-                  L195,252 L215,256 L240,242
-                  L268,230 L285,234 L308,218
-                  L335,204 L352,208 L375,192
-                  L402,176 L418,180 L442,162
-                  L468,146 L484,150 L508,132
-                  L535,115 L550,119 L572,100
-                  L598,82 L614,87 L638,68
-                  L664,50 L678,55 L702,36
-                  L728,20 L742,25 L765,10
-                  L785,4 L802,8 L820,2
-                  L840,6 L858,3 L878,8
-                  L900,14 L918,10 L940,18
-                  L962,12 L982,8 L1005,16
-                  L1028,10 L1050,6 L1075,12
-                  L1100,8 L1125,4 L1155,10
-                  L1188,6 L1220,3 L1260,8
-                  L1305,5 L1355,4 L1440,2
-                "
-                stroke="#E77500"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity="0.75"
-              />
-            </svg>
+            <img
+              src="/stats-mountain.png"
+              alt=""
+              className="w-full h-full object-cover object-center opacity-90"
+            />
           </div>
 
           <div className="max-w-5xl mx-auto relative z-10">
