@@ -124,7 +124,7 @@ export default function Home() {
             style={{
               backgroundImage: "url('/woml-icon-orange.png')",
               backgroundAttachment: "fixed",
-              backgroundSize: "60%",
+              backgroundSize: "420%",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
               opacity: 0.08,
@@ -340,8 +340,9 @@ export default function Home() {
             style={{
               backgroundImage: "url('/woml-icon-orange.png')",
               backgroundAttachment: "fixed",
-              backgroundSize: "cover",
+              backgroundSize: "420%",
               backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
               opacity: 0.08,
             }}
           />
