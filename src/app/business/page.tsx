@@ -806,20 +806,20 @@ function BusinessPortalContent() {
         <Image
           src="/woml-icon-orange.png"
           alt=""
-          width={900}
-          height={900}
+          width={1200}
+          height={1200}
           className="absolute select-none object-contain"
-          style={{ width: '82vw', height: '82vw', maxWidth: '920px', maxHeight: '920px', filter: 'brightness(0)', opacity: 0.08, transform: 'translate(4px, 4px)' }}
+          style={{ width: '105vw', height: '105vw', maxWidth: '1200px', maxHeight: '1200px', filter: 'brightness(0)', opacity: 0.12, transform: 'translate(6px, 6px)' }}
           priority
         />
         {/* Orange layer */}
         <Image
           src="/woml-icon-orange.png"
           alt=""
-          width={900}
-          height={900}
+          width={1200}
+          height={1200}
           className="absolute select-none object-contain"
-          style={{ width: '80vw', height: '80vw', maxWidth: '900px', maxHeight: '900px', opacity: 0.07 }}
+          style={{ width: '100vw', height: '100vw', maxWidth: '1100px', maxHeight: '1100px', opacity: 0.12 }}
           priority
         />
       </div>
