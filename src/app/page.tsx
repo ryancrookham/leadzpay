@@ -41,13 +41,11 @@ export default function Home() {
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none select-none"
         aria-hidden="true"
       >
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/black%20orange%20fill%403x-vH0gXy64jc2rCyf5HVrtWl6Fll3usO.png"
           alt=""
-          width={800}
-          height={800}
           className="w-[40vw] h-auto opacity-[0.035]"
-          priority
         />
       </div>
 
