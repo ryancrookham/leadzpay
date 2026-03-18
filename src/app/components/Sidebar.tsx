@@ -15,8 +15,8 @@ const tabs: { label: string; href: string; external?: boolean }[] = [
   { label: "Legal", href: "/legal" },
 ];
 
-// Nav bar height in px — py-4 (32px) + h-10 logo (40px) = 72px
-const NAV_H = 152;
+// Nav bar height — py-3 (24px top+bottom) + h-10 logo (40px) = 64px
+const NAV_H = 64;
 
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
@@ -78,9 +78,9 @@ export default function Sidebar() {
         className="flex flex-col gap-[5px] p-2 mr-1"
         aria-label="Toggle menu"
       >
-        <span className="block w-[22px] h-[2px] bg-[#152238] rounded" />
-        <span className="block w-[22px] h-[2px] bg-[#152238] rounded" />
-        <span className="block w-[22px] h-[2px] bg-[#152238] rounded" />
+        <span className="block w-[22px] h-[2px] bg-white rounded" />
+        <span className="block w-[22px] h-[2px] bg-white rounded" />
+        <span className="block w-[22px] h-[2px] bg-white rounded" />
       </button>
     </>
   );
