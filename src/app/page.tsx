@@ -227,14 +227,20 @@ export default function Home() {
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
 
-          {/* Mountain climber watermark */}
-          <div className="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
-            <img
-              src="/stats-mountain.png"
-              alt=""
-              className="w-full h-full object-cover object-center opacity-90"
-            />
-          </div>
+          {/* WOML icon watermark */}
+          <div
+            className="absolute inset-0 pointer-events-none select-none"
+            aria-hidden="true"
+            style={{
+              backgroundImage: "url('/woml-icon-orange.png')",
+              backgroundAttachment: "fixed",
+              backgroundSize: "420%",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              opacity: 0.06,
+              mixBlendMode: "multiply",
+            }}
+          />
 
           <div className="max-w-5xl mx-auto relative z-10">
             <div className="grid md:grid-cols-3 gap-12 text-center">
