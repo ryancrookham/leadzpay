@@ -8,7 +8,7 @@ import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [ridgeDrawn, setRidgeDrawn] = useState(false);
+  const [ridgeProgress, setRidgeProgress] = useState(0);
   const statsRef = useRef<HTMLElement>(null);
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
   const dashboardUrl =
@@ -23,14 +23,21 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const el = statsRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setRidgeDrawn(true); },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    if (!mounted) return;
+    const handleScroll = () => {
+      const el = statsRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // Start drawing when section enters viewport, finish when it leaves top
+      const start = vh * 0.92;   // section top at 92% down = begin
+      const end   = vh * -0.1;   // section top at -10% (just scrolled past) = done
+      const p = Math.max(0, Math.min(1, (start - rect.top) / (start - end)));
+      setRidgeProgress(p);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
   }, [mounted]);
 
   if (!mounted || isLoading) {
@@ -240,76 +247,65 @@ export default function Home() {
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
         <section ref={statsRef} className="py-24 px-8 relative z-[1] overflow-hidden bg-[#f8f9fc]">
 
-          {/* Climber photo — left-anchored, darkened */}
+          {/* Climber photo — shifted left to frame the figure, charcoal mountain */}
           <div
             className="absolute inset-0 pointer-events-none select-none"
             aria-hidden="true"
             style={{
               backgroundImage: "url('/stats-mountain.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "left center",
+              backgroundSize: "130%",
+              backgroundPosition: "12% center",
               backgroundRepeat: "no-repeat",
-              opacity: 0.28,
-              filter: "brightness(0.55) saturate(0.7)",
+              opacity: 0.45,
+              filter: "brightness(0.32) saturate(0.5)",
             }}
           />
 
-          {/* Dark gradient — hides WOML text in right half, deepens mountain */}
+          {/* Gradient — fades right side back to page bg, hides WOML text */}
           <div
             className="absolute inset-0 pointer-events-none"
             aria-hidden="true"
             style={{
-              background: "linear-gradient(to right, transparent 35%, rgba(248,249,252,0.82) 70%)",
+              background: "linear-gradient(to right, rgba(248,249,252,0.05) 30%, rgba(248,249,252,0.88) 72%)",
             }}
           />
 
-          {/* Animated orange ridge line — draws itself on scroll */}
+          {/* Scroll-driven orange ridge line */}
           <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-            <svg
-              viewBox="0 0 1440 300"
-              preserveAspectRatio="xMidYMid slice"
-              fill="none"
-              className="w-full h-full"
-            >
-              {/* Outer glow */}
+            <svg viewBox="0 0 1440 300" preserveAspectRatio="xMidYMid slice" fill="none" className="w-full h-full">
+              {/* Glow layer */}
               <path
                 d="M0,290 L80,268 L160,245 L240,222 L320,198 L400,173 L470,150 L530,128 L585,108 L635,90 L678,74 L715,60 L748,49 L778,40 L805,34 L830,30 L858,28 L890,30 L925,36 L965,30 L1010,24 L1060,18 L1120,14 L1190,11 L1270,8 L1360,6 L1440,5"
-                stroke="#E77500"
-                strokeWidth="10"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity="0.15"
+                stroke="#E77500" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" opacity="0.18"
                 pathLength="1"
-                style={{
-                  strokeDasharray: 1,
-                  strokeDashoffset: ridgeDrawn ? 0 : 1,
-                  transition: ridgeDrawn ? "stroke-dashoffset 2.4s cubic-bezier(0.4,0,0.2,1)" : "none",
-                }}
+                style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
               />
-              {/* Core bright line */}
+              {/* Core line */}
               <path
                 d="M0,290 L80,268 L160,245 L240,222 L320,198 L400,173 L470,150 L530,128 L585,108 L635,90 L678,74 L715,60 L748,49 L778,40 L805,34 L830,30 L858,28 L890,30 L925,36 L965,30 L1010,24 L1060,18 L1120,14 L1190,11 L1270,8 L1360,6 L1440,5"
-                stroke="#E77500"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity="0.9"
+                stroke="#E77500" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.95"
                 pathLength="1"
-                style={{
-                  strokeDasharray: 1,
-                  strokeDashoffset: ridgeDrawn ? 0 : 1,
-                  transition: ridgeDrawn ? "stroke-dashoffset 2.4s cubic-bezier(0.4,0,0.2,1)" : "none",
-                }}
+                style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
               />
-              {/* Travelling dot at the line tip */}
-              {ridgeDrawn && (
-                <circle r="5" fill="#E77500" opacity="0.9">
-                  <animateMotion
-                    dur="2.4s"
-                    fill="freeze"
-                    path="M0,290 L80,268 L160,245 L240,222 L320,198 L400,173 L470,150 L530,128 L585,108 L635,90 L678,74 L715,60 L748,49 L778,40 L805,34 L830,30 L858,28 L890,30 L925,36 L965,30 L1010,24 L1060,18 L1120,14 L1190,11 L1270,8 L1360,6 L1440,5"
-                  />
-                </circle>
+              {/* Travelling dot at the tip */}
+              {ridgeProgress > 0.02 && (
+                <circle
+                  cx={ridgeProgress * 1440}
+                  cy={290 - ridgeProgress * 285}
+                  r="5"
+                  fill="#E77500"
+                  opacity="0.95"
+                />
+              )}
+              {/* Glow halo around dot */}
+              {ridgeProgress > 0.02 && (
+                <circle
+                  cx={ridgeProgress * 1440}
+                  cy={290 - ridgeProgress * 285}
+                  r="12"
+                  fill="#E77500"
+                  opacity="0.18"
+                />
               )}
             </svg>
           </div>
