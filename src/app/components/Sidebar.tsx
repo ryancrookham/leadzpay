@@ -21,6 +21,8 @@ const NAV_H = 64;
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const isHome = pathname === "/";
+  const barColor = isHome ? "bg-white" : "bg-[#0d1b2e]";
 
   return (
     <>
@@ -78,9 +80,9 @@ export default function Sidebar() {
         className="flex flex-col gap-[5px] p-2 mr-1"
         aria-label="Toggle menu"
       >
-        <span className="block w-[22px] h-[2px] bg-white rounded" />
-        <span className="block w-[22px] h-[2px] bg-white rounded" />
-        <span className="block w-[22px] h-[2px] bg-white rounded" />
+        <span className={`block w-[22px] h-[2px] ${barColor} rounded`} />
+        <span className={`block w-[22px] h-[2px] ${barColor} rounded`} />
+        <span className={`block w-[22px] h-[2px] ${barColor} rounded`} />
       </button>
     </>
   );
