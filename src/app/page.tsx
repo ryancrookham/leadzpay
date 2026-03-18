@@ -225,20 +225,18 @@ export default function Home() {
         </section>
 
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
-        <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
+        <section className="py-24 px-8 relative z-[1] overflow-hidden">
 
-          {/* WOML icon watermark */}
+          {/* Climber watermark background */}
           <div
             className="absolute inset-0 pointer-events-none select-none"
             aria-hidden="true"
             style={{
-              backgroundImage: "url('/woml-icon-orange.png')",
-              backgroundAttachment: "fixed",
-              backgroundSize: "420%",
+              backgroundImage: "url('/stats-mountain.png')",
+              backgroundSize: "cover",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
-              opacity: 0.06,
-              mixBlendMode: "multiply",
+              opacity: 0.35,
             }}
           />
 
