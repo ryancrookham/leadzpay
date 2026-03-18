@@ -227,7 +227,7 @@ export default function Home() {
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
 
-          {/* Mountain range — orange outline traces the ridge exactly */}
+          {/* Growth chart mountain — strong upward trend left to right */}
           <div className="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
             <svg
               viewBox="0 0 1440 320"
@@ -236,73 +236,63 @@ export default function Home() {
               xmlns="http://www.w3.org/2000/svg"
               className="w-full h-full"
             >
-              {/* The ridge path — used for both fill and the orange outline stroke */}
-              {/* Jagged mountain range: low on left, climbs with rough steps to peak ~x=540, then descends right */}
+              {/* Ridge: starts low-left, climbs hard with jagged volatility, stays high on right */}
               <path
-                id="ridge"
                 d="
-                  M0,285
-                  L30,278 L55,268 L70,272 L90,260
-                  L115,248 L130,252 L150,238
-                  L175,224 L190,228 L210,214
-                  L238,198 L252,202 L268,186
-                  L295,168 L308,172 L325,155
-                  L348,136 L360,140 L378,120
-                  L398,100 L412,104 L428,86
-                  L448,68 L462,72 L478,55
-                  L498,40 L512,44 L528,30
-                  L542,18 L556,22 L568,12
-                  L578,8
-                  L590,14 L604,10 L616,18
-                  L630,28 L644,24 L658,36
-                  L676,52 L690,48 L706,62
-                  L726,78 L738,74 L754,88
-                  L774,104 L788,100 L806,114
-                  L830,128 L848,124 L868,138
-                  L895,152 L915,148 L938,162
-                  L968,175 L990,171 L1015,184
-                  L1048,196 L1072,192 L1100,204
-                  L1135,216 L1162,212 L1192,224
-                  L1230,236 L1262,232 L1295,244
-                  L1340,256 L1385,262 L1440,268
+                  M0,295
+                  L40,288 L65,292 L90,280
+                  L120,272 L140,276 L165,262
+                  L195,252 L215,256 L240,242
+                  L268,230 L285,234 L308,218
+                  L335,204 L352,208 L375,192
+                  L402,176 L418,180 L442,162
+                  L468,146 L484,150 L508,132
+                  L535,115 L550,119 L572,100
+                  L598,82 L614,87 L638,68
+                  L664,50 L678,55 L702,36
+                  L728,20 L742,25 L765,10
+                  L785,4 L802,8 L820,2
+                  L840,6 L858,3 L878,8
+                  L900,14 L918,10 L940,18
+                  L962,12 L982,8 L1005,16
+                  L1028,10 L1050,6 L1075,12
+                  L1100,8 L1125,4 L1155,10
+                  L1188,6 L1220,3 L1260,8
+                  L1305,5 L1355,4 L1440,2
                   L1440,320 L0,320 Z
                 "
                 fill="#212121"
                 opacity="0.05"
               />
-              {/* Orange ridge outline — same path, stroke only, no fill */}
+              {/* Orange outline — traces the exact ridge */}
               <path
                 d="
-                  M0,285
-                  L30,278 L55,268 L70,272 L90,260
-                  L115,248 L130,252 L150,238
-                  L175,224 L190,228 L210,214
-                  L238,198 L252,202 L268,186
-                  L295,168 L308,172 L325,155
-                  L348,136 L360,140 L378,120
-                  L398,100 L412,104 L428,86
-                  L448,68 L462,72 L478,55
-                  L498,40 L512,44 L528,30
-                  L542,18 L556,22 L568,12
-                  L578,8
-                  L590,14 L604,10 L616,18
-                  L630,28 L644,24 L658,36
-                  L676,52 L690,48 L706,62
-                  L726,78 L738,74 L754,88
-                  L774,104 L788,100 L806,114
-                  L830,128 L848,124 L868,138
-                  L895,152 L915,148 L938,162
-                  L968,175 L990,171 L1015,184
-                  L1048,196 L1072,192 L1100,204
-                  L1135,216 L1162,212 L1192,224
-                  L1230,236 L1262,232 L1295,244
-                  L1340,256 L1385,262 L1440,268
+                  M0,295
+                  L40,288 L65,292 L90,280
+                  L120,272 L140,276 L165,262
+                  L195,252 L215,256 L240,242
+                  L268,230 L285,234 L308,218
+                  L335,204 L352,208 L375,192
+                  L402,176 L418,180 L442,162
+                  L468,146 L484,150 L508,132
+                  L535,115 L550,119 L572,100
+                  L598,82 L614,87 L638,68
+                  L664,50 L678,55 L702,36
+                  L728,20 L742,25 L765,10
+                  L785,4 L802,8 L820,2
+                  L840,6 L858,3 L878,8
+                  L900,14 L918,10 L940,18
+                  L962,12 L982,8 L1005,16
+                  L1028,10 L1050,6 L1075,12
+                  L1100,8 L1125,4 L1155,10
+                  L1188,6 L1220,3 L1260,8
+                  L1305,5 L1355,4 L1440,2
                 "
                 stroke="#E77500"
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity="0.7"
+                opacity="0.75"
               />
             </svg>
           </div>
