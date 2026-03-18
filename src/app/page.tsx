@@ -71,9 +71,9 @@ export default function Home() {
           <Image
             src="/woml-alt-white.png"
             alt="WOML"
-            width={160}
-            height={48}
-            className="h-10 w-auto object-contain"
+            width={480}
+            height={144}
+            className="h-[72px] w-auto object-contain"
           />
         </button>
         <div className="flex-1 flex items-center justify-end gap-3">
