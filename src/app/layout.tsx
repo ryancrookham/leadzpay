@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Space_Grotesk } from "next/font/google";
-import "./styles.css";
+import { Bricolage_Grotesque, Space_Grotesk } from "next/font/google";
+import "./globals.css";
 import { Providers } from "@/lib/providers";
 import CookieBanner from "@/app/components/CookieBanner";
 
-const cormorant = Cormorant_Garamond({
+const bricolage = Bricolage_Grotesque({
   variable: "--font-heading",
   subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["700", "800"],
 });
 
 const spaceGrotesk = Space_Grotesk({
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${cormorant.variable} ${spaceGrotesk.variable} antialiased`}
+        className={`${bricolage.variable} ${spaceGrotesk.variable} antialiased`}
       >
         <Providers>
           {children}
