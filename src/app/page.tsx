@@ -225,8 +225,42 @@ export default function Home() {
         </section>
 
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
-        <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
-          <div className="max-w-5xl mx-auto">
+        <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
+
+          {/* Mountain + chart-line watermark */}
+          <div className="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
+            <svg
+              viewBox="0 0 1440 320"
+              preserveAspectRatio="xMidYMid slice"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-full h-full"
+            >
+              {/* Mountain silhouette */}
+              <path
+                d="M0,320 L0,245 L60,232 L120,218 L200,205 L280,192 L350,178 L420,160 L490,138 L550,115 L610,90 L660,68 L700,50 L730,38 L760,32 L790,38 L820,52 L870,72 L930,90 L1000,108 L1080,124 L1160,140 L1250,158 L1350,172 L1440,182 L1440,320 Z"
+                fill="#212121"
+                opacity="0.045"
+              />
+              {/* Bold orange performance line */}
+              <path
+                d="M0,305 C40,298 80,290 130,278 C180,266 220,255 270,240 C320,225 365,210 415,192 C465,174 510,155 560,133 C610,111 650,90 700,68 C730,54 755,42 780,34 C805,26 830,30 865,42 C900,54 935,68 975,60 C1015,52 1060,38 1110,26 C1160,14 1220,7 1290,4 C1350,2 1400,3 1440,3"
+                stroke="#E77500"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.55"
+              />
+              {/* Subtle glow under the line */}
+              <path
+                d="M0,305 C40,298 80,290 130,278 C180,266 220,255 270,240 C320,225 365,210 415,192 C465,174 510,155 560,133 C610,111 650,90 700,68 C730,54 755,42 780,34 C805,26 830,30 865,42 C900,54 935,68 975,60 C1015,52 1060,38 1110,26 C1160,14 1220,7 1290,4 C1350,2 1400,3 1440,3 L1440,320 L0,320 Z"
+                fill="#E77500"
+                opacity="0.025"
+              />
+            </svg>
+          </div>
+
+          <div className="max-w-5xl mx-auto relative z-10">
             <div className="grid md:grid-cols-3 gap-12 text-center">
               {[
                 { value: "3,000+", label: "Leads Facilitated Monthly" },
