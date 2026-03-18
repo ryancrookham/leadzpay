@@ -270,40 +270,46 @@ export default function Home() {
             }}
           />
 
-          {/* Scroll-driven orange ridge line — traces actual mountain slope */}
+          {/* Scroll-driven orange ridge line — traces exact mountain profile */}
           <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-            <svg viewBox="0 0 1440 300" preserveAspectRatio="xMidYMid slice" fill="none" className="w-full h-full">
-              {/* Glow layer */}
-              <path
-                d="M137,302 L148,294 L154,289 L160,284 L165,279 L172,273 L177,268 L184,262 L190,256 L197,250 L203,244 L210,238 L215,233 L222,226 L228,220 L235,213 L241,207 L248,200 L253,194 L260,187 L266,181 L274,173 L280,167 L288,159 L294,153 L302,145 L309,138 L317,130 L324,123 L332,115 L339,107 L347,99 L354,92 L362,84 L370,76 L378,68 L386,60 L394,52 L402,45 L410,38 L418,31 L427,24 L435,17 L444,11 L452,6 L460,2 L469,4 L480,1 L494,4 L510,2 L528,5 L545,2 L565,5 L587,2 L612,5 L640,2 L672,5 L708,2 L750,5 L796,2 L848,5 L908,2 L976,5 L1054,2 L1142,5 L1240,2 L1350,4 L1440,2"
-                stroke="#E77500" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" opacity="0.2"
-                pathLength="1"
-                style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
-              />
-              {/* Core bright line */}
-              <path
-                d="M137,302 L148,294 L154,289 L160,284 L165,279 L172,273 L177,268 L184,262 L190,256 L197,250 L203,244 L210,238 L215,233 L222,226 L228,220 L235,213 L241,207 L248,200 L253,194 L260,187 L266,181 L274,173 L280,167 L288,159 L294,153 L302,145 L309,138 L317,130 L324,123 L332,115 L339,107 L347,99 L354,92 L362,84 L370,76 L378,68 L386,60 L394,52 L402,45 L410,38 L418,31 L427,24 L435,17 L444,11 L452,6 L460,2 L469,4 L480,1 L494,4 L510,2 L528,5 L545,2 L565,5 L587,2 L612,5 L640,2 L672,5 L708,2 L750,5 L796,2 L848,5 L908,2 L976,5 L1054,2 L1142,5 L1240,2 L1350,4 L1440,2"
-                stroke="#E77500" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.95"
-                pathLength="1"
-                style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
-              />
-              {/* Dot rides the tip — on climb then along rocky ridge */}
-              {ridgeProgress > 0.02 && (() => {
-                const climbEnd = 0.72;
-                const cx = ridgeProgress <= climbEnd
-                  ? 137 + (ridgeProgress / climbEnd) * 323
-                  : 460 + ((ridgeProgress - climbEnd) / (1 - climbEnd)) * 980;
-                const cy = ridgeProgress <= climbEnd
-                  ? 302 - (ridgeProgress / climbEnd) * 300
-                  : 2 + Math.sin((ridgeProgress - climbEnd) * 80) * 2;
-                return (
-                  <>
-                    <circle cx={cx} cy={cy} r="13" fill="#E77500" opacity="0.2" />
-                    <circle cx={cx} cy={cy} r="5"  fill="#E77500" opacity="0.95" />
-                  </>
-                );
-              })()}
-            </svg>
+            {(() => {
+              // Waypoints measured from actual image pixels (stats-mountain.png 1584×672)
+              // CSS: backgroundSize:130%, backgroundPosition:12% center, section≈420px tall
+              const RIDGE_X = [335,350,355,360,364,374,383,393,402,411,448,484,521,557,594,630,667,676,686,695,705,714,723,733,742,752,761,771,780,790,799,809,818,823,827,832,870,920,970,1020,1080,1140,1200,1280,1360,1440];
+              const RIDGE_Y = [300,291,281,276,272,264,258,220,182,149,114,81,48,21,29,36,44,50,55,60,58,55,53,50,47,43,39,34,28,23,17,13,9,8,6,5,7,5,8,5,7,5,8,6,8,7];
+              const RIDGE_F = [0,0.0137,0.0225,0.0281,0.0325,0.0426,0.051,0.0819,0.1126,0.1394,0.1794,0.2177,0.2566,0.292,0.3217,0.3505,0.3802,0.3887,0.3975,0.4056,0.4136,0.421,0.4282,0.4364,0.4439,0.4523,0.4601,0.4689,0.4773,0.4861,0.4946,0.5031,0.5108,0.5148,0.5183,0.5223,0.5522,0.5915,0.6308,0.6701,0.7173,0.7644,0.8115,0.8744,0.9372,1];
+              // Interpolate dot position at current progress
+              let cx = RIDGE_X[0], cy = RIDGE_Y[0];
+              if (ridgeProgress > 0.005) {
+                const p = Math.min(ridgeProgress, 1);
+                let i = RIDGE_F.findIndex(f => f >= p);
+                if (i < 0) i = RIDGE_F.length - 1;
+                if (i === 0) { cx = RIDGE_X[0]; cy = RIDGE_Y[0]; }
+                else {
+                  const t = (p - RIDGE_F[i-1]) / (RIDGE_F[i] - RIDGE_F[i-1]);
+                  cx = RIDGE_X[i-1] + t * (RIDGE_X[i] - RIDGE_X[i-1]);
+                  cy = RIDGE_Y[i-1] + t * (RIDGE_Y[i] - RIDGE_Y[i-1]);
+                }
+              }
+              const pathD = "M335,300 L350,291 L355,281 L360,276 L364,272 L374,264 L383,258 L393,220 L402,182 L411,149 L448,114 L484,81 L521,48 L557,21 L594,29 L630,36 L667,44 L676,50 L686,55 L695,60 L705,58 L714,55 L723,53 L733,50 L742,47 L752,43 L761,39 L771,34 L780,28 L790,23 L799,17 L809,13 L818,9 L823,8 L827,6 L832,5 L870,7 L920,5 L970,8 L1020,5 L1080,7 L1140,5 L1200,8 L1280,6 L1360,8 L1440,7";
+              return (
+                <svg viewBox="0 0 1440 300" preserveAspectRatio="none" fill="none" className="w-full h-full">
+                  {/* Glow */}
+                  <path d={pathD} stroke="#E77500" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" opacity="0.18"
+                    pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
+                  {/* Core line */}
+                  <path d={pathD} stroke="#E77500" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="1"
+                    pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
+                  {/* Dot at tip */}
+                  {ridgeProgress > 0.01 && (
+                    <>
+                      <circle cx={cx} cy={cy} r="12" fill="#E77500" opacity="0.22" />
+                      <circle cx={cx} cy={cy} r="5" fill="#E77500" opacity="1" />
+                    </>
+                  )}
+                </svg>
+              );
+            })()}
           </div>
 
           <div className="max-w-5xl mx-auto relative z-10">
