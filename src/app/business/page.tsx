@@ -801,13 +801,25 @@ function BusinessPortalContent() {
   return (
     <div className="min-h-screen bg-[#E77500] relative">
       {/* Watermark Logo Background */}
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
+        {/* Black shadow layer */}
         <Image
-          src="/woml-alt-white.png"
+          src="/woml-icon-orange.png"
           alt=""
-          width={600}
-          height={600}
-          className="opacity-[0.02] select-none"
+          width={900}
+          height={900}
+          className="absolute select-none object-contain"
+          style={{ width: '82vw', height: '82vw', maxWidth: '920px', maxHeight: '920px', filter: 'brightness(0)', opacity: 0.08, transform: 'translate(4px, 4px)' }}
+          priority
+        />
+        {/* Orange layer */}
+        <Image
+          src="/woml-icon-orange.png"
+          alt=""
+          width={900}
+          height={900}
+          className="absolute select-none object-contain"
+          style={{ width: '80vw', height: '80vw', maxWidth: '900px', maxHeight: '900px', opacity: 0.07 }}
           priority
         />
       </div>
