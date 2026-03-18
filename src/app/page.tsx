@@ -244,43 +244,51 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
-        <section ref={statsRef} className="py-24 px-8 relative z-[1] overflow-hidden bg-[#f8f9fc]">
+        {/* ─── STATS — Fixed-height mountain section ───────────────────────── */}
+        {/* Desktop: fixed 380px so SVG path coordinates are exact.           */}
+        {/* Mobile: auto height with padding, mountain/line hidden.           */}
+        <section
+          ref={statsRef}
+          className="relative z-[1] overflow-hidden bg-[#f8f9fc] py-16 sm:py-0 sm:h-[380px]"
+        >
 
-          {/* Climber photo — shifted left to frame the figure, charcoal mountain */}
+          {/* Mountain — desktop only. backgroundSize 130% + center gives     */}
+          {/* exact placement: scale=1.1818, x_off=-52, y_off=-207 in SVG px  */}
           <div
-            className="absolute inset-0 pointer-events-none select-none"
+            className="absolute inset-0 pointer-events-none select-none hidden sm:block"
             aria-hidden="true"
             style={{
               backgroundImage: "url('/stats-mountain.png')",
               backgroundSize: "130%",
               backgroundPosition: "12% center",
               backgroundRepeat: "no-repeat",
-              opacity: 0.45,
-              filter: "brightness(0.32) saturate(0.5)",
+              opacity: 0.5,
+              filter: "brightness(0.28) saturate(0.45)",
             }}
           />
 
-          {/* Gradient — fades right side back to page bg, hides WOML text */}
+          {/* Gradient — fades right side back to page bg */}
           <div
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none hidden sm:block"
             aria-hidden="true"
             style={{
-              background: "linear-gradient(to right, rgba(248,249,252,0.05) 30%, rgba(248,249,252,0.88) 72%)",
+              background: "linear-gradient(to right, rgba(248,249,252,0.0) 20%, rgba(248,249,252,0.9) 68%)",
             }}
           />
 
-          {/* Scroll-driven orange ridge line — traces exact mountain profile */}
-          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+          {/* Orange ridge line — desktop only.                               */}
+          {/* Path computed for EXACT section h=380px, viewBox 1440×380.      */}
+          {/* CSS math: scale=1.1818, x_off=-52, y_off=(380-794)/2=-207       */}
+          {/* svg_x = img_x*1.1818−52  |  svg_y = img_y*1.1818−207           */}
+          <div className="absolute inset-0 pointer-events-none hidden sm:block" aria-hidden="true">
             {(() => {
-              // Waypoints measured from actual image pixels (stats-mountain.png 1584×672)
-              // CSS: backgroundSize:130%, backgroundPosition:12% center, section≈420px tall
-              const RIDGE_X = [335,350,355,360,364,374,383,393,402,411,448,484,521,557,594,630,667,676,686,695,705,714,723,733,742,752,761,771,780,790,799,809,818,823,827,832,870,920,970,1020,1080,1140,1200,1280,1360,1440];
-              const RIDGE_Y = [300,291,281,276,272,264,258,220,182,149,114,81,48,21,29,36,44,50,55,60,58,55,53,50,47,43,39,34,28,23,17,13,9,8,6,5,7,5,8,5,7,5,8,6,8,7];
-              const RIDGE_F = [0,0.0137,0.0225,0.0281,0.0325,0.0426,0.051,0.0819,0.1126,0.1394,0.1794,0.2177,0.2566,0.292,0.3217,0.3505,0.3802,0.3887,0.3975,0.4056,0.4136,0.421,0.4282,0.4364,0.4439,0.4523,0.4601,0.4689,0.4773,0.4861,0.4946,0.5031,0.5108,0.5148,0.5183,0.5223,0.5522,0.5915,0.6308,0.6701,0.7173,0.7644,0.8115,0.8744,0.9372,1];
-              // Interpolate dot position at current progress
+              // Waypoints: pixel-traced from stats-mountain.png (1584×672)
+              const RIDGE_X = [344,374,385,395,409,421,460,500,560,600,650,704,730,751,770,799,850,920,1020,1140,1260,1380,1440];
+              const RIDGE_Y = [380,312,229,158,81,5,4,4,4,5,8,58,49,40,20,1,2,1,2,1,2,1,2];
+              const RIDGE_F = [0.0,0.0516,0.1097,0.1594,0.2137,0.2671,0.2942,0.3219,0.3635,0.3913,0.426,0.4771,0.4962,0.512,0.5312,0.5552,0.5906,0.6392,0.7086,0.7918,0.8751,0.9584,1.0];
+              // Interpolate dot tip position
               let cx = RIDGE_X[0], cy = RIDGE_Y[0];
-              if (ridgeProgress > 0.005) {
+              if (ridgeProgress > 0.01) {
                 const p = Math.min(ridgeProgress, 1);
                 let i = RIDGE_F.findIndex(f => f >= p);
                 if (i < 0) i = RIDGE_F.length - 1;
@@ -291,19 +299,19 @@ export default function Home() {
                   cy = RIDGE_Y[i-1] + t * (RIDGE_Y[i] - RIDGE_Y[i-1]);
                 }
               }
-              const pathD = "M335,300 L350,291 L355,281 L360,276 L364,272 L374,264 L383,258 L393,220 L402,182 L411,149 L448,114 L484,81 L521,48 L557,21 L594,29 L630,36 L667,44 L676,50 L686,55 L695,60 L705,58 L714,55 L723,53 L733,50 L742,47 L752,43 L761,39 L771,34 L780,28 L790,23 L799,17 L809,13 L818,9 L823,8 L827,6 L832,5 L870,7 L920,5 L970,8 L1020,5 L1080,7 L1140,5 L1200,8 L1280,6 L1360,8 L1440,7";
+              const pathD = "M344,380 L374,312 L385,229 L395,158 L409,81 L421,5 L460,4 L500,4 L560,4 L600,5 L650,8 L704,58 L730,49 L751,40 L770,20 L799,1 L850,2 L920,1 L1020,2 L1140,1 L1260,2 L1380,1 L1440,2";
               return (
-                <svg viewBox="0 0 1440 300" preserveAspectRatio="none" fill="none" className="w-full h-full">
-                  {/* Glow */}
-                  <path d={pathD} stroke="#E77500" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" opacity="0.18"
+                <svg viewBox="0 0 1440 380" preserveAspectRatio="none" fill="none" className="w-full h-full">
+                  {/* Glow halo */}
+                  <path d={pathD} stroke="#E77500" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" opacity="0.15"
                     pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
                   {/* Core line */}
-                  <path d={pathD} stroke="#E77500" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="1"
+                  <path d={pathD} stroke="#E77500" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" opacity="1"
                     pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
                   {/* Dot at tip */}
                   {ridgeProgress > 0.01 && (
                     <>
-                      <circle cx={cx} cy={cy} r="12" fill="#E77500" opacity="0.22" />
+                      <circle cx={cx} cy={cy} r="13" fill="#E77500" opacity="0.2" />
                       <circle cx={cx} cy={cy} r="5" fill="#E77500" opacity="1" />
                     </>
                   )}
@@ -312,8 +320,10 @@ export default function Home() {
             })()}
           </div>
 
-          <div className="max-w-5xl mx-auto relative z-10">
-            <div className="grid md:grid-cols-3 gap-12 text-center">
+          {/* Stats — absolutely centered on desktop, normal flow on mobile   */}
+          <div className="sm:absolute sm:inset-0 sm:flex sm:items-center sm:justify-center relative z-10">
+            <div className="max-w-5xl mx-auto w-full px-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 sm:gap-12 text-center">
               {[
                 { value: "3,000+", label: "Leads Facilitated Monthly" },
                 { value: "$500+", label: "Average Provider Earnings" },
@@ -328,6 +338,7 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           </div>
         </section>
