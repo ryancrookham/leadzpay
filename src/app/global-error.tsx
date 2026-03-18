@@ -13,7 +13,7 @@ export default function GlobalError({
         style={{
           padding: 40,
           fontFamily: "monospace",
-          background: "#0d1b2e",
+          background: "#212121",
           color: "#fff",
         }}
       >

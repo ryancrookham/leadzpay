@@ -22,7 +22,7 @@ export default function Home() {
 
   if (!mounted || isLoading) {
     return (
-      <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center">
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
         <div className="text-center">
           <Image
             src="/woml-alt-white.png"
@@ -116,7 +116,7 @@ export default function Home() {
         {/* ─── HERO — Dark Navy with fixed background image ────────────────── */}
         <section
           className="relative py-36 px-8 overflow-hidden"
-          style={{ background: "#0d1b2e" }}
+          style={{ background: "#212121" }}
         >
           {/* Fixed parallax background image — stays put as you scroll through hero */}
           <div
@@ -170,10 +170,10 @@ export default function Home() {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#0d1b2e] mb-6 tracking-tight">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
                 Why Businesses Choose <span className="text-[#E77500]">WOML</span>
               </h2>
-              <p className="text-[#0d1b2e]/45 text-lg max-w-2xl mx-auto">
+              <p className="text-[#212121]/45 text-lg max-w-2xl mx-auto">
                 Your referral network is valuable. Keep it private, automated, and under your control.
               </p>
             </div>
@@ -216,8 +216,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={card.icon} />
                     </svg>
                   </div>
-                  <h3 className="text-xl font-bold text-[#0d1b2e] mb-3">{card.title}</h3>
-                  <p className="text-[#0d1b2e]/45 text-sm leading-relaxed">{card.description}</p>
+                  <h3 className="text-xl font-bold text-[#212121] mb-3">{card.title}</h3>
+                  <p className="text-[#212121]/45 text-sm leading-relaxed">{card.description}</p>
                 </div>
               ))}
             </div>
@@ -234,10 +234,10 @@ export default function Home() {
                 { value: "< 2 min", label: "Provider Onboarding" },
               ].map((stat, i) => (
                 <div key={i}>
-                  <div className="text-6xl md:text-7xl lg:text-8xl font-bold text-[#0d1b2e] mb-3 tracking-tight">
+                  <div className="text-6xl md:text-7xl lg:text-8xl font-bold text-[#212121] mb-3 tracking-tight">
                     {stat.value}
                   </div>
-                  <div className="text-[#0d1b2e]/35 text-xs tracking-[0.2em] uppercase font-medium">
+                  <div className="text-[#212121]/35 text-xs tracking-[0.2em] uppercase font-medium">
                     {stat.label}
                   </div>
                 </div>
@@ -250,10 +250,10 @@ export default function Home() {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#0d1b2e] mb-6 tracking-tight">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
                 Go Live in <span className="text-[#E77500]">4 Steps</span>
               </h2>
-              <p className="text-[#0d1b2e]/45 text-lg">From setup to payout in under 10 minutes.</p>
+              <p className="text-[#212121]/45 text-lg">From setup to payout in under 10 minutes.</p>
             </div>
             <div className="space-y-10">
               {[
@@ -267,8 +267,8 @@ export default function Home() {
                     {item.step}
                   </div>
                   <div className="pt-2">
-                    <h3 className="text-2xl font-bold text-[#0d1b2e] mb-2">{item.title}</h3>
-                    <p className="text-[#0d1b2e]/45 text-lg leading-relaxed">{item.description}</p>
+                    <h3 className="text-2xl font-bold text-[#212121] mb-2">{item.title}</h3>
+                    <p className="text-[#212121]/45 text-lg leading-relaxed">{item.description}</p>
                   </div>
                 </div>
               ))}
@@ -279,10 +279,10 @@ export default function Home() {
         {/* ─── PROVIDER CALLOUT — Light gray ───────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#0d1b2e] mb-6 tracking-tight">
+            <h2 className="text-4xl md:text-5xl font-bold text-[#212121] mb-6 tracking-tight">
               Are You a Lead Provider?
             </h2>
-            <p className="text-[#0d1b2e]/45 text-lg mb-10 leading-relaxed">
+            <p className="text-[#212121]/45 text-lg mb-10 leading-relaxed">
               Already referring customers to businesses you work with? Get paid for every referral. Your business will invite you when they&apos;re ready.
             </p>
             <Link href="/how-it-works" className="inline-flex items-center gap-2 text-[#E77500] hover:text-[#D47526] font-semibold text-lg transition">
@@ -298,7 +298,7 @@ export default function Home() {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#0d1b2e] mb-4 tracking-tight">Questions?</h2>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-4 tracking-tight">Questions?</h2>
             </div>
             <div className="space-y-4">
               {[
@@ -318,12 +318,12 @@ export default function Home() {
                   }}
                 >
                   <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                    <span className="font-bold text-[#0d1b2e] text-lg">{faq.q}</span>
-                    <svg className="w-5 h-5 text-[#0d1b2e]/25 group-open:rotate-180 transition-transform shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <span className="font-bold text-[#212121] text-lg">{faq.q}</span>
+                    <svg className="w-5 h-5 text-[#212121]/25 group-open:rotate-180 transition-transform shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </summary>
-                  <div className="px-6 pb-6 text-[#0d1b2e]/45 leading-relaxed">{faq.a}</div>
+                  <div className="px-6 pb-6 text-[#212121]/45 leading-relaxed">{faq.a}</div>
                 </details>
               ))}
             </div>
@@ -333,7 +333,7 @@ export default function Home() {
         {/* ─── FINAL CTA — Dark Navy with fixed bg ─────────────────────────── */}
         <section
           className="py-32 px-8 relative overflow-hidden"
-          style={{ background: "#0d1b2e" }}
+          style={{ background: "#212121" }}
         >
           <div
             className="absolute inset-0 pointer-events-none"
@@ -365,7 +365,7 @@ export default function Home() {
       </main>
 
       {/* ─── FOOTER ──────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/10 py-10 px-8 bg-[#0d1b2e] relative z-[1]">
+      <footer className="border-t border-white/10 py-10 px-8 bg-[#212121] relative z-[1]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-5">
           <Image src="/woml-alt-white.png" alt="WOML" width={120} height={36} className="h-8 w-auto object-contain opacity-60" />
           <div className="text-white/20 text-xs italic text-center max-w-md">

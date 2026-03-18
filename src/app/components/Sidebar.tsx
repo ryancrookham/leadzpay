@@ -21,7 +21,7 @@ const NAV_H = 152;
 export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const barColor = "bg-[#0d1b2e]";
+  const barColor = "bg-[#212121]";
 
   return (
     <>
