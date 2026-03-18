@@ -394,7 +394,7 @@ export default function AdminPanel() {
   // --- Loading / Signing Out ---
   if (authLoading || isSigningOut) {
     return (
-      <div className="min-h-screen bg-[#152238] flex items-center justify-center">
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
       </div>
     );
@@ -403,7 +403,7 @@ export default function AdminPanel() {
   // --- Login Screen ---
   if (!isAuthenticated || !currentUser || currentUser.role !== "admin") {
     return (
-      <div className="min-h-screen bg-[#152238] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl max-w-md w-full border border-gray-200">
           <div className="text-center mb-6">
             <Image src="/woml-alt-orange.png" alt="WOML" width={800} height={240} className="mx-auto mb-4 h-56 w-auto object-contain" />
@@ -463,7 +463,7 @@ export default function AdminPanel() {
 
   // --- Dashboard ---
   return (
-    <div className="min-h-screen bg-[#152238]">
+    <div className="min-h-screen bg-[#212121]">
       <nav className="flex items-center justify-between px-8 py-6 border-b border-white/20">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">

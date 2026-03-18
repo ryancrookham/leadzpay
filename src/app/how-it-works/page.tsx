@@ -44,7 +44,7 @@ export default function HowItWorksPage() {
         </Link>
         {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
-          <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
+          <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
           <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition">
@@ -54,7 +54,7 @@ export default function HowItWorksPage() {
       </nav>
 
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
-        <h1 className="text-3xl font-bold text-[#152238] mb-4">How It Works</h1>
+        <h1 className="text-3xl font-bold text-[#212121] mb-4">How It Works</h1>
         <p className="text-gray-500 text-sm mb-12">
           WOML runs on a simple four-step flow — from signup to automatic payout.
         </p>
@@ -66,7 +66,7 @@ export default function HowItWorksPage() {
                 {step.num}
               </div>
               <div>
-                <h2 className="text-base font-semibold text-[#152238] mb-1">{step.title}</h2>
+                <h2 className="text-base font-semibold text-[#212121] mb-1">{step.title}</h2>
                 <p className="text-gray-500 text-sm leading-relaxed">{step.body}</p>
               </div>
             </div>
@@ -75,13 +75,13 @@ export default function HowItWorksPage() {
 
         <div className="mt-14 p-6 border border-gray-200 rounded-xl bg-gray-50">
           <p className="text-sm text-gray-500 leading-relaxed">
-            <span className="font-semibold text-[#152238]">Privacy by design.</span>{" "}
+            <span className="font-semibold text-[#212121]">Privacy by design.</span>{" "}
             Every business channel on WOML is fully isolated. Lead providers you invite cannot see or interact with any other business on the platform — only yours.
           </p>
         </div>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"

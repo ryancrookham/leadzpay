@@ -42,7 +42,7 @@ export default function LegalPage() {
         </Link>
         {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
-          <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
+          <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
           <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition">
@@ -52,7 +52,7 @@ export default function LegalPage() {
       </nav>
 
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
-        <h1 className="text-3xl font-bold text-[#152238] mb-2">Legal Documents</h1>
+        <h1 className="text-3xl font-bold text-[#212121] mb-2">Legal Documents</h1>
         <p className="text-gray-500 text-sm mb-10">
           All WOML platform agreements and policies are publicly available below.
         </p>
@@ -61,7 +61,7 @@ export default function LegalPage() {
           {docs.map((doc) => (
             <div key={doc.id} className="flex items-center justify-between py-6">
               <div>
-                <h2 className="text-base font-semibold text-[#152238] mb-1">{doc.label}</h2>
+                <h2 className="text-base font-semibold text-[#212121] mb-1">{doc.label}</h2>
                 <p className="text-gray-500 text-sm">{doc.description}</p>
               </div>
               <div className="flex gap-2 ml-6 shrink-0">
@@ -69,7 +69,7 @@ export default function LegalPage() {
                   href={doc.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg text-[#152238] hover:bg-gray-50 transition"
+                  className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg text-[#212121] hover:bg-gray-50 transition"
                 >
                   View
                 </a>
@@ -86,7 +86,7 @@ export default function LegalPage() {
         </div>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"

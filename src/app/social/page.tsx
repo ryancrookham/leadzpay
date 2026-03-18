@@ -28,7 +28,7 @@ export default function SocialPage() {
         <div className="flex-1 flex items-center justify-end gap-3">
           <Link
             href="/auth/login"
-            className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition"
+            className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition"
           >
             Sign In
           </Link>
@@ -42,7 +42,7 @@ export default function SocialPage() {
       </nav>
 
       <main className="flex-1 flex flex-col items-center justify-center px-8 py-16">
-        <h1 className="text-3xl font-bold text-[#152238] mb-3 text-center">
+        <h1 className="text-3xl font-bold text-[#212121] mb-3 text-center">
           Follow Us on Social Media
         </h1>
         <p className="text-gray-500 text-sm mb-12 text-center max-w-md">
@@ -69,7 +69,7 @@ export default function SocialPage() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold text-[#152238] group-hover:text-[#0A66C2] transition-colors">
+            <p className="text-base font-semibold text-[#212121] group-hover:text-[#0A66C2] transition-colors">
               LinkedIn
             </p>
             <p className="text-sm text-gray-400 truncate">linkedin.com/company/woml-llc</p>
@@ -91,7 +91,7 @@ export default function SocialPage() {
         </p>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"

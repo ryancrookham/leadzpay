@@ -21,7 +21,7 @@ export default function ContactPage() {
         </Link>
         {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
-          <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
+          <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
           <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition">
@@ -31,7 +31,7 @@ export default function ContactPage() {
       </nav>
 
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
-        <h1 className="text-3xl font-bold text-[#152238] mb-4">Contact</h1>
+        <h1 className="text-3xl font-bold text-[#212121] mb-4">Contact</h1>
         <p className="text-gray-500 text-sm mb-10">
           Have a question or need help? Reach out and we&apos;ll get back to you within one business day.
         </p>
@@ -44,7 +44,7 @@ export default function ContactPage() {
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-[#152238] mb-1">Email</p>
+              <p className="text-sm font-semibold text-[#212121] mb-1">Email</p>
               <a
                 href="mailto:support@womleads.com"
                 className="text-sm text-[#E77500] hover:underline"
@@ -62,7 +62,7 @@ export default function ContactPage() {
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-[#152238] mb-1">Mailing Address</p>
+              <p className="text-sm font-semibold text-[#212121] mb-1">Mailing Address</p>
               <p className="text-sm text-gray-500">376 Farmhouse Ln<br />Wind Gap, PA 18091</p>
             </div>
           </div>
@@ -74,7 +74,7 @@ export default function ContactPage() {
         </p>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"

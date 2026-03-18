@@ -90,7 +90,7 @@ export default function Home() {
               </Link>
               <button
                 onClick={async () => { await logout(); window.location.reload(); }}
-                className="text-[#152238]/50 hover:text-red-400 px-2 py-2 rounded-lg transition"
+                className="text-[#212121]/50 hover:text-red-400 px-2 py-2 rounded-lg transition"
                 title="Log Out"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,7 +100,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition text-sm">
+              <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition text-sm">
                 Sign In
               </Link>
               <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-5 py-2 rounded-lg font-medium transition text-sm">

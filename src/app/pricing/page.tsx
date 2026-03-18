@@ -21,7 +21,7 @@ export default function PricingPage() {
         </Link>
         {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
-          <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
+          <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
           <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition">
@@ -31,7 +31,7 @@ export default function PricingPage() {
       </nav>
 
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
-        <h1 className="text-3xl font-bold text-[#152238] mb-4">Pricing</h1>
+        <h1 className="text-3xl font-bold text-[#212121] mb-4">Pricing</h1>
         <p className="text-gray-500 text-sm mb-10">
           WOML uses a transparent spread model. The business sets the payout rate for providers — WOML charges a small platform fee on top of each accepted lead.
         </p>
@@ -39,19 +39,19 @@ export default function PricingPage() {
         <div className="divide-y divide-gray-200 border-t border-b border-gray-200 mb-10">
           <div className="flex items-start justify-between py-5">
             <div>
-              <h2 className="text-sm font-semibold text-[#152238] mb-1">Business</h2>
+              <h2 className="text-sm font-semibold text-[#212121] mb-1">Business</h2>
               <p className="text-gray-500 text-sm">Charged per accepted lead. You set the lead value — WOML&apos;s platform fee is added transparently on top.</p>
             </div>
           </div>
           <div className="flex items-start justify-between py-5">
             <div>
-              <h2 className="text-sm font-semibold text-[#152238] mb-1">Provider</h2>
+              <h2 className="text-sm font-semibold text-[#212121] mb-1">Provider</h2>
               <p className="text-gray-500 text-sm">Paid per accepted lead. You earn the payout rate set by the business — no deductions from your side.</p>
             </div>
           </div>
           <div className="flex items-start justify-between py-5">
             <div>
-              <h2 className="text-sm font-semibold text-[#152238] mb-1">Platform Fee</h2>
+              <h2 className="text-sm font-semibold text-[#212121] mb-1">Platform Fee</h2>
               <p className="text-gray-500 text-sm">WOML&apos;s fee is configured by the platform administrator. The current fee structure is shown in your signed agreement and visible in your dashboard.</p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export default function PricingPage() {
 
         <div className="p-6 border border-gray-200 rounded-xl bg-gray-50">
           <p className="text-sm text-gray-500 leading-relaxed">
-            <span className="font-semibold text-[#152238]">All fees are disclosed upfront.</span>{" "}
+            <span className="font-semibold text-[#212121]">All fees are disclosed upfront.</span>{" "}
             The exact fee structure is displayed in your Business or Provider Agreement before you sign. Providers approaching $600 in annual earnings are flagged for 1099 compliance.
           </p>
         </div>
@@ -75,7 +75,7 @@ export default function PricingPage() {
         </div>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"

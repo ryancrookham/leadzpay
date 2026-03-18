@@ -25,7 +25,7 @@ export default function CookieBanner() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[9999] p-4 sm:p-6 animate-in slide-in-from-bottom">
-      <div className="max-w-4xl mx-auto bg-[#152238] border border-white/10 rounded-xl shadow-2xl px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div className="max-w-4xl mx-auto bg-[#212121] border border-white/10 rounded-xl shadow-2xl px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="flex-1 text-sm text-gray-300 leading-relaxed">
           This site uses cookies to keep you signed in and improve your experience.
           We do not use advertising or third-party tracking cookies.{" "}

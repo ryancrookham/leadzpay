@@ -56,7 +56,7 @@ export default function FAQPage() {
         </Link>
         {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
-          <Link href="/auth/login" className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition">
+          <Link href="/auth/login" className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition">
             Sign In
           </Link>
           <Link href="/auth/register?role=buyer" className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition">
@@ -66,7 +66,7 @@ export default function FAQPage() {
       </nav>
 
       <main className="flex-1 px-8 py-16 max-w-3xl mx-auto w-full">
-        <h1 className="text-3xl font-bold text-[#152238] mb-2">FAQ</h1>
+        <h1 className="text-3xl font-bold text-[#212121] mb-2">FAQ</h1>
         <p className="text-gray-500 text-sm mb-10">Common questions about WOML.</p>
 
         <div className="divide-y divide-gray-200 border-t border-gray-200">
@@ -76,7 +76,7 @@ export default function FAQPage() {
                 onClick={() => setOpen(open === i ? null : i)}
                 className="w-full flex items-center justify-between text-left gap-4"
               >
-                <span className="text-sm font-semibold text-[#152238]">{faq.q}</span>
+                <span className="text-sm font-semibold text-[#212121]">{faq.q}</span>
                 <span className="text-gray-400 text-lg leading-none shrink-0">
                   {open === i ? "−" : "+"}
                 </span>
@@ -94,7 +94,7 @@ export default function FAQPage() {
         </p>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-gray-200 py-8 px-8 bg-[#212121]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"
