@@ -270,43 +270,39 @@ export default function Home() {
             }}
           />
 
-          {/* Scroll-driven orange ridge line */}
+          {/* Scroll-driven orange ridge line — traces actual mountain slope */}
           <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
             <svg viewBox="0 0 1440 300" preserveAspectRatio="xMidYMid slice" fill="none" className="w-full h-full">
               {/* Glow layer */}
               <path
-                d="M0,290 L80,268 L160,245 L240,222 L320,198 L400,173 L470,150 L530,128 L585,108 L635,90 L678,74 L715,60 L748,49 L778,40 L805,34 L830,30 L858,28 L890,30 L925,36 L965,30 L1010,24 L1060,18 L1120,14 L1190,11 L1270,8 L1360,6 L1440,5"
-                stroke="#E77500" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" opacity="0.18"
+                d="M137,302 L148,294 L154,289 L160,284 L165,279 L172,273 L177,268 L184,262 L190,256 L197,250 L203,244 L210,238 L215,233 L222,226 L228,220 L235,213 L241,207 L248,200 L253,194 L260,187 L266,181 L274,173 L280,167 L288,159 L294,153 L302,145 L309,138 L317,130 L324,123 L332,115 L339,107 L347,99 L354,92 L362,84 L370,76 L378,68 L386,60 L394,52 L402,45 L410,38 L418,31 L427,24 L435,17 L444,11 L452,6 L460,2 L469,4 L480,1 L494,4 L510,2 L528,5 L545,2 L565,5 L587,2 L612,5 L640,2 L672,5 L708,2 L750,5 L796,2 L848,5 L908,2 L976,5 L1054,2 L1142,5 L1240,2 L1350,4 L1440,2"
+                stroke="#E77500" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" opacity="0.2"
                 pathLength="1"
                 style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
               />
-              {/* Core line */}
+              {/* Core bright line */}
               <path
-                d="M0,290 L80,268 L160,245 L240,222 L320,198 L400,173 L470,150 L530,128 L585,108 L635,90 L678,74 L715,60 L748,49 L778,40 L805,34 L830,30 L858,28 L890,30 L925,36 L965,30 L1010,24 L1060,18 L1120,14 L1190,11 L1270,8 L1360,6 L1440,5"
+                d="M137,302 L148,294 L154,289 L160,284 L165,279 L172,273 L177,268 L184,262 L190,256 L197,250 L203,244 L210,238 L215,233 L222,226 L228,220 L235,213 L241,207 L248,200 L253,194 L260,187 L266,181 L274,173 L280,167 L288,159 L294,153 L302,145 L309,138 L317,130 L324,123 L332,115 L339,107 L347,99 L354,92 L362,84 L370,76 L378,68 L386,60 L394,52 L402,45 L410,38 L418,31 L427,24 L435,17 L444,11 L452,6 L460,2 L469,4 L480,1 L494,4 L510,2 L528,5 L545,2 L565,5 L587,2 L612,5 L640,2 L672,5 L708,2 L750,5 L796,2 L848,5 L908,2 L976,5 L1054,2 L1142,5 L1240,2 L1350,4 L1440,2"
                 stroke="#E77500" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.95"
                 pathLength="1"
                 style={{ strokeDasharray: 1, strokeDashoffset: 1 - ridgeProgress }}
               />
-              {/* Travelling dot at the tip */}
-              {ridgeProgress > 0.02 && (
-                <circle
-                  cx={ridgeProgress * 1440}
-                  cy={290 - ridgeProgress * 285}
-                  r="5"
-                  fill="#E77500"
-                  opacity="0.95"
-                />
-              )}
-              {/* Glow halo around dot */}
-              {ridgeProgress > 0.02 && (
-                <circle
-                  cx={ridgeProgress * 1440}
-                  cy={290 - ridgeProgress * 285}
-                  r="12"
-                  fill="#E77500"
-                  opacity="0.18"
-                />
-              )}
+              {/* Dot rides the tip — on climb then along rocky ridge */}
+              {ridgeProgress > 0.02 && (() => {
+                const climbEnd = 0.72;
+                const cx = ridgeProgress <= climbEnd
+                  ? 137 + (ridgeProgress / climbEnd) * 323
+                  : 460 + ((ridgeProgress - climbEnd) / (1 - climbEnd)) * 980;
+                const cy = ridgeProgress <= climbEnd
+                  ? 302 - (ridgeProgress / climbEnd) * 300
+                  : 2 + Math.sin((ridgeProgress - climbEnd) * 80) * 2;
+                return (
+                  <>
+                    <circle cx={cx} cy={cy} r="13" fill="#E77500" opacity="0.2" />
+                    <circle cx={cx} cy={cy} r="5"  fill="#E77500" opacity="0.95" />
+                  </>
+                );
+              })()}
             </svg>
           </div>
 
