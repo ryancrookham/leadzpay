@@ -7,10 +7,8 @@ import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
-  // Get dashboard URL based on user role
   const dashboardUrl = currentUser?.role === "admin" ? "/admin" : currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
 
-  // Show minimal loading state only while checking auth
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -23,21 +21,19 @@ export default function Home() {
             className="mx-auto mb-4 animate-pulse"
             priority
           />
-          <div className="text-[#E77500]/70 text-sm">Loading...</div>
+          <div className="text-[#E77500]/70 text-sm font-sans">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-white via-[#f8f9fc] via-60% to-[#0d1b2e]">
       {/* Navigation */}
-      <nav className="flex items-center px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
-        {/* Left: hamburger — flex-1 balances the right side */}
+      <nav className="flex items-center px-8 py-4 bg-white/80 backdrop-blur-md border-b border-gray-100 relative z-[60]">
         <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
-        {/* Center: logo in document flow so nav height expands naturally */}
         <button
           onClick={() => { window.location.href = "/admin"; }}
           className="cursor-pointer"
@@ -50,13 +46,12 @@ export default function Home() {
             className="h-[120px] w-auto object-contain"
           />
         </button>
-        {/* Right: auth buttons — flex-1 keeps logo centered */}
         <div className="flex-1 flex items-center justify-end gap-3">
           {isAuthenticated ? (
             <div className="flex gap-2 items-center">
               <Link
                 href={dashboardUrl}
-                className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2"
+                className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 font-sans"
               >
                 Go to Dashboard
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +63,7 @@ export default function Home() {
                   await logout();
                   window.location.reload();
                 }}
-                className="text-gray-500 hover:text-red-500 px-3 py-2 rounded-lg transition flex items-center gap-1"
+                className="text-[#0d1b2e]/60 hover:text-red-500 px-3 py-2 rounded-lg transition flex items-center gap-1"
                 title="Log Out"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,13 +75,13 @@ export default function Home() {
             <>
               <Link
                 href="/auth/login"
-                className="text-[#152238] hover:text-[#E77500] px-3 py-2 font-medium transition"
+                className="text-[#0d1b2e] hover:text-[#E77500] px-3 py-2 font-medium transition font-sans"
               >
                 Sign In
               </Link>
               <Link
                 href="/auth/register?role=buyer"
-                className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition border border-[#E77500]"
+                className="bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg font-medium transition font-sans"
               >
                 Business Sign Up
               </Link>
@@ -97,37 +92,35 @@ export default function Home() {
 
       {/* Hero Section */}
       <main className="flex-1">
-        <section className="py-20 px-8">
+        <section className="py-24 px-8">
           <div className="max-w-6xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              {/* Left: Content */}
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
               <div className="text-center lg:text-left">
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#152238] leading-tight mb-6">
+                <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[#0d1b2e] leading-[1.1] mb-8 font-heading">
                   <span className="text-balance">Word of Mouth is Your Best Lead Source.</span>
                   <br />
                   <span className="text-[#E77500] text-balance">Now Make It Scalable.</span>
                 </h1>
-                <p className="text-lg md:text-xl text-gray-500 mb-8 max-w-xl mx-auto lg:mx-0 text-pretty">
-                  Create your private referral channel, invite your network, and receive verified leads with automatic payments. Join businesses facilitating <span className="font-semibold text-[#152238]">3,000+ leads monthly</span>.
+                <p className="text-lg md:text-xl text-[#0d1b2e]/60 mb-10 max-w-xl mx-auto lg:mx-0 text-pretty leading-relaxed font-sans">
+                  Create your private referral channel, invite your network, and receive verified leads with automatic payments. Join businesses facilitating <span className="font-medium text-[#0d1b2e]">3,000+ leads monthly</span>.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                   <Link
                     href="/auth/register?role=buyer"
-                    className="bg-[#E77500] hover:bg-[#D47526] text-white px-8 py-4 rounded-lg font-semibold text-lg transition shadow-lg shadow-[#E77500]/20 hover:shadow-xl hover:shadow-[#E77500]/30"
+                    className="bg-[#E77500] hover:bg-[#D47526] text-white px-8 py-4 rounded-lg font-medium text-lg transition shadow-lg shadow-[#E77500]/20 hover:shadow-xl hover:shadow-[#E77500]/30 font-sans"
                   >
                     Start Your Free Channel
                   </Link>
                   <Link
                     href="/how-it-works"
-                    className="border-2 border-[#152238] text-[#152238] hover:bg-[#152238] hover:text-white px-8 py-4 rounded-lg font-semibold text-lg transition"
+                    className="border-2 border-[#0d1b2e] text-[#0d1b2e] hover:bg-[#0d1b2e] hover:text-white px-8 py-4 rounded-lg font-medium text-lg transition font-sans"
                   >
                     See How It Works
                   </Link>
                 </div>
               </div>
-              {/* Right: Visual */}
               <div className="relative">
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-gray-100">
+                <div className="glass-card rounded-2xl overflow-hidden">
                   <Image
                     src="/WOMLdesktopvisual.png"
                     alt="WOML Dashboard Preview"
@@ -137,20 +130,19 @@ export default function Home() {
                     priority
                   />
                 </div>
-                {/* Floating accent */}
-                <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-[#E77500]/10 rounded-full blur-2xl" />
-                <div className="absolute -top-4 -right-4 w-32 h-32 bg-[#152238]/5 rounded-full blur-2xl" />
+                <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-[#E77500]/10 rounded-full blur-3xl" />
+                <div className="absolute -top-6 -right-6 w-40 h-40 bg-[#0d1b2e]/5 rounded-full blur-3xl" />
               </div>
             </div>
           </div>
         </section>
 
         {/* Why WOML Section */}
-        <section className="py-20 px-8 bg-gray-50/50">
+        <section className="py-24 px-8 bg-[#f0f2f7]/50">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#152238] mb-4">Why Businesses Choose WOML</h2>
-              <p className="text-gray-500 text-lg max-w-2xl mx-auto">Your referral network is valuable. Keep it private, automated, and under your control.</p>
+              <h2 className="text-4xl md:text-5xl font-bold text-[#0d1b2e] mb-4 font-heading">Why Businesses Choose WOML</h2>
+              <p className="text-[#0d1b2e]/60 text-lg max-w-2xl mx-auto font-sans">Your referral network is valuable. Keep it private, automated, and under your control.</p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
@@ -158,7 +150,7 @@ export default function Home() {
                   title: "Private Channels",
                   description: "Every business gets a completely isolated channel. Your providers, your leads, your data. No one else sees it.",
                   icon: (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   ),
@@ -167,7 +159,7 @@ export default function Home() {
                   title: "Automated Payments",
                   description: "Stripe-powered payouts. Approve a lead, your provider gets paid instantly to their bank. No manual transfers.",
                   icon: (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   ),
@@ -176,7 +168,7 @@ export default function Home() {
                   title: "Verified Leads",
                   description: "Built-in license verification catches fake or blurry IDs before they reach you. Only real leads get through.",
                   icon: (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                   ),
@@ -185,7 +177,7 @@ export default function Home() {
                   title: "Real-Time Control",
                   description: "Accept, reject, or flag leads instantly. Track conversions, spend, and provider performance from your dashboard.",
                   icon: (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   ),
@@ -193,13 +185,13 @@ export default function Home() {
               ].map((card, i) => (
                 <div
                   key={i}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+                  className="glass-card rounded-xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className="w-12 h-12 bg-[#E77500]/10 rounded-lg flex items-center justify-center text-[#E77500] mb-4">
                     {card.icon}
                   </div>
-                  <h3 className="text-lg font-semibold text-[#152238] mb-2">{card.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{card.description}</p>
+                  <h3 className="text-lg font-bold text-[#0d1b2e] mb-2 font-heading">{card.title}</h3>
+                  <p className="text-[#0d1b2e]/60 text-sm leading-relaxed font-sans">{card.description}</p>
                 </div>
               ))}
             </div>
@@ -207,11 +199,11 @@ export default function Home() {
         </section>
 
         {/* 4 Easy Steps Section */}
-        <section className="py-20 px-8">
+        <section className="py-24 px-8">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#152238] mb-4">4 Easy Steps to Scale Your Referrals</h2>
-              <p className="text-gray-500 text-lg">From setup to payout in under 10 minutes.</p>
+              <h2 className="text-4xl md:text-5xl font-bold text-[#0d1b2e] mb-4 font-heading">4 Easy Steps to Scale Your Referrals</h2>
+              <p className="text-[#0d1b2e]/60 text-lg font-sans">From setup to payout in under 10 minutes.</p>
             </div>
             <div className="space-y-8">
               {[
@@ -240,12 +232,12 @@ export default function Home() {
                   key={item.step}
                   className="flex gap-6 items-start"
                 >
-                  <div className="w-9 h-9 rounded-full bg-[#E77500] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-[#E77500] text-white flex items-center justify-center font-bold text-sm shrink-0 font-sans">
                     {item.step}
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-[#152238] mb-1">{item.title}</h3>
-                    <p className="text-gray-500 leading-relaxed">{item.description}</p>
+                    <h3 className="text-xl font-bold text-[#0d1b2e] mb-1 font-heading">{item.title}</h3>
+                    <p className="text-[#0d1b2e]/60 leading-relaxed font-sans">{item.description}</p>
                   </div>
                 </div>
               ))}
@@ -254,7 +246,7 @@ export default function Home() {
         </section>
 
         {/* Stats Bar */}
-        <section className="py-16 px-8 bg-[#152238]">
+        <section className="py-20 px-8 bg-[#0d1b2e]">
           <div className="max-w-5xl mx-auto">
             <div className="grid md:grid-cols-3 gap-8 text-center">
               {[
@@ -263,8 +255,8 @@ export default function Home() {
                 { value: "< 2 min", label: "Provider Onboarding Time" },
               ].map((stat, i) => (
                 <div key={i}>
-                  <div className="text-4xl md:text-5xl font-bold text-white mb-2">{stat.value}</div>
-                  <div className="text-white/60 text-sm tracking-wide uppercase">{stat.label}</div>
+                  <div className="text-4xl md:text-5xl font-bold text-white mb-2 font-heading">{stat.value}</div>
+                  <div className="text-white/50 text-sm tracking-wide uppercase font-sans">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -272,15 +264,15 @@ export default function Home() {
         </section>
 
         {/* Provider Callout */}
-        <section className="py-20 px-8">
+        <section className="py-24 px-8 bg-[#0d1b2e]">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl md:text-4xl font-bold text-[#152238] mb-4">Are You a Lead Provider?</h2>
-            <p className="text-gray-500 text-lg mb-8">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-heading">Are You a Lead Provider?</h2>
+            <p className="text-white/60 text-lg mb-8 font-sans">
               Already referring customers to businesses you work with? Get paid for every referral. Your business will invite you when they&apos;re ready.
             </p>
             <Link
               href="/how-it-works"
-              className="inline-flex items-center gap-2 text-[#E77500] hover:text-[#D47526] font-semibold text-lg transition"
+              className="inline-flex items-center gap-2 text-[#E77500] hover:text-[#D47526] font-medium text-lg transition font-sans"
             >
               Learn More
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -291,10 +283,10 @@ export default function Home() {
         </section>
 
         {/* FAQ Section */}
-        <section className="py-20 px-8 bg-gray-50/50">
+        <section className="py-24 px-8 bg-[#0d1b2e]">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#152238] mb-4">Frequently Asked Questions</h2>
+              <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-heading">Frequently Asked Questions</h2>
             </div>
             <div className="space-y-4">
               {[
@@ -321,12 +313,12 @@ export default function Home() {
               ].map((faq, i) => (
                 <details
                   key={i}
-                  className="group bg-white rounded-xl border border-gray-200 overflow-hidden"
+                  className="group glass-card rounded-xl overflow-hidden"
                 >
                   <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                    <span className="font-semibold text-[#152238]">{faq.q}</span>
+                    <span className="font-bold text-[#0d1b2e] font-heading">{faq.q}</span>
                     <svg
-                      className="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform"
+                      className="w-5 h-5 text-[#0d1b2e]/40 group-open:rotate-180 transition-transform"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -334,7 +326,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </summary>
-                  <div className="px-6 pb-6 text-gray-500 leading-relaxed">
+                  <div className="px-6 pb-6 text-[#0d1b2e]/60 leading-relaxed font-sans">
                     {faq.a}
                   </div>
                 </details>
@@ -344,15 +336,15 @@ export default function Home() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-20 px-8">
+        <section className="py-24 px-8 bg-[#0d1b2e]">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl md:text-4xl font-bold text-[#152238] mb-4">Ready to Scale Your Referrals?</h2>
-            <p className="text-gray-500 text-lg mb-8">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-heading">Ready to Scale Your Referrals?</h2>
+            <p className="text-white/60 text-lg mb-10 font-sans">
               Join businesses using WOML to turn word of mouth into a predictable lead engine.
             </p>
             <Link
               href="/auth/register?role=buyer"
-              className="inline-block bg-[#E77500] hover:bg-[#D47526] text-white px-10 py-4 rounded-lg font-semibold text-lg transition shadow-lg shadow-[#E77500]/20 hover:shadow-xl hover:shadow-[#E77500]/30"
+              className="inline-block bg-[#E77500] hover:bg-[#D47526] text-white px-10 py-4 rounded-lg font-medium text-lg transition shadow-lg shadow-[#E77500]/30 hover:shadow-xl hover:shadow-[#E77500]/40 font-sans"
             >
               Start Your Free Channel
             </Link>
@@ -360,7 +352,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-8 bg-[#152238]">
+      <footer className="border-t border-white/10 py-8 px-8 bg-[#0d1b2e]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-4">
           <Image
             src="/woml-alt-white.png"
@@ -369,11 +361,11 @@ export default function Home() {
             height={36}
             className="h-9 w-auto object-contain"
           />
-          <div className="text-white/40 text-xs italic text-center">
+          <div className="text-white/30 text-xs italic text-center font-sans">
             &ldquo;So whether you eat or drink or whatever you do, do it all for the glory of God.&rdquo;
-            <span className="not-italic font-medium text-white/50 ml-1">— 1 Corinthians 10:31</span>
+            <span className="not-italic font-medium text-white/40 ml-1">— 1 Corinthians 10:31</span>
           </div>
-          <div className="text-white/40 text-xs">© 2026 WOML LLC. All rights reserved.</div>
+          <div className="text-white/30 text-xs font-sans">© 2026 WOML LLC. All rights reserved.</div>
         </div>
       </footer>
     </div>
