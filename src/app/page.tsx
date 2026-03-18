@@ -122,11 +122,12 @@ export default function Home() {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              backgroundImage: "url('/WOMLdesktopvisual.png')",
+              backgroundImage: "url('/woml-icon-orange.png')",
               backgroundAttachment: "fixed",
-              backgroundSize: "cover",
+              backgroundSize: "60%",
               backgroundPosition: "center",
-              opacity: 0.06,
+              backgroundRepeat: "no-repeat",
+              opacity: 0.08,
             }}
           />
           {/* Ambient glow orbs */}
@@ -337,11 +338,11 @@ export default function Home() {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              backgroundImage: "url('/WOMLdesktopvisual.png')",
+              backgroundImage: "url('/woml-icon-orange.png')",
               backgroundAttachment: "fixed",
               backgroundSize: "cover",
               backgroundPosition: "center",
-              opacity: 0.05,
+              opacity: 0.08,
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#E77500]/5 to-transparent pointer-events-none" />
