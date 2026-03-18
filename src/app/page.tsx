@@ -227,7 +227,7 @@ export default function Home() {
         {/* ─── STATS — Light gray ──────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1] overflow-hidden">
 
-          {/* Mountain + chart-line watermark */}
+          {/* Mountain range — orange outline traces the ridge exactly */}
           <div className="absolute inset-0 pointer-events-none select-none" aria-hidden="true">
             <svg
               viewBox="0 0 1440 320"
@@ -236,26 +236,73 @@ export default function Home() {
               xmlns="http://www.w3.org/2000/svg"
               className="w-full h-full"
             >
-              {/* Mountain silhouette */}
+              {/* The ridge path — used for both fill and the orange outline stroke */}
+              {/* Jagged mountain range: low on left, climbs with rough steps to peak ~x=540, then descends right */}
               <path
-                d="M0,320 L0,245 L60,232 L120,218 L200,205 L280,192 L350,178 L420,160 L490,138 L550,115 L610,90 L660,68 L700,50 L730,38 L760,32 L790,38 L820,52 L870,72 L930,90 L1000,108 L1080,124 L1160,140 L1250,158 L1350,172 L1440,182 L1440,320 Z"
+                id="ridge"
+                d="
+                  M0,285
+                  L30,278 L55,268 L70,272 L90,260
+                  L115,248 L130,252 L150,238
+                  L175,224 L190,228 L210,214
+                  L238,198 L252,202 L268,186
+                  L295,168 L308,172 L325,155
+                  L348,136 L360,140 L378,120
+                  L398,100 L412,104 L428,86
+                  L448,68 L462,72 L478,55
+                  L498,40 L512,44 L528,30
+                  L542,18 L556,22 L568,12
+                  L578,8
+                  L590,14 L604,10 L616,18
+                  L630,28 L644,24 L658,36
+                  L676,52 L690,48 L706,62
+                  L726,78 L738,74 L754,88
+                  L774,104 L788,100 L806,114
+                  L830,128 L848,124 L868,138
+                  L895,152 L915,148 L938,162
+                  L968,175 L990,171 L1015,184
+                  L1048,196 L1072,192 L1100,204
+                  L1135,216 L1162,212 L1192,224
+                  L1230,236 L1262,232 L1295,244
+                  L1340,256 L1385,262 L1440,268
+                  L1440,320 L0,320 Z
+                "
                 fill="#212121"
-                opacity="0.045"
+                opacity="0.05"
               />
-              {/* Bold orange performance line */}
+              {/* Orange ridge outline — same path, stroke only, no fill */}
               <path
-                d="M0,305 C40,298 80,290 130,278 C180,266 220,255 270,240 C320,225 365,210 415,192 C465,174 510,155 560,133 C610,111 650,90 700,68 C730,54 755,42 780,34 C805,26 830,30 865,42 C900,54 935,68 975,60 C1015,52 1060,38 1110,26 C1160,14 1220,7 1290,4 C1350,2 1400,3 1440,3"
+                d="
+                  M0,285
+                  L30,278 L55,268 L70,272 L90,260
+                  L115,248 L130,252 L150,238
+                  L175,224 L190,228 L210,214
+                  L238,198 L252,202 L268,186
+                  L295,168 L308,172 L325,155
+                  L348,136 L360,140 L378,120
+                  L398,100 L412,104 L428,86
+                  L448,68 L462,72 L478,55
+                  L498,40 L512,44 L528,30
+                  L542,18 L556,22 L568,12
+                  L578,8
+                  L590,14 L604,10 L616,18
+                  L630,28 L644,24 L658,36
+                  L676,52 L690,48 L706,62
+                  L726,78 L738,74 L754,88
+                  L774,104 L788,100 L806,114
+                  L830,128 L848,124 L868,138
+                  L895,152 L915,148 L938,162
+                  L968,175 L990,171 L1015,184
+                  L1048,196 L1072,192 L1100,204
+                  L1135,216 L1162,212 L1192,224
+                  L1230,236 L1262,232 L1295,244
+                  L1340,256 L1385,262 L1440,268
+                "
                 stroke="#E77500"
-                strokeWidth="3.5"
+                strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity="0.55"
-              />
-              {/* Subtle glow under the line */}
-              <path
-                d="M0,305 C40,298 80,290 130,278 C180,266 220,255 270,240 C320,225 365,210 415,192 C465,174 510,155 560,133 C610,111 650,90 700,68 C730,54 755,42 780,34 C805,26 830,30 865,42 C900,54 935,68 975,60 C1015,52 1060,38 1110,26 C1160,14 1220,7 1290,4 C1350,2 1400,3 1440,3 L1440,320 L0,320 Z"
-                fill="#E77500"
-                opacity="0.025"
+                opacity="0.7"
               />
             </svg>
           </div>
