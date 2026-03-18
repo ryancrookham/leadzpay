@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
   const dashboardUrl = currentUser?.role === "admin" ? "/admin" : currentUser?.role === "buyer" ? "/business" : "/provider-dashboard";
 
-  if (isLoading) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Show loading state only after client mount to avoid hydration mismatch
+  if (!mounted || isLoading) {
     return (
       <div className="min-h-screen bg-[#0d1b2e] flex items-center justify-center">
         <div className="text-center">
@@ -18,7 +25,7 @@ export default function Home() {
             alt="WOML"
             width={200}
             height={60}
-            className="mx-auto mb-4 animate-pulse"
+            className="mx-auto mb-4 animate-pulse w-auto h-auto"
             priority
           />
           <div className="text-white/50 text-sm font-sans">Loading...</div>
@@ -29,8 +36,23 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
+      {/* Fixed Watermark */}
+      <div 
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none select-none"
+        aria-hidden="true"
+      >
+        <Image
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/black%20orange%20fill%403x-vH0gXy64jc2rCyf5HVrtWl6Fll3usO.png"
+          alt=""
+          width={800}
+          height={800}
+          className="w-[40vw] h-auto opacity-[0.035]"
+          priority
+        />
+      </div>
+
       {/* Navigation - Dark */}
-      <nav className="flex items-center px-8 py-4 bg-[#0d1b2e] border-b border-white/10 relative z-[60]">
+      <nav className="flex items-center px-8 py-4 bg-[#0d1b2e] border-b border-white/10 relative z-10">
         <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
@@ -43,7 +65,7 @@ export default function Home() {
             alt="WOML - Word of Mouth Leads"
             width={180}
             height={54}
-            className="h-12 w-auto object-contain"
+            className="h-auto w-auto max-h-12 object-contain"
           />
         </button>
         <div className="flex-1 flex items-center justify-end gap-3">
@@ -90,7 +112,7 @@ export default function Home() {
         </div>
       </nav>
 
-      <main className="flex-1">
+      <main className="flex-1 relative z-[1]">
         {/* Hero Section - Dark Navy */}
         <section className="relative py-32 px-8 bg-[#0d1b2e] overflow-hidden">
           {/* Background mesh gradient */}
@@ -346,14 +368,14 @@ export default function Home() {
       </main>
 
       {/* Footer - Dark Navy */}
-      <footer className="border-t border-white/10 py-10 px-8 bg-[#0d1b2e]">
+      <footer className="border-t border-white/10 py-10 px-8 bg-[#0d1b2e] relative z-[1]">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-5">
           <Image
             src="/woml-alt-white.png"
             alt="WOML - Word of Mouth Leads"
             width={120}
             height={36}
-            className="h-10 w-auto object-contain"
+            className="h-auto w-auto max-h-10 object-contain"
           />
           <div className="text-white/25 text-xs italic text-center font-sans max-w-md">
             &ldquo;So whether you eat or drink or whatever you do, do it all for the glory of God.&rdquo;
