@@ -36,7 +36,7 @@ export default function Sidebar() {
 
       {/* Sidebar panel */}
       <div
-        className="fixed left-0 bottom-0 w-52 bg-white z-50 transition-transform duration-200 ease-in-out shadow-md"
+        className="fixed left-0 bottom-0 w-52 bg-[#212121] z-50 transition-transform duration-200 ease-in-out shadow-xl"
         style={{
           top: NAV_H,
           transform: open ? "translateX(0)" : "translateX(-100%)",
@@ -51,7 +51,7 @@ export default function Sidebar() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
-                className="flex items-center justify-center py-5 text-sm tracking-wide transition-colors text-[#E77500]/60 hover:text-[#E77500]"
+                className="flex items-center justify-center py-5 text-sm tracking-wide transition-colors text-white/50 hover:text-white"
               >
                 {tab.label}
               </a>
@@ -63,7 +63,7 @@ export default function Sidebar() {
                 className={`flex items-center justify-center py-5 text-sm tracking-wide transition-colors ${
                   pathname === tab.href
                     ? "text-[#E77500]"
-                    : "text-[#E77500]/60 hover:text-[#E77500]"
+                    : "text-white/60 hover:text-white"
                 }`}
               >
                 {tab.label}
