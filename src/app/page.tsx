@@ -282,10 +282,11 @@ export default function Home() {
           {/* svg_x = img_x*1.1818−52  |  svg_y = img_y*1.1818−207           */}
           <div className="absolute inset-0 pointer-events-none hidden sm:block" aria-hidden="true">
             {(() => {
-              // Waypoints: pixel-traced from stats-mountain.png (1584×672)
-              const RIDGE_X = [344,374,385,395,409,421,460,500,560,600,650,704,730,751,770,799,850,920,1020,1140,1260,1380,1440];
-              const RIDGE_Y = [380,312,229,158,81,5,4,4,4,5,8,58,49,40,20,1,2,1,2,1,2,1,2];
-              const RIDGE_F = [0.0,0.0516,0.1097,0.1594,0.2137,0.2671,0.2942,0.3219,0.3635,0.3913,0.426,0.4771,0.4962,0.512,0.5312,0.5552,0.5906,0.6392,0.7086,0.7918,0.8751,0.9584,1.0];
+              // Waypoints: left boundary of mountain + plateau (avoids tracing climber)
+              // Entry spreads across full left half; plateau matches what user confirmed looks good
+              const RIDGE_X = [0,80,180,270,330,363,388,405,418,428,435,440,460,500,560,600,650,704,730,751,770,799,850,920,1020,1140,1260,1380,1440];
+              const RIDGE_Y = [380,368,345,315,280,250,210,165,115,68,30,8,4,4,4,5,8,58,49,40,20,1,2,1,2,1,2,1,2];
+              const RIDGE_F = [0.0,0.048,0.1088,0.1651,0.2063,0.2327,0.2607,0.2892,0.3198,0.3483,0.3712,0.3846,0.3967,0.4204,0.456,0.4797,0.5094,0.5531,0.5694,0.583,0.5993,0.6199,0.6501,0.6916,0.7509,0.8221,0.8933,0.9644,1.0];
               // Interpolate dot tip position
               let cx = RIDGE_X[0], cy = RIDGE_Y[0];
               if (ridgeProgress > 0.01) {
@@ -299,7 +300,7 @@ export default function Home() {
                   cy = RIDGE_Y[i-1] + t * (RIDGE_Y[i] - RIDGE_Y[i-1]);
                 }
               }
-              const pathD = "M344,380 L374,312 L385,229 L395,158 L409,81 L421,5 L460,4 L500,4 L560,4 L600,5 L650,8 L704,58 L730,49 L751,40 L770,20 L799,1 L850,2 L920,1 L1020,2 L1140,1 L1260,2 L1380,1 L1440,2";
+              const pathD = "M0,380 L80,368 L180,345 L270,315 L330,280 L363,250 L388,210 L405,165 L418,115 L428,68 L435,30 L440,8 L460,4 L500,4 L560,4 L600,5 L650,8 L704,58 L730,49 L751,40 L770,20 L799,1 L850,2 L920,1 L1020,2 L1140,1 L1260,2 L1380,1 L1440,2";
               return (
                 <svg viewBox="0 0 1440 380" preserveAspectRatio="none" fill="none" className="w-full h-full">
                   {/* Glow halo */}
