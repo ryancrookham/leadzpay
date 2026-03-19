@@ -22,15 +22,12 @@ export default function Home() {
 
   // ── Stat counters ──────────────────────────────────────────────────────────
   const statsRef = useRef<HTMLDivElement>(null);
-  const [statsStarted, setStatsStarted] = useState(false);
-  const [c0, setC0] = useState(0);   // 0 → 3000  displayed as "3,000+"
-  const [c1, setC1] = useState(0);   // 0 → 100   displayed as "100%"
-  const [c2, setC2] = useState(9);   // 9 → 2     displayed as "< X min"
+  const statsStartedRef = useRef(false);
+  const [c0, setC0] = useState(0);   // 0 → 3000  "3,000+"
+  const [c1, setC1] = useState(0);   // 0 → 100   "100%"
+  const [c2, setC2] = useState(10);  // 10 → 2    "< X min"
 
   useEffect(() => {
-    const el = statsRef.current;
-    if (!el) return;
-
     const animate = (
       from: number,
       to: number,
@@ -47,20 +44,25 @@ export default function Home() {
       requestAnimationFrame(tick);
     };
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !statsStarted) {
-          setStatsStarted(true);
-          animate(0, 3000, 1800, setC0);
-          animate(0, 100,  1600, setC1);
-          animate(9, 2,    1400, setC2);
-        }
-      },
-      { threshold: 0.1, rootMargin: "0px 0px -80px 0px" }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [statsStarted]);
+    const startCounters = () => {
+      if (statsStartedRef.current) return;
+      const el = statsRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.9) {
+        statsStartedRef.current = true;
+        animate(0,  3000, 1800, setC0);
+        animate(0,  100,  1600, setC1);
+        animate(10, 2,    1400, setC2);
+        window.removeEventListener("scroll", startCounters);
+      }
+    };
+
+    // Check immediately in case already in view, then listen for scroll
+    startCounters();
+    window.addEventListener("scroll", startCounters, { passive: true });
+    return () => window.removeEventListener("scroll", startCounters);
+  }, []);
 
 if (!mounted || isLoading) {
     return (
