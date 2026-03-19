@@ -373,7 +373,7 @@ function RegisterContent() {
   if (requestedRole === "buyer") {
     return (
       <div className="min-h-screen bg-[#f8f9fc] flex flex-col">
-        <header className="bg-[#212121] px-8 py-4 flex items-center">
+        <header className="bg-[#212121] px-8 py-4 flex items-center justify-center">
           <Link href="/" className="flex items-center">
             <Image src="/woml-alt-white.png" alt="WOML - Word of Mouth Leads" width={120} height={36} className="h-8 w-auto object-contain" />
           </Link>

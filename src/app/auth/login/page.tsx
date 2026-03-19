@@ -81,7 +81,7 @@ function LoginContent() {
   return (
     <div className="min-h-screen bg-[#f8f9fc] flex flex-col">
       {/* Top nav bar */}
-      <header className="bg-[#212121] px-8 py-4 flex items-center">
+      <header className="bg-[#212121] px-8 py-4 flex items-center justify-center">
         <Link href="/" className="flex items-center">
           <Image
             src="/woml-alt-white.png"
