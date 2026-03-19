@@ -5004,6 +5004,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                     onChange={e => setAutoPaySchedule(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
                   >
+                    <option value="instant">Instant (test)</option>
                     <option value="weekly">Weekly</option>
                     <option value="biweekly">Bi-weekly</option>
                     <option value="monthly">Monthly</option>
@@ -5022,7 +5023,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                 </div>
               </div>
               <p className="text-gray-400 text-xs">
-                You have {reviewWindowDays} day{reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve. Approved leads are paid on the {autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.
+                You have {reviewWindowDays} day{reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve. {autoPaySchedule === "instant" ? "Approved leads are paid immediately (instant mode — use for testing only)." : `Approved leads are paid on the ${autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.`}
               </p>
               {nextAutoPayDate && (
                 <p className="text-blue-600 text-xs font-medium">

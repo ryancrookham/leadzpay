@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getAutoPaySettings, updateAutoPaySettings } from "@/lib/db";
 
-const VALID_SCHEDULES = ["weekly", "biweekly", "monthly"] as const;
+const VALID_SCHEDULES = ["instant", "weekly", "biweekly", "monthly"] as const;
 
 function calculateNextAutoPayDate(schedule: string): Date {
   const now = new Date();
   const next = new Date(now);
 
   switch (schedule) {
+    case "instant":
+      // Set to right now so the cron fires on its very next run
+      return now;
     case "weekly":
       next.setDate(now.getDate() + 7);
       break;
