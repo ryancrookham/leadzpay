@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/app/components/Sidebar";
 
@@ -19,6 +19,47 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // ── Stat counters ──────────────────────────────────────────────────────────
+  const statsRef = useRef<HTMLDivElement>(null);
+  const [statsStarted, setStatsStarted] = useState(false);
+  // targets: 3000, 100, 2 (displayed as "3,000+", "100%", "< 2 min")
+  const [c0, setC0] = useState(0);
+  const [c1, setC1] = useState(0);
+  const [c2, setC2] = useState(10); // counts DOWN to 2
+
+  useEffect(() => {
+    const el = statsRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !statsStarted) {
+          setStatsStarted(true);
+          const animate = (
+            from: number,
+            to: number,
+            duration: number,
+            setter: (v: number) => void
+          ) => {
+            const start = performance.now();
+            const tick = (now: number) => {
+              const p = Math.min((now - start) / duration, 1);
+              const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+              setter(Math.round(from + (to - from) * eased));
+              if (p < 1) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          };
+          animate(0, 3000, 1800, setC0);
+          animate(0, 100, 1600, setC1);
+          animate(10, 2, 1400, setC2);
+        }
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [statsStarted]);
 
 if (!mounted || isLoading) {
     return (
@@ -227,15 +268,24 @@ if (!mounted || isLoading) {
         {/* ─── STATS ───────────────────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
           <div className="max-w-5xl mx-auto">
-            <div className="grid md:grid-cols-3 gap-12 text-center">
+            <div ref={statsRef} className="grid md:grid-cols-3 gap-12 text-center">
               {[
-                { value: "3,000+", label: "Leads Facilitated Monthly" },
-                { value: "100%", label: "Private Channels" },
-                { value: "< 2 min", label: "Provider Setup" },
+                {
+                  display: `${c0.toLocaleString()}+`,
+                  label: "Leads Facilitated Monthly",
+                },
+                {
+                  display: `${c1}%`,
+                  label: "Private Channels",
+                },
+                {
+                  display: `< ${c2} min`,
+                  label: "Provider Setup",
+                },
               ].map((stat, i) => (
                 <div key={i}>
-                  <div className="text-6xl md:text-7xl lg:text-8xl font-bold text-[#212121] mb-3 tracking-tight">
-                    {stat.value}
+                  <div className="text-6xl md:text-7xl lg:text-8xl font-bold text-[#212121] mb-3 tracking-tight tabular-nums">
+                    {stat.display}
                   </div>
                   <div className="text-[#212121]/35 text-xs tracking-[0.2em] uppercase font-medium">
                     {stat.label}
