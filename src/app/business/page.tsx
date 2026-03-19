@@ -188,6 +188,11 @@ function BusinessPortalContent() {
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
   const [funnelTargets, setFunnelTargets] = useState({ contacted: 80, quoted: 50, sold: 30, dead: 20 });
 
+  // Payout mode — loaded at top level so Leads tab can show instant-mode banner
+  const [isInstantMode, setIsInstantMode] = useState(false);
+  const [leadsPayNowLoading, setLeadsPayNowLoading] = useState(false);
+  const [leadsPayNowResult, setLeadsPayNowResult] = useState<string | null>(null);
+
   // SMS agents loaded from settings (for attribution)
   const [smsAgents, setSmsAgents] = useState<{ name: string; phone: string }[]>([]);
 
@@ -258,6 +263,18 @@ function BusinessPortalContent() {
       fetch("/api/business/pipeline/auto-dead", { method: "POST" }).catch(() => {});
     });
   }, [currentUser, fetchDashboard]);
+
+  // Load payout mode so Leads tab can show instant-mode banner
+  useEffect(() => {
+    if (!currentUser) return;
+    fetch("/api/business/auto-pay-settings")
+      .then(r => r.json())
+      .then(data => {
+        const s = data.settings ?? data;
+        setIsInstantMode(s.autoPayEnabled === true && s.autoPaySchedule === "instant");
+      })
+      .catch(() => {});
+  }, [currentUser]);
 
   // Check Stripe setup status for buyer
   useEffect(() => {
@@ -1652,7 +1669,7 @@ function BusinessPortalContent() {
             {payableLeadsAll.length > 0 && (
               <div className="space-y-2">
                 {/* Summary bar — instant mode gets its own banner */}
-                {autoPayEnabled && autoPaySchedule === "instant" ? (
+                {isInstantMode ? (
                   <div className="bg-orange-50 border border-orange-300 rounded-xl px-5 py-4 flex items-start justify-between flex-wrap gap-3">
                     <div className="flex items-start gap-3 min-w-0">
                       <svg className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1663,39 +1680,39 @@ function BusinessPortalContent() {
                         <p className="text-orange-700 text-xs mt-0.5">
                           These {payableLeadsAll.length} lead{payableLeadsAll.length !== 1 ? "s" : ""} ({`$${amountPending.toFixed(2)}`}) were submitted before Instant mode was enabled, or a provider&apos;s Stripe account isn&apos;t fully connected yet. Pay them now to clear the queue — future leads will be instant automatically.
                         </p>
-                        {payNowResult && (
-                          <p className={`text-xs mt-2 font-medium ${payNowResult.startsWith("Error") ? "text-red-600" : "text-emerald-700"}`}>
-                            {payNowResult}
+                        {leadsPayNowResult && (
+                          <p className={`text-xs mt-2 font-medium ${leadsPayNowResult.startsWith("Error") ? "text-red-600" : "text-emerald-700"}`}>
+                            {leadsPayNowResult}
                           </p>
                         )}
                       </div>
                     </div>
                     <button
                       onClick={async () => {
-                        setPayNowLoading(true);
-                        setPayNowResult(null);
+                        setLeadsPayNowLoading(true);
+                        setLeadsPayNowResult(null);
                         try {
                           const res = await fetch("/api/business/pay-now", { method: "POST" });
                           const data = await res.json();
                           if (res.ok) {
-                            setPayNowResult(data.message || "Payment processed.");
+                            setLeadsPayNowResult(data.message || "Payment processed.");
                             await fetchLeads();
                           } else {
-                            setPayNowResult(`Error: ${data.error}`);
+                            setLeadsPayNowResult(`Error: ${data.error}`);
                           }
                         } catch {
-                          setPayNowResult("Error: Failed to process payment.");
+                          setLeadsPayNowResult("Error: Failed to process payment.");
                         } finally {
-                          setPayNowLoading(false);
+                          setLeadsPayNowLoading(false);
                         }
                       }}
-                      disabled={payNowLoading}
+                      disabled={leadsPayNowLoading}
                       className="inline-flex items-center gap-2 bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50 shrink-0"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      {payNowLoading ? "Paying…" : `Pay $${amountPending.toFixed(2)} Now`}
+                      {leadsPayNowLoading ? "Paying…" : `Pay $${amountPending.toFixed(2)} Now`}
                     </button>
                   </div>
                 ) : (
@@ -2218,7 +2235,7 @@ function BusinessPortalContent() {
         {/* Settings Tab */}
         {activeTab === "settings" && (
           <TabErrorBoundary tabName="Settings">
-            <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} />
+            <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} onPayoutModeChange={setIsInstantMode} />
           </TabErrorBoundary>
         )}
 
@@ -4560,7 +4577,7 @@ Reply to this email or call me at [Your Number] when you get a chance. Looking f
 }
 
 // Settings Tab
-function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings }) {
+function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings; onPayoutModeChange?: (isInstant: boolean) => void }) {
   const { updateUser } = useAuth();
   const [email, setEmail] = useState(currentBuyer?.email || "");
   const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
@@ -5134,6 +5151,9 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   setAutoPaySaved(true);
                   setTimeout(() => setAutoPaySaved(false), 3000);
 
+                  // Notify parent so the Leads tab banner updates immediately
+                  onPayoutModeChange?.(autoPayEnabled && autoPaySchedule === "instant");
+
                   // If instant mode was just saved, immediately pay any leads already in the queue
                   if (autoPaySchedule === "instant" && autoPayEnabled) {
                     setPayNowLoading(true);
@@ -5143,7 +5163,6 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                       const payData = await payRes.json();
                       if (payRes.ok && payData.succeeded > 0) {
                         setPayNowResult(payData.message || "Queued leads paid.");
-                        await fetchLeads();
                       }
                     } catch { /* non-blocking */ } finally {
                       setPayNowLoading(false);
