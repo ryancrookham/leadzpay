@@ -72,38 +72,32 @@ function LoginContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4 relative">
-      {/* Watermark Logo Background */}
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-        <Image
-          src="/woml-alt-orange.png"
-          alt=""
-          width={500}
-          height={500}
-          className="opacity-[0.03] select-none"
-          priority
-        />
-      </div>
+    <div className="min-h-screen bg-[#f8f9fc] flex flex-col">
+      {/* Top nav bar */}
+      <header className="bg-[#212121] px-8 py-4 flex items-center">
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/woml-alt-white.png"
+            alt="WOML - Word of Mouth Leads"
+            width={120}
+            height={36}
+            className="h-8 w-auto object-contain"
+          />
+        </Link>
+      </header>
 
-      <div className="relative z-10 bg-white p-8 rounded-2xl border border-gray-200 max-w-md w-full shadow-lg">
+      {/* Centered form */}
+      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl border border-gray-200 max-w-md w-full shadow-sm">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-block">
-            <Image
-              src="/woml-alt-orange.png"
-              alt="WOML - Word of Mouth Leads"
-              width={180}
-              height={54}
-              className="mx-auto mb-4 h-14 w-auto object-contain"
-            />
-          </Link>
-          <h1 className="text-2xl font-bold text-[#E8822A] mb-2">Welcome Back</h1>
+          <h1 className="text-2xl font-bold text-[#212121] mb-2">Welcome Back</h1>
           <p className="text-gray-500">Sign in to your account</p>
         </div>
 
@@ -212,14 +206,15 @@ function LoginContent() {
           </Link>
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 function LoadingFallback() {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E8822A]"></div>
+    <div className="min-h-screen bg-[#212121] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
     </div>
   );
 }
