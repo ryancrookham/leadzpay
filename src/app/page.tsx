@@ -23,39 +23,40 @@ export default function Home() {
   // ── Stat counters ──────────────────────────────────────────────────────────
   const statsRef = useRef<HTMLDivElement>(null);
   const [statsStarted, setStatsStarted] = useState(false);
-  // targets: 3000, 100, 2 (displayed as "3,000+", "100%", "< 2 min")
-  const [c0, setC0] = useState(0);
-  const [c1, setC1] = useState(0);
-  const [c2, setC2] = useState(10); // counts DOWN to 2
+  const [c0, setC0] = useState(0);   // 0 → 3000  displayed as "3,000+"
+  const [c1, setC1] = useState(0);   // 0 → 100   displayed as "100%"
+  const [c2, setC2] = useState(9);   // 9 → 2     displayed as "< X min"
 
   useEffect(() => {
     const el = statsRef.current;
     if (!el) return;
+
+    const animate = (
+      from: number,
+      to: number,
+      duration: number,
+      setter: (v: number) => void
+    ) => {
+      const start = performance.now();
+      const tick = (now: number) => {
+        const p = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        setter(Math.round(from + (to - from) * eased));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !statsStarted) {
           setStatsStarted(true);
-          const animate = (
-            from: number,
-            to: number,
-            duration: number,
-            setter: (v: number) => void
-          ) => {
-            const start = performance.now();
-            const tick = (now: number) => {
-              const p = Math.min((now - start) / duration, 1);
-              const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
-              setter(Math.round(from + (to - from) * eased));
-              if (p < 1) requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
-          };
           animate(0, 3000, 1800, setC0);
-          animate(0, 100, 1600, setC1);
-          animate(10, 2, 1400, setC2);
+          animate(0, 100,  1600, setC1);
+          animate(9, 2,    1400, setC2);
         }
       },
-      { threshold: 0.4 }
+      { threshold: 0.1, rootMargin: "0px 0px -80px 0px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
