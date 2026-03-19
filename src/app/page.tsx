@@ -231,7 +231,7 @@ if (!mounted || isLoading) {
               {[
                 { value: "3,000+", label: "Leads Facilitated Monthly" },
                 { value: "100%", label: "Private Channels" },
-                { value: "$500+", label: "Average Provider Earnings" },
+                { value: "< 2 min", label: "Provider Setup" },
               ].map((stat, i) => (
                 <div key={i}>
                   <div className="text-6xl md:text-7xl lg:text-8xl font-bold text-[#212121] mb-3 tracking-tight">
