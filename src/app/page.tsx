@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/app/components/Sidebar";
+import FadeIn from "@/app/components/FadeIn";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -213,14 +214,14 @@ if (!mounted || isLoading) {
         {/* ─── WHY WOML — White with glossy cards ─────────────────────────── */}
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-20">
+            <FadeIn className="text-center mb-20">
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
                 Why Businesses Choose <span className="text-[#E77500]">WOML</span>
               </h2>
               <p className="text-[#212121]/45 text-lg max-w-2xl mx-auto">
                 Your referral network is valuable. Keep it private, automated, and under your control.
               </p>
-            </div>
+            </FadeIn>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 {
@@ -244,8 +245,8 @@ if (!mounted || isLoading) {
                   icon: "M13 10V3L4 14h7v7l9-11h-7z",
                 },
               ].map((card, i) => (
+                <FadeIn key={i} delay={i * 100}>
                 <div
-                  key={i}
                   className="rounded-2xl p-8 hover:-translate-y-1 transition-all duration-300 cursor-default"
                   style={{
                     background: "linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(248,249,252,0.95) 100%)",
@@ -263,6 +264,7 @@ if (!mounted || isLoading) {
                   <h3 className="text-xl font-bold text-[#212121] mb-3">{card.title}</h3>
                   <p className="text-[#212121]/45 text-sm leading-relaxed">{card.description}</p>
                 </div>
+                </FadeIn>
               ))}
             </div>
           </div>
@@ -271,6 +273,7 @@ if (!mounted || isLoading) {
         {/* ─── STATS ───────────────────────────────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
           <div className="max-w-5xl mx-auto">
+            <FadeIn>
             <div ref={statsRef} className="grid md:grid-cols-3 gap-12 text-center">
               {[
                 {
@@ -296,18 +299,19 @@ if (!mounted || isLoading) {
                 </div>
               ))}
             </div>
+            </FadeIn>
           </div>
         </section>
 
         {/* ─── HOW IT WORKS — White ────────────────────────────────────────── */}
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-20">
+            <FadeIn className="text-center mb-20">
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
                 Go Live in <span className="text-[#E77500]">4 Steps</span>
               </h2>
               <p className="text-[#212121]/45 text-lg">From setup to payout in under 10 minutes.</p>
-            </div>
+            </FadeIn>
             <div className="space-y-10">
               {[
                 { step: 1, title: "Create Your Channel", description: "Sign up, set your lead criteria, required fields, and payout rate per lead." },
@@ -315,7 +319,8 @@ if (!mounted || isLoading) {
                 { step: 3, title: "Receive & Review Leads", description: "Leads flow into your dashboard with verified info. Accept good ones, reject bad ones with a reason." },
                 { step: 4, title: "Automatic Payouts", description: "Approved leads trigger instant Stripe payments. You only pay for leads you keep." },
               ].map((item) => (
-                <div key={item.step} className="flex gap-8 items-start">
+                <FadeIn key={item.step} delay={(item.step - 1) * 120}>
+                <div className="flex gap-8 items-start">
                   <div className="w-14 h-14 rounded-full bg-[#E77500] text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-lg shadow-[#E77500]/30">
                     {item.step}
                   </div>
@@ -324,6 +329,7 @@ if (!mounted || isLoading) {
                     <p className="text-[#212121]/45 text-lg leading-relaxed">{item.description}</p>
                   </div>
                 </div>
+                </FadeIn>
               ))}
             </div>
           </div>
@@ -331,7 +337,7 @@ if (!mounted || isLoading) {
 
         {/* ─── PROVIDER CALLOUT — Light gray ───────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
-          <div className="max-w-3xl mx-auto text-center">
+          <FadeIn className="max-w-3xl mx-auto text-center">
             <h2 className="text-4xl md:text-5xl font-bold text-[#212121] mb-6 tracking-tight">
               Are You a Lead Provider?
             </h2>
@@ -344,15 +350,15 @@ if (!mounted || isLoading) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </Link>
-          </div>
+          </FadeIn>
         </section>
 
         {/* ─── FAQ — White ─────────────────────────────────────────────────── */}
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-16">
+            <FadeIn className="text-center mb-16">
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-4 tracking-tight">Questions?</h2>
-            </div>
+            </FadeIn>
             <div className="space-y-4">
               {[
                 { q: "How much does WOML cost?", a: "WOML is free to set up. You only pay a small platform fee on each approved lead payout. No monthly fees, no hidden costs." },
@@ -361,8 +367,8 @@ if (!mounted || isLoading) {
                 { q: "What if I want to reject a lead?", a: "You have full control. Reject any lead with a single click and optionally provide a reason. Rejected leads don't trigger any payment." },
                 { q: "How do providers sign up?", a: "You invite providers via SMS or a unique link. They complete a simple 2-minute onboarding, verify their identity, and they're ready to send leads." },
               ].map((faq, i) => (
+                <FadeIn key={i} delay={i * 80}>
                 <details
-                  key={i}
                   className="group rounded-2xl overflow-hidden"
                   style={{
                     background: "linear-gradient(145deg, rgba(255,255,255,0.9), rgba(248,249,252,0.95))",
@@ -378,6 +384,7 @@ if (!mounted || isLoading) {
                   </summary>
                   <div className="px-6 pb-6 text-[#212121]/45 leading-relaxed">{faq.a}</div>
                 </details>
+                </FadeIn>
               ))}
             </div>
           </div>
@@ -400,7 +407,7 @@ if (!mounted || isLoading) {
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#E77500]/5 to-transparent pointer-events-none" />
-          <div className="max-w-3xl mx-auto text-center relative z-10">
+          <FadeIn className="max-w-3xl mx-auto text-center relative z-10">
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
               Ready to Scale Your <span className="text-[#E77500]">Referrals</span>?
             </h2>
@@ -413,7 +420,7 @@ if (!mounted || isLoading) {
             >
               Start Your Free Channel
             </Link>
-          </div>
+          </FadeIn>
         </section>
       </main>
 
