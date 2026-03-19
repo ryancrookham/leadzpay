@@ -4972,42 +4972,58 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           </button>
         </div>
 
-        {/* ── Auto-Pay Settings ─────────────────────────────────────────── */}
+        {/* ── Payout Settings ─────────────────────────────────────────── */}
         <div className="border-t border-gray-200 pt-6 mt-2">
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-800">Auto-Pay</h4>
-              <p className="text-gray-500 text-xs mt-0.5">
-                Automatically approve and pay leads on a schedule. Leads you don&apos;t reject within the review window are auto-approved.
-              </p>
-            </div>
+          <h4 className="text-sm font-semibold text-gray-800 mb-1">Payout Mode</h4>
+          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML takes 12.5% (6.25% from you, 6.25% from the provider).</p>
+
+          {/* 3-mode selector */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {/* Manual */}
             <button
               type="button"
-              onClick={() => setAutoPayEnabled(v => !v)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                autoPayEnabled ? "bg-[#E8822A]" : "bg-gray-200"
-              }`}
-              aria-pressed={autoPayEnabled}
+              onClick={() => { setAutoPayEnabled(false); setAutoPaySchedule("biweekly"); }}
+              className={`p-4 rounded-xl border-2 text-left transition ${!autoPayEnabled ? "border-[#E8822A] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
             >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  autoPayEnabled ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
+              <div className="text-xl mb-2">🖐️</div>
+              <p className={`text-sm font-semibold ${!autoPayEnabled ? "text-[#E77500]" : "text-gray-800"}`}>Manual</p>
+              <p className="text-xs text-gray-500 mt-0.5">You click pay when ready. Full control, no automation.</p>
+            </button>
+
+            {/* Scheduled */}
+            <button
+              type="button"
+              onClick={() => { setAutoPayEnabled(true); if (autoPaySchedule === "instant") setAutoPaySchedule("biweekly"); }}
+              className={`p-4 rounded-xl border-2 text-left transition ${autoPayEnabled && autoPaySchedule !== "instant" ? "border-[#E8822A] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
+            >
+              <div className="text-xl mb-2">📅</div>
+              <p className={`text-sm font-semibold ${autoPayEnabled && autoPaySchedule !== "instant" ? "text-[#E77500]" : "text-gray-800"}`}>Scheduled</p>
+              <p className="text-xs text-gray-500 mt-0.5">Auto-pays on a weekly, bi-weekly, or monthly cycle.</p>
+            </button>
+
+            {/* Instant */}
+            <button
+              type="button"
+              onClick={() => { setAutoPayEnabled(true); setAutoPaySchedule("instant"); setReviewWindowDays(0); }}
+              className={`p-4 rounded-xl border-2 text-left transition ${autoPayEnabled && autoPaySchedule === "instant" ? "border-[#E8822A] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
+            >
+              <div className="text-xl mb-2">⚡</div>
+              <p className={`text-sm font-semibold ${autoPayEnabled && autoPaySchedule === "instant" ? "text-[#E77500]" : "text-gray-800"}`}>Instant</p>
+              <p className="text-xs text-gray-500 mt-0.5">Pays automatically the moment a lead is submitted.</p>
             </button>
           </div>
 
-          {autoPayEnabled && (
-            <div className="mt-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4 max-w-md">
+          {/* Scheduled sub-options */}
+          {autoPayEnabled && autoPaySchedule !== "instant" && (
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-gray-700 text-xs font-medium">Pay Schedule</label>
+                  <label className="block text-gray-700 text-xs font-medium">Pay Cycle</label>
                   <select
                     value={autoPaySchedule}
                     onChange={e => setAutoPaySchedule(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
                   >
-                    <option value="instant">Instant (test)</option>
                     <option value="weekly">Weekly</option>
                     <option value="biweekly">Bi-weekly</option>
                     <option value="monthly">Monthly</option>
@@ -5021,27 +5037,43 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                     max={14}
                     value={reviewWindowDays}
                     onChange={e => setReviewWindowDays(Math.min(14, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               </div>
               <p className="text-gray-400 text-xs">
-                {reviewWindowDays === 0 ? "Leads are paid instantly with no review window — full trust mode." : `You have ${reviewWindowDays} day${reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve.`} {autoPaySchedule === "instant" ? "Approved leads are paid immediately (instant mode — use for testing only)." : `Approved leads are paid on the ${autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.`}
+                {reviewWindowDays === 0
+                  ? "Leads are auto-approved with no review window."
+                  : `You have ${reviewWindowDays} day${reviewWindowDays !== 1 ? "s" : ""} to reject a lead before it auto-approves.`}
+                {" "}Approved leads are batched and paid on your {autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.
               </p>
               {nextAutoPayDate && (
-                <p className="text-blue-600 text-xs font-medium">
-                  Next auto-pay: {new Date(nextAutoPayDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                <p className="text-[#E77500] text-xs font-medium">
+                  Next scheduled payout: {new Date(nextAutoPayDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
                 </p>
               )}
             </div>
           )}
 
+          {/* Instant info banner */}
+          {autoPayEnabled && autoPaySchedule === "instant" && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <span className="text-lg">⚡</span>
+                <div>
+                  <p className="text-sm font-semibold text-orange-800">Instant mode active</p>
+                  <p className="text-xs text-orange-700 mt-0.5">Every lead submitted triggers an immediate Stripe charge to your card and payout to the provider. No review window — full trust mode. Use the button below to pay any leads that are waiting.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {autoPaySaved && (
-            <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs flex items-center gap-2">
+            <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Auto-pay settings saved!
+              Payout settings saved!
             </div>
           )}
 
@@ -5056,7 +5088,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   body: JSON.stringify({
                     autoPayEnabled,
                     autoPaySchedule,
-                    reviewWindowDays,
+                    reviewWindowDays: autoPaySchedule === "instant" ? 0 : reviewWindowDays,
                   }),
                 });
                 if (res.ok) {
@@ -5070,18 +5102,18 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   alert(`Save failed: ${err.error || res.statusText}`);
                 }
               } catch (e) {
-                console.error("Failed to save auto-pay settings:", e);
+                console.error("Failed to save payout settings:", e);
               } finally {
                 setAutoPaySaving(false);
               }
             }}
             disabled={autoPaySaving}
-            className="mt-3 bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+            className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
-            {autoPaySaving ? "Saving\u2026" : "Save Auto-Pay Settings"}
+            {autoPaySaving ? "Saving…" : "Save Payout Settings"}
           </button>
 
-          {/* Pay Now button — only shown when Instant mode is active */}
+          {/* Pay Now button — visible in instant mode to catch any queued leads */}
           {autoPayEnabled && autoPaySchedule === "instant" && (
             <div className="mt-3 space-y-2">
               <button
@@ -5108,7 +5140,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                {payNowLoading ? "Processing…" : "Pay All Approved Leads Now"}
+                {payNowLoading ? "Processing…" : "Pay All Pending Leads Now"}
               </button>
               {payNowResult && (
                 <p className={`text-xs px-3 py-2 rounded-lg ${payNowResult.startsWith("Error") ? "bg-red-50 text-red-600 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
