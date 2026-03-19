@@ -60,12 +60,17 @@ export default function Sidebar() {
                 key={tab.href}
                 href={tab.href}
                 onClick={() => setOpen(false)}
-                className={`flex items-center justify-center py-5 text-sm tracking-wide transition-colors ${
+                className={`flex items-center justify-center gap-2 py-5 text-sm tracking-wide transition-colors ${
                   pathname === tab.href
                     ? "text-[#E77500]"
                     : "text-[#E77500]/60 hover:text-[#E77500]"
                 }`}
               >
+                <span className={`w-3 h-3 rounded-full border flex-shrink-0 transition-colors ${
+                  pathname === tab.href
+                    ? "border-[#E77500] bg-[#E77500]/10"
+                    : "border-[#E77500]/30"
+                }`} />
                 {tab.label}
               </Link>
             )
