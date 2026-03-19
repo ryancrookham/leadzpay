@@ -11,14 +11,14 @@ const LINKEDIN_URL = "https://www.linkedin.com/company/woml-llc/";
 
 export default function SocialPage() {
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <nav className="flex items-center px-8 py-4 bg-white border-b border-gray-100 relative z-[60]">
+    <div className="min-h-screen bg-[#f8f9fc] flex flex-col">
+      <nav className="flex items-center px-8 py-4 bg-[#212121] border-b border-white/10 relative z-[60]">
         <div className="flex-1 flex items-center">
           <Sidebar />
         </div>
         <Link href="/">
           <Image
-            src="/woml-alt-orange.png"
+            src="/woml-alt-white.png"
             alt="WOML - Word of Mouth Leads"
             width={360}
             height={108}
@@ -28,7 +28,7 @@ export default function SocialPage() {
         <div className="flex-1 flex items-center justify-end gap-3">
           <Link
             href="/auth/login"
-            className="text-[#212121] hover:text-[#E77500] px-3 py-2 font-medium transition"
+            className="text-white/80 hover:text-white px-3 py-2 font-medium transition"
           >
             Sign In
           </Link>
