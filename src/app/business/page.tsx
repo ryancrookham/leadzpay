@@ -5061,7 +5061,8 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                 });
                 if (res.ok) {
                   const data = await res.json();
-                  setNextAutoPayDate(data.nextAutoPayDate || null);
+                  const s = data.settings ?? data;
+                  setNextAutoPayDate(s.nextAutoPayDate || null);
                   setAutoPaySaved(true);
                   setTimeout(() => setAutoPaySaved(false), 3000);
                 } else {
