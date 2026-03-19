@@ -185,7 +185,7 @@ if (!mounted || isLoading) {
               <span className="w-1.5 h-1.5 rounded-full bg-[#E77500] animate-pulse" />
               Facilitating 3,000+ leads monthly
             </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-[1.05] mb-8 tracking-tight">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-[1.05] mb-8 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
               Word of Mouth is Your
               <br />
               Best Lead Source.
@@ -216,7 +216,7 @@ if (!mounted || isLoading) {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-6xl mx-auto">
             <FadeIn className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
                 Why Businesses Choose <span className="text-[#E77500]">WOML</span>
               </h2>
               <p className="text-[#212121]/45 text-lg max-w-2xl mx-auto">
@@ -308,7 +308,7 @@ if (!mounted || isLoading) {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-4xl mx-auto">
             <FadeIn className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-6 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
                 Go Live in <span className="text-[#E77500]">4 Steps</span>
               </h2>
               <p className="text-[#212121]/45 text-lg">From setup to payout in under 10 minutes.</p>
@@ -339,7 +339,7 @@ if (!mounted || isLoading) {
         {/* ─── PROVIDER CALLOUT — Light gray ───────────────────────────────── */}
         <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
           <FadeIn className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#212121] mb-6 tracking-tight">
+            <h2 className="text-4xl md:text-5xl font-bold text-[#212121] mb-6 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
               Are You a Lead Provider?
             </h2>
             <p className="text-[#212121]/45 text-lg mb-10 leading-relaxed">
@@ -358,7 +358,7 @@ if (!mounted || isLoading) {
         <section className="py-28 px-8 bg-white relative z-[1]">
           <div className="max-w-3xl mx-auto">
             <FadeIn className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-4 tracking-tight">Questions?</h2>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#212121] mb-4 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>Questions?</h2>
             </FadeIn>
             <div className="space-y-4">
               {[
@@ -409,7 +409,7 @@ if (!mounted || isLoading) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#E77500]/5 to-transparent pointer-events-none" />
           <FadeIn className="max-w-3xl mx-auto text-center relative z-10">
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
               Ready to Scale Your <span className="text-[#E77500]">Referrals</span>?
             </h2>
             <p className="text-white/45 text-lg mb-12 leading-relaxed">

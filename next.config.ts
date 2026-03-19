@@ -1,5 +1,6 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const nextConfig = {
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
   eslint: {
     // The strict typescript ESLint config flags pre-existing `any` types
     // across many API routes and pages as build errors. Lint locally with
