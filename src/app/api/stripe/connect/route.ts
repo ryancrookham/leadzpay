@@ -138,16 +138,22 @@ export async function GET(request: NextRequest) {
 
     // Verify the account status with Stripe
     const account = await stripe.accounts.retrieve(accountId);
+    const stripeComplete = account.details_submitted === true;
 
-    // Mark stripe account in DB (preserve actual details_submitted value)
-    await updateUserStripeAccount(userId, accountId, account.details_submitted === true);
+    // Mark stripe account in DB with the real details_submitted value
+    await updateUserStripeAccount(userId, accountId, stripeComplete);
 
-    // If provider hasn't completed app onboarding, mark it complete now —
-    // they've gone through the full Stripe flow, that's sufficient
+    // Only mark app onboarding complete if Stripe was actually finished
     const onboardingState = await getProviderOnboardingState(userId);
-    if (onboardingState && !onboardingState.complete) {
+    if (stripeComplete && onboardingState && !onboardingState.complete) {
       const sql = getDb();
       await sql`UPDATE users SET onboarding_complete = TRUE, updated_at = NOW() WHERE id = ${userId}`;
+    }
+
+    // If Stripe wasn't finished, bounce back to step 4 so they can't escape
+    if (!stripeComplete) {
+      console.log("[Stripe Connect] Provider returned without completing Stripe, redirecting to step 4:", userId);
+      return NextResponse.redirect(`${appUrl}/provider-onboarding?stripe=incomplete`);
     }
 
     // Fetch fresh user data to build the session token
@@ -188,9 +194,9 @@ export async function GET(request: NextRequest) {
             location: freshUser.location || undefined,
             licensedStates: freshUser.licensed_states || undefined,
             stripeAccountId: freshUser.stripe_account_id || undefined,
-            stripeOnboardingComplete: true,
+            stripeOnboardingComplete: freshUser.stripe_onboarding_complete === true,
             onboardingStep: freshUser.onboarding_step,
-            onboardingComplete: true,
+            onboardingComplete: freshUser.onboarding_complete === true,
           },
           secret,
           maxAge,
