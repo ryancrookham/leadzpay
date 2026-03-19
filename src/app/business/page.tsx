@@ -4537,6 +4537,8 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
   const [nextAutoPayDate, setNextAutoPayDate] = useState<string | null>(null);
   const [autoPaySaving, setAutoPaySaving] = useState(false);
   const [autoPaySaved, setAutoPaySaved] = useState(false);
+  const [payNowLoading, setPayNowLoading] = useState(false);
+  const [payNowResult, setPayNowResult] = useState<string | null>(null);
 
   // PIN state
   const [pinHasExisting, setPinHasExisting] = useState<boolean | null>(null);
@@ -4588,10 +4590,11 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         const res = await fetch("/api/business/auto-pay-settings");
         if (res.ok) {
           const data = await res.json();
-          setAutoPayEnabled(data.autoPayEnabled ?? false);
-          setAutoPaySchedule(data.autoPaySchedule || "biweekly");
-          setReviewWindowDays(data.reviewWindowDays ?? 3);
-          setNextAutoPayDate(data.nextAutoPayDate || null);
+          const s = data.settings ?? data; // handle both {settings:{}} and flat response
+          setAutoPayEnabled(s.autoPayEnabled ?? false);
+          setAutoPaySchedule(s.autoPaySchedule || "biweekly");
+          setReviewWindowDays(s.reviewWindowDays ?? 3);
+          setNextAutoPayDate(s.nextAutoPayDate || null);
         }
       } catch (e) {
         console.error("Failed to load auto-pay settings:", e);
@@ -5076,6 +5079,43 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
           >
             {autoPaySaving ? "Saving\u2026" : "Save Auto-Pay Settings"}
           </button>
+
+          {/* Pay Now button — only shown when Instant mode is active */}
+          {autoPayEnabled && autoPaySchedule === "instant" && (
+            <div className="mt-3 space-y-2">
+              <button
+                onClick={async () => {
+                  setPayNowLoading(true);
+                  setPayNowResult(null);
+                  try {
+                    const res = await fetch("/api/business/pay-now", { method: "POST" });
+                    const data = await res.json();
+                    if (res.ok) {
+                      setPayNowResult(data.message || "Payment processed.");
+                    } else {
+                      setPayNowResult(`Error: ${data.error}`);
+                    }
+                  } catch {
+                    setPayNowResult("Error: Failed to process payment.");
+                  } finally {
+                    setPayNowLoading(false);
+                  }
+                }}
+                disabled={payNowLoading}
+                className="bg-[#E77500] hover:bg-[#D47526] text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                {payNowLoading ? "Processing…" : "Pay All Approved Leads Now"}
+              </button>
+              {payNowResult && (
+                <p className={`text-xs px-3 py-2 rounded-lg ${payNowResult.startsWith("Error") ? "bg-red-50 text-red-600 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+                  {payNowResult}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Business Owner PIN ─────────────────────────────────────────── */}
