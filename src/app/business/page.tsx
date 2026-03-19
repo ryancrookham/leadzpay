@@ -1651,24 +1651,72 @@ function BusinessPortalContent() {
             {/* Pending Payments — Provider-Grouped */}
             {payableLeadsAll.length > 0 && (
               <div className="space-y-2">
-                {/* Summary bar */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
-                  <span className="text-amber-800 text-sm font-medium">
-                    {payableLeadsAll.length} unpaid lead{payableLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {pendingByProvider.length > 1 && (
-                      <button
-                        onClick={() => handleBatchPayment(payableLeadsAll.map(l => l.id))}
-                        disabled={batchMarkingPaid}
-                        className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
-                        {batchMarkingPaid ? "Processing..." : `Pay All Providers ($${amountPending.toFixed(2)})`}
-                      </button>
-                    )}
+                {/* Summary bar — instant mode gets its own banner */}
+                {autoPayEnabled && autoPaySchedule === "instant" ? (
+                  <div className="bg-orange-50 border border-orange-300 rounded-xl px-5 py-4 flex items-start justify-between flex-wrap gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <svg className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <div>
+                        <p className="text-orange-800 text-sm font-semibold">Instant mode is on — these leads should have been paid automatically</p>
+                        <p className="text-orange-700 text-xs mt-0.5">
+                          These {payableLeadsAll.length} lead{payableLeadsAll.length !== 1 ? "s" : ""} ({`$${amountPending.toFixed(2)}`}) were submitted before Instant mode was enabled, or a provider&apos;s Stripe account isn&apos;t fully connected yet. Pay them now to clear the queue — future leads will be instant automatically.
+                        </p>
+                        {payNowResult && (
+                          <p className={`text-xs mt-2 font-medium ${payNowResult.startsWith("Error") ? "text-red-600" : "text-emerald-700"}`}>
+                            {payNowResult}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setPayNowLoading(true);
+                        setPayNowResult(null);
+                        try {
+                          const res = await fetch("/api/business/pay-now", { method: "POST" });
+                          const data = await res.json();
+                          if (res.ok) {
+                            setPayNowResult(data.message || "Payment processed.");
+                            await fetchLeads();
+                          } else {
+                            setPayNowResult(`Error: ${data.error}`);
+                          }
+                        } catch {
+                          setPayNowResult("Error: Failed to process payment.");
+                        } finally {
+                          setPayNowLoading(false);
+                        }
+                      }}
+                      disabled={payNowLoading}
+                      className="inline-flex items-center gap-2 bg-[#E77500] hover:bg-[#D47526] text-white px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50 shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {payNowLoading ? "Paying…" : `Pay $${amountPending.toFixed(2)} Now`}
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+                    <span className="text-amber-800 text-sm font-medium">
+                      {payableLeadsAll.length} unpaid lead{payableLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {pendingByProvider.length > 1 && (
+                        <button
+                          onClick={() => handleBatchPayment(payableLeadsAll.map(l => l.id))}
+                          disabled={batchMarkingPaid}
+                          className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                          {batchMarkingPaid ? "Processing..." : `Pay All Providers ($${amountPending.toFixed(2)})`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Per-provider cards */}
                 {pendingByProvider.map(group => (
@@ -5085,6 +5133,22 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   setNextAutoPayDate(s.nextAutoPayDate || null);
                   setAutoPaySaved(true);
                   setTimeout(() => setAutoPaySaved(false), 3000);
+
+                  // If instant mode was just saved, immediately pay any leads already in the queue
+                  if (autoPaySchedule === "instant" && autoPayEnabled) {
+                    setPayNowLoading(true);
+                    setPayNowResult(null);
+                    try {
+                      const payRes = await fetch("/api/business/pay-now", { method: "POST" });
+                      const payData = await payRes.json();
+                      if (payRes.ok && payData.succeeded > 0) {
+                        setPayNowResult(payData.message || "Queued leads paid.");
+                        await fetchLeads();
+                      }
+                    } catch { /* non-blocking */ } finally {
+                      setPayNowLoading(false);
+                    }
+                  }
                 } else {
                   const err = await res.json().catch(() => ({}));
                   alert(`Save failed: ${err.error || res.statusText}`);
