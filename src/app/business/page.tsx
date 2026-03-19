@@ -539,7 +539,7 @@ function BusinessPortalContent() {
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isBuyer(currentUser) || !stripeSetupChecked) {
     return (
-      <div className="min-h-screen bg-[#E77500] flex items-center justify-center">
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-alt-white.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
@@ -1697,7 +1697,7 @@ function BusinessPortalContent() {
 
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-xl font-bold text-white">Leads</h2>
+              <h2 className="text-xl font-bold text-[#212121]">Leads</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Filter pills */}
                 {[{ key: "all", label: "All" }, ...pipeStages.map(s => ({ key: s, label: stageLabels[s] || s }))].map(f => (
@@ -1705,7 +1705,7 @@ function BusinessPortalContent() {
                     key={f.key}
                     onClick={() => setPipelineFilter(f.key)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                      pipelineFilter === f.key ? "bg-white text-[#E77500] shadow-md" : "text-white/80 hover:text-white hover:bg-white/10"
+                      pipelineFilter === f.key ? "bg-[#E77500] text-white shadow-md" : "text-[#212121]/60 hover:text-[#212121] hover:bg-gray-100"
                     }`}
                   >{f.label}</button>
                 ))}
@@ -1713,10 +1713,10 @@ function BusinessPortalContent() {
                 <select
                   value={pipelineSort}
                   onChange={e => setPipelineSort(e.target.value as typeof pipelineSort)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white border border-white/20 focus:outline-none"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white text-[#212121] border border-gray-200 focus:outline-none"
                 >
-                  <option value="newest" className="text-gray-800">Newest</option>
-                  <option value="oldest" className="text-gray-800">Oldest</option>
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
                 </select>
                 {/* Search leads */}
                 <input
@@ -1724,13 +1724,13 @@ function BusinessPortalContent() {
                   placeholder="Search leads..."
                   value={pipelineSearch}
                   onChange={e => setPipelineSearch(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white border border-white/20 placeholder-white/50 focus:outline-none focus:bg-white/20 w-36"
+                  className="px-3 py-1.5 rounded-lg text-xs bg-white text-[#212121] border border-gray-200 placeholder-gray-400 focus:outline-none w-36"
                 />
                 {/* Provider filter */}
                 <select
                   value={providerFilter}
                   onChange={e => setProviderFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white border border-white/20 focus:outline-none w-40"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white text-[#212121] border border-gray-200 focus:outline-none w-40"
                 >
                   <option value="all" className="text-gray-800">All Providers</option>
                   {uniqueProviders.map(([id, name]) => (
@@ -1738,7 +1738,7 @@ function BusinessPortalContent() {
                   ))}
                 </select>
                 {/* Payment status filter */}
-                <div className="flex items-center gap-1 ml-1 border-l border-white/20 pl-2">
+                <div className="flex items-center gap-1 ml-1 border-l border-gray-200 pl-2">
                   {([
                     { key: "all", label: "All" },
                     { key: "pending", label: "Unpaid" },
@@ -1749,7 +1749,7 @@ function BusinessPortalContent() {
                       key={f.key}
                       onClick={() => setPaymentFilter(f.key)}
                       className={`px-2 py-1 rounded text-[10px] font-medium transition ${
-                        paymentFilter === f.key ? "bg-white text-[#E77500] shadow-sm" : "text-white/70 hover:text-white hover:bg-white/10"
+                        paymentFilter === f.key ? "bg-[#E77500] text-white shadow-sm" : "text-[#212121]/60 hover:text-[#212121] hover:bg-gray-100"
                       }`}
                     >{f.label}</button>
                   ))}
@@ -4362,8 +4362,8 @@ function LeaderboardTab({ smsAgents }: { smsAgents: { name: string; phone: strin
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-white">Leaderboard</h2>
-        <p className="text-white/70 text-sm mt-1">Agent performance ranked by conversion rate.</p>
+        <h2 className="text-xl font-bold text-[#212121]">Leaderboard</h2>
+        <p className="text-[#212121]/60 text-sm mt-1">Agent performance ranked by conversion rate.</p>
       </div>
 
       {loading && (
@@ -4449,8 +4449,8 @@ Reply to this email or call me at [Your Number] when you get a chance. Looking f
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-white">Email Outreach Scripts</h2>
-        <p className="text-white/70 text-sm mt-1">Copy, personalize, and send to leads who aren&apos;t picking up the phone.</p>
+        <h2 className="text-xl font-bold text-[#212121]">Email Outreach Scripts</h2>
+        <p className="text-[#212121]/60 text-sm mt-1">Copy, personalize, and send to leads who aren&apos;t picking up the phone.</p>
       </div>
 
       {/* New Script Form */}

@@ -218,7 +218,7 @@ export default function ProviderDashboard() {
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isProvider(currentUser)) {
     return (
-      <div className="min-h-screen bg-[#f8f9fc] flex items-center justify-center">
+      <div className="min-h-screen bg-[#212121] flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-alt-white.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
