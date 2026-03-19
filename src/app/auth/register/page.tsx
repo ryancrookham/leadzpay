@@ -558,8 +558,9 @@ function RegisterContent() {
             </div>
           )}
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-gray-500 text-sm">Already have an account? <Link href="/auth/login" className="text-[#E8822A] hover:underline font-medium">Sign in</Link></p>
+            <Link href="/" className="block text-sm text-gray-400 hover:text-[#E8822A] transition">Back to Home</Link>
           </div>
         </div>
         </div>
