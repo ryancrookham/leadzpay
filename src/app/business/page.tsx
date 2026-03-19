@@ -4975,30 +4975,30 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
         {/* ── Payout Settings ─────────────────────────────────────────── */}
         <div className="border-t border-gray-200 pt-6 mt-2">
           <h4 className="text-sm font-semibold text-gray-800 mb-1">Payout Mode</h4>
-          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML takes 12.5% (6.25% from you, 6.25% from the provider).</p>
+          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML takes 12.5% — split evenly: 6.25% added to your rate, 6.25% deducted from the provider payout.</p>
 
           {/* 3-mode selector */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             {/* Manual */}
             <button
               type="button"
-              onClick={() => { setAutoPayEnabled(false); setAutoPaySchedule("biweekly"); }}
+              onClick={() => { setAutoPayEnabled(false); setAutoPaySchedule("biweekly"); setReviewWindowDays(3); }}
               className={`p-4 rounded-xl border-2 text-left transition ${!autoPayEnabled ? "border-[#E8822A] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
             >
               <div className="text-xl mb-2">🖐️</div>
               <p className={`text-sm font-semibold ${!autoPayEnabled ? "text-[#E77500]" : "text-gray-800"}`}>Manual</p>
-              <p className="text-xs text-gray-500 mt-0.5">You click pay when ready. Full control, no automation.</p>
+              <p className="text-xs text-gray-500 mt-1">Pay leads individually or in bulk whenever you&apos;re ready. No automation — you&apos;re in full control.</p>
             </button>
 
             {/* Scheduled */}
             <button
               type="button"
-              onClick={() => { setAutoPayEnabled(true); if (autoPaySchedule === "instant") setAutoPaySchedule("biweekly"); }}
+              onClick={() => { setAutoPayEnabled(true); setReviewWindowDays(3); if (autoPaySchedule === "instant") setAutoPaySchedule("biweekly"); }}
               className={`p-4 rounded-xl border-2 text-left transition ${autoPayEnabled && autoPaySchedule !== "instant" ? "border-[#E8822A] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
             >
               <div className="text-xl mb-2">📅</div>
               <p className={`text-sm font-semibold ${autoPayEnabled && autoPaySchedule !== "instant" ? "text-[#E77500]" : "text-gray-800"}`}>Scheduled</p>
-              <p className="text-xs text-gray-500 mt-0.5">Auto-pays on a weekly, bi-weekly, or monthly cycle.</p>
+              <p className="text-xs text-gray-500 mt-1">3-day review window, then WOML auto-pays on your chosen cycle. Set it and forget it.</p>
             </button>
 
             {/* Instant */}
@@ -5009,43 +5009,33 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
             >
               <div className="text-xl mb-2">⚡</div>
               <p className={`text-sm font-semibold ${autoPayEnabled && autoPaySchedule === "instant" ? "text-[#E77500]" : "text-gray-800"}`}>Instant</p>
-              <p className="text-xs text-gray-500 mt-0.5">Pays automatically the moment a lead is submitted.</p>
+              <p className="text-xs text-gray-500 mt-1">Fully automated. Providers are paid the moment they submit a lead — no delays, no review.</p>
             </button>
           </div>
 
-          {/* Scheduled sub-options */}
+          {/* Scheduled sub-options — just the cycle picker, review window is fixed at 3 days */}
           {autoPayEnabled && autoPaySchedule !== "instant" && (
             <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-gray-700 text-xs font-medium">Pay Cycle</label>
-                  <select
-                    value={autoPaySchedule}
-                    onChange={e => setAutoPaySchedule(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Bi-weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-gray-700 text-xs font-medium">Review Window (days)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={14}
-                    value={reviewWindowDays}
-                    onChange={e => setReviewWindowDays(Math.min(14, Math.max(0, parseInt(e.target.value) || 0)))}
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
-                  />
-                </div>
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-xs text-gray-600 font-medium">3-day review window · Leads auto-approve after 3 days if not rejected</p>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-gray-700 text-xs font-medium">Pay Cycle</label>
+                <select
+                  value={autoPaySchedule}
+                  onChange={e => setAutoPaySchedule(e.target.value)}
+                  className="w-full max-w-[200px] px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
               </div>
               <p className="text-gray-400 text-xs">
-                {reviewWindowDays === 0
-                  ? "Leads are auto-approved with no review window."
-                  : `You have ${reviewWindowDays} day${reviewWindowDays !== 1 ? "s" : ""} to reject a lead before it auto-approves.`}
-                {" "}Approved leads are batched and paid on your {autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.
+                Approved leads are batched and paid automatically on your {autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.
               </p>
               {nextAutoPayDate && (
                 <p className="text-[#E77500] text-xs font-medium">
@@ -5057,13 +5047,11 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
 
           {/* Instant info banner */}
           {autoPayEnabled && autoPaySchedule === "instant" && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
-              <div className="flex items-start gap-3">
-                <span className="text-lg">⚡</span>
-                <div>
-                  <p className="text-sm font-semibold text-orange-800">Instant mode active</p>
-                  <p className="text-xs text-orange-700 mt-0.5">Every lead submitted triggers an immediate Stripe charge to your card and payout to the provider. No review window — full trust mode. Use the button below to pay any leads that are waiting.</p>
-                </div>
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4 flex items-start gap-3">
+              <span className="text-lg mt-0.5">⚡</span>
+              <div>
+                <p className="text-sm font-semibold text-orange-800">Fully automated — no action required</p>
+                <p className="text-xs text-orange-700 mt-0.5">Every lead submission triggers an immediate Stripe charge and provider payout. Zero review window — use when you fully trust your providers. If any leads are already pending, use the button below to pay them now.</p>
               </div>
             </div>
           )}
@@ -5088,7 +5076,7 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   body: JSON.stringify({
                     autoPayEnabled,
                     autoPaySchedule,
-                    reviewWindowDays: autoPaySchedule === "instant" ? 0 : reviewWindowDays,
+                    reviewWindowDays: autoPaySchedule === "instant" ? 0 : 3,
                   }),
                 });
                 if (res.ok) {
