@@ -81,8 +81,8 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: `autoPaySchedule must be one of: ${VALID_SCHEDULES.join(", ")}` }, { status: 400 });
       }
 
-      if (typeof reviewWindowDays !== "number" || reviewWindowDays < 1 || reviewWindowDays > 14) {
-        return NextResponse.json({ error: "reviewWindowDays must be between 1 and 14" }, { status: 400 });
+      if (typeof reviewWindowDays !== "number" || reviewWindowDays < 0 || reviewWindowDays > 14) {
+        return NextResponse.json({ error: "reviewWindowDays must be between 0 and 14" }, { status: 400 });
       }
     }
 

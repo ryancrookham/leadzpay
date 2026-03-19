@@ -5061,6 +5061,9 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   setNextAutoPayDate(data.nextAutoPayDate || null);
                   setAutoPaySaved(true);
                   setTimeout(() => setAutoPaySaved(false), 3000);
+                } else {
+                  const err = await res.json().catch(() => ({}));
+                  alert(`Save failed: ${err.error || res.statusText}`);
                 }
               } catch (e) {
                 console.error("Failed to save auto-pay settings:", e);
