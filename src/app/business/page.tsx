@@ -5014,16 +5014,16 @@ function SettingsTab({ currentBuyer, feeSettings }: { currentBuyer: import("@/li
                   <label className="block text-gray-700 text-xs font-medium">Review Window (days)</label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     max={14}
                     value={reviewWindowDays}
-                    onChange={e => setReviewWindowDays(Math.min(14, Math.max(1, parseInt(e.target.value) || 1)))}
+                    onChange={e => setReviewWindowDays(Math.min(14, Math.max(0, parseInt(e.target.value) || 0)))}
                     className="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-sm focus:border-[#E8822A] focus:outline-none transition"
                   />
                 </div>
               </div>
               <p className="text-gray-400 text-xs">
-                You have {reviewWindowDays} day{reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve. {autoPaySchedule === "instant" ? "Approved leads are paid immediately (instant mode — use for testing only)." : `Approved leads are paid on the ${autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.`}
+                {reviewWindowDays === 0 ? "Leads are paid instantly with no review window — full trust mode." : `You have ${reviewWindowDays} day${reviewWindowDays !== 1 ? "s" : ""} to reject bad leads before they auto-approve.`} {autoPaySchedule === "instant" ? "Approved leads are paid immediately (instant mode — use for testing only)." : `Approved leads are paid on the ${autoPaySchedule === "weekly" ? "weekly" : autoPaySchedule === "biweekly" ? "bi-weekly" : "monthly"} cycle.`}
               </p>
               {nextAutoPayDate && (
                 <p className="text-blue-600 text-xs font-medium">
