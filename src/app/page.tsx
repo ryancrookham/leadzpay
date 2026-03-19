@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/app/components/Sidebar";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [ridgeProgress, setRidgeProgress] = useState(0);
-  const statsRef = useRef<HTMLElement>(null);
   const { isAuthenticated, currentUser, isLoading, logout } = useAuth();
   const dashboardUrl =
     currentUser?.role === "admin"
@@ -22,25 +20,7 @@ export default function Home() {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    const handleScroll = () => {
-      const el = statsRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // Start drawing when section enters viewport, finish when it leaves top
-      const start = vh * 0.92;   // section top at 92% down = begin
-      const end   = vh * -0.1;   // section top at -10% (just scrolled past) = done
-      const p = Math.max(0, Math.min(1, (start - rect.top) / (start - end)));
-      setRidgeProgress(p);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [mounted]);
-
-  if (!mounted || isLoading) {
+if (!mounted || isLoading) {
     return (
       <div className="min-h-screen bg-[#212121] flex items-center justify-center">
         <div className="text-center">
@@ -244,87 +224,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── STATS — Fixed-height mountain section ───────────────────────── */}
-        {/* Desktop: fixed 380px so SVG path coordinates are exact.           */}
-        {/* Mobile: auto height with padding, mountain/line hidden.           */}
-        <section
-          ref={statsRef}
-          className="relative z-[1] overflow-hidden bg-[#f8f9fc] py-16 sm:py-0 sm:h-[380px]"
-        >
-
-          {/* Mountain — desktop only. backgroundSize 130% + center gives     */}
-          {/* exact placement: scale=1.1818, x_off=-52, y_off=-207 in SVG px  */}
-          <div
-            className="absolute inset-0 pointer-events-none select-none hidden sm:block"
-            aria-hidden="true"
-            style={{
-              backgroundImage: "url('/stats-mountain.png')",
-              backgroundSize: "130%",
-              backgroundPosition: "12% center",
-              backgroundRepeat: "no-repeat",
-              opacity: 0.5,
-              filter: "brightness(0.28) saturate(0.45)",
-            }}
-          />
-
-          {/* Gradient — fades right side back to page bg */}
-          <div
-            className="absolute inset-0 pointer-events-none hidden sm:block"
-            aria-hidden="true"
-            style={{
-              background: "linear-gradient(to right, rgba(248,249,252,0.0) 20%, rgba(248,249,252,0.9) 68%)",
-            }}
-          />
-
-          {/* Orange ridge line — desktop only.                               */}
-          {/* Path computed for EXACT section h=380px, viewBox 1440×380.      */}
-          {/* CSS math: scale=1.1818, x_off=-52, y_off=(380-794)/2=-207       */}
-          {/* svg_x = img_x*1.1818−52  |  svg_y = img_y*1.1818−207           */}
-          <div className="absolute inset-0 pointer-events-none hidden sm:block" aria-hidden="true">
-            {(() => {
-              // Waypoints: left boundary of mountain + plateau (avoids tracing climber)
-              // Entry spreads across full left half; plateau matches what user confirmed looks good
-              const RIDGE_X = [0,80,180,270,330,363,388,405,418,428,435,440,460,500,560,600,650,704,730,751,770,799,850,920,1020,1140,1260,1380,1440];
-              const RIDGE_Y = [380,368,345,315,280,250,210,165,115,68,30,8,4,4,4,5,8,58,49,40,20,1,2,1,2,1,2,1,2];
-              const RIDGE_F = [0.0,0.048,0.1088,0.1651,0.2063,0.2327,0.2607,0.2892,0.3198,0.3483,0.3712,0.3846,0.3967,0.4204,0.456,0.4797,0.5094,0.5531,0.5694,0.583,0.5993,0.6199,0.6501,0.6916,0.7509,0.8221,0.8933,0.9644,1.0];
-              // Interpolate dot tip position
-              let cx = RIDGE_X[0], cy = RIDGE_Y[0];
-              if (ridgeProgress > 0.01) {
-                const p = Math.min(ridgeProgress, 1);
-                let i = RIDGE_F.findIndex(f => f >= p);
-                if (i < 0) i = RIDGE_F.length - 1;
-                if (i === 0) { cx = RIDGE_X[0]; cy = RIDGE_Y[0]; }
-                else {
-                  const t = (p - RIDGE_F[i-1]) / (RIDGE_F[i] - RIDGE_F[i-1]);
-                  cx = RIDGE_X[i-1] + t * (RIDGE_X[i] - RIDGE_X[i-1]);
-                  cy = RIDGE_Y[i-1] + t * (RIDGE_Y[i] - RIDGE_Y[i-1]);
-                }
-              }
-              const pathD = "M0,380 L80,368 L180,345 L270,315 L330,280 L363,250 L388,210 L405,165 L418,115 L428,68 L435,30 L440,8 L460,4 L500,4 L560,4 L600,5 L650,8 L704,58 L730,49 L751,40 L770,20 L799,1 L850,2 L920,1 L1020,2 L1140,1 L1260,2 L1380,1 L1440,2";
-              return (
-                <svg viewBox="0 0 1440 380" preserveAspectRatio="none" fill="none" className="w-full h-full">
-                  {/* Glow halo */}
-                  <path d={pathD} stroke="#E77500" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" opacity="0.15"
-                    pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
-                  {/* Core line */}
-                  <path d={pathD} stroke="#E77500" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" opacity="1"
-                    pathLength="1" style={{ strokeDasharray: `${ridgeProgress} 1`, strokeDashoffset: 0 }} />
-                  {/* Dot at tip */}
-                  {ridgeProgress > 0.01 && (
-                    <>
-                      <circle cx={cx} cy={cy} r="13" fill="#E77500" opacity="0.2" />
-                      <circle cx={cx} cy={cy} r="5" fill="#E77500" opacity="1" />
-                    </>
-                  )}
-                </svg>
-              );
-            })()}
-          </div>
-
-          {/* Stats — absolutely centered on desktop, normal flow on mobile   */}
-          <div className="sm:absolute sm:inset-0 sm:flex sm:items-center sm:justify-center relative z-10">
-            <div className="max-w-5xl mx-auto w-full px-8">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 sm:gap-12 text-center">
+        {/* ─── STATS ───────────────────────────────────────────────────────── */}
+        <section className="py-24 px-8 bg-[#f8f9fc] relative z-[1]">
+          <div className="max-w-5xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-12 text-center">
               {[
                 { value: "3,000+", label: "Leads Facilitated Monthly" },
                 { value: "$500+", label: "Average Provider Earnings" },
@@ -339,7 +242,6 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-            </div>
             </div>
           </div>
         </section>
