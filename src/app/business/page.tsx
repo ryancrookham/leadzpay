@@ -799,10 +799,10 @@ function BusinessPortalContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#E77500] relative">
+    <div className="min-h-screen bg-[#f8f9fc] relative">
 
       {/* Header */}
-      <header className="relative z-10 bg-[#E77500] border-b border-white/20 px-8 py-4">
+      <header className="relative z-10 bg-[#212121] border-b border-white/10 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
@@ -932,8 +932,8 @@ function BusinessPortalContent() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-white text-[#E77500] shadow-md"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
+                  ? "bg-[#E77500] text-white shadow-md"
+                  : "text-[#212121]/55 hover:text-[#212121] hover:bg-[#212121]/8"
               }`}
             >
               {tab === "marketing" ? "Outreach" : tab === "leaderboard" ? "Leaderboard" : tab === "pipeline" ? "Leads" : tab.charAt(0).toUpperCase() + tab.slice(1)}

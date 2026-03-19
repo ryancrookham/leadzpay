@@ -218,7 +218,7 @@ export default function ProviderDashboard() {
   // Show branded loading state during auth check
   if (isLoading || !isAuthenticated || !currentUser || !isProvider(currentUser)) {
     return (
-      <div className="min-h-screen bg-[#E77500] flex items-center justify-center">
+      <div className="min-h-screen bg-[#f8f9fc] flex items-center justify-center">
         <div className="text-center">
           <Image src="/woml-alt-white.png" alt="WOML" width={200} height={60} className="mx-auto mb-4" priority />
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
@@ -257,21 +257,10 @@ export default function ProviderDashboard() {
   const connectionStatus = getConnectionStatus();
 
   return (
-    <div className="min-h-screen bg-[#E77500] relative">
-      {/* Watermark Logo Background */}
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0">
-        <Image
-          src="/woml-alt-white.png"
-          alt=""
-          width={600}
-          height={600}
-          className="opacity-[0.02] select-none"
-          priority
-        />
-      </div>
+    <div className="min-h-screen bg-[#f8f9fc] relative">
 
       {/* Header */}
-      <header className="relative z-10 bg-[#E77500] border-b border-white/20 px-8 py-4">
+      <header className="relative z-10 bg-[#212121] border-b border-white/10 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center">
@@ -382,8 +371,8 @@ export default function ProviderDashboard() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-lg font-medium transition whitespace-nowrap ${
                 activeTab === tab
-                  ? "bg-white text-[#E77500] shadow-md"
-                  : "text-white/80 hover:text-white hover:bg-white/10"
+                  ? "bg-[#E77500] text-white shadow-md"
+                  : "text-[#212121]/55 hover:text-[#212121] hover:bg-[#212121]/8"
               }`}
             >
               {tab === "connection" ? "Connection" : tab.charAt(0).toUpperCase() + tab.slice(1)}
