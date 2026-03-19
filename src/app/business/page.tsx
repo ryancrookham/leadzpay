@@ -1735,8 +1735,8 @@ function BusinessPortalContent() {
                   </div>
                 )}
 
-                {/* Per-provider cards */}
-                {pendingByProvider.map(group => (
+                {/* Per-provider cards — hidden in instant mode (banner handles it) */}
+                {!isInstantMode && pendingByProvider.map(group => (
                   <div key={group.providerId} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2 shadow-sm">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-[#E8822A]/10 flex items-center justify-center shrink-0">
