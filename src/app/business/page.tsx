@@ -2905,7 +2905,7 @@ function ProvidersTab({
                           <div>
                             <p className="text-emerald-600 text-xs">Rate</p>
                             <p className="text-emerald-800 font-bold text-lg">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</p>
-                            <p className="text-emerald-600 text-xs">(${Number(connection.rate_per_lead || 0).toFixed(2)} + $${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerFee.toFixed(2)} fee)</p>
+                            <p className="text-emerald-600 text-xs">(${Number(connection.rate_per_lead || 0).toFixed(2)} rate + $${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerFee.toFixed(2)} WOML fee)</p>
                           </div>
                           <div>
                             <p className="text-emerald-600 text-xs">Payment</p>
@@ -3597,7 +3597,12 @@ function ProviderDetailModal({
                         <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[#E8822A] font-bold">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</p>
+                        {(() => { const bd = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings); return (
+                          <>
+                            <p className="text-[#E8822A] font-bold">${bd.buyerTotal.toFixed(2)}</p>
+                            <p className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} + ${bd.buyerFee.toFixed(2)} fee</p>
+                          </>
+                        ); })()}
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           lead.payoutStatus === "completed"
                             ? "bg-emerald-100 text-emerald-700"
@@ -5040,7 +5045,7 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange }: { curren
         {/* ── Payout Settings ─────────────────────────────────────────── */}
         <div className="border-t border-gray-200 pt-6 mt-2">
           <h4 className="text-sm font-semibold text-gray-800 mb-1">Payout Mode</h4>
-          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML takes 12.5% — split evenly: 6.25% added to your rate, 6.25% deducted from the provider payout.</p>
+          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML charges a platform fee of <span className="font-semibold text-gray-700">$0.30 flat + 12.5%</span> per lead, split evenly between you and your provider — you pay half (added to your rate), they give up half (deducted from their payout).</p>
 
           {/* 3-mode selector */}
           <div className="grid grid-cols-3 gap-3 mb-4">
@@ -5728,7 +5733,7 @@ function ConnectionsTab({
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-[#E8822A] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
-                        <span className="text-gray-400 text-xs">(incl. platform fee)</span>
+                        <span className="text-gray-400 text-xs">(incl. $0.30 flat + 6.25% WOML fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>

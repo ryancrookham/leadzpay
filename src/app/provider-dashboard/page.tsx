@@ -511,7 +511,7 @@ function DashboardTab({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-[#E8822A]">Submit New Lead</h3>
-                <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead (after ${providerFeeDisplay.toFixed(2)} fee)</p>
+                <p className="text-gray-500 text-sm">Earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead <span className="text-gray-400 text-xs">(${Number(activeConnection.rate_per_lead || 0).toFixed(2)} rate − ${providerFeeDisplay.toFixed(2)} WOML fee: $0.15 flat + 6.25%)</span></p>
               </div>
             </div>
           </button>
@@ -546,7 +546,7 @@ function DashboardTab({
               </div>
               <div>
                 <p className="font-semibold text-gray-800">{activeConnection.buyerBusinessName}</p>
-                <p className="text-gray-500 text-sm">${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead (after ${providerFeeDisplay.toFixed(2)} fee) • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
+                <p className="text-gray-500 text-sm">${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)}/lead <span className="text-gray-400 text-xs">(${Number(activeConnection.rate_per_lead || 0).toFixed(2)} − ${providerFeeDisplay.toFixed(2)} WOML fee)</span> • {formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
               </div>
             </div>
           ) : (
@@ -935,8 +935,12 @@ function ConnectionTab({
               </div>
               <div>
                 <p className="text-xl font-bold text-emerald-800">Lead Submitted Successfully!</p>
-                <p className="text-emerald-600">You earned ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)} for this lead.</p>
-                <p className="text-emerald-500 text-sm">(${Number(activeConnection?.rate_per_lead || 0).toFixed(2)}/lead - ${providerFeeDisplay.toFixed(2)} platform fee)</p>
+                {(() => { const bd = calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings); return (
+                  <>
+                    <p className="text-emerald-600">You earned <span className="font-bold">${bd.providerNet.toFixed(2)}</span> for this lead.</p>
+                    <p className="text-emerald-500 text-sm">${Number(activeConnection?.rate_per_lead || 0).toFixed(2)} rate − ${bd.providerFee.toFixed(2)} WOML fee ($0.15 flat + 6.25%)</p>
+                  </>
+                ); })()}
               </div>
             </div>
             <button
@@ -1077,9 +1081,15 @@ function ConnectionTab({
 
             <div className="space-y-4">
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-                <p className="text-orange-700 text-sm font-medium">
-                  You&apos;ll earn ${calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings).providerNet.toFixed(2)} for this lead
-                </p>
+                {(() => { const bd = calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings); return (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-orange-700 text-sm font-semibold">You&apos;ll earn ${bd.providerNet.toFixed(2)} for this lead</p>
+                      <p className="text-orange-500 text-xs mt-0.5">Rate ${Number(activeConnection.rate_per_lead || 0).toFixed(2)} − WOML fee ${bd.providerFee.toFixed(2)} ($0.15 flat + 6.25%)</p>
+                    </div>
+                    <span className="text-2xl font-bold text-orange-300">${bd.providerNet.toFixed(2)}</span>
+                  </div>
+                ); })()}
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
@@ -1604,7 +1614,14 @@ function EarningsTab({
                   <p className="text-gray-500 text-sm">{new Date(lead.submittedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`font-bold ${lead.payoutStatus === "rejected" ? "text-gray-400 line-through" : "text-[#E8822A]"}`}>${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).providerNet.toFixed(2)}</p>
+                  {(() => { const bd = calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings); return (
+                    <>
+                      <p className={`font-bold ${lead.payoutStatus === "rejected" ? "text-gray-400 line-through" : "text-[#E8822A]"}`}>${bd.providerNet.toFixed(2)}</p>
+                      {lead.payoutStatus !== "rejected" && (
+                        <p className="text-gray-400 text-xs">${Number(lead.payoutAmount || 0).toFixed(2)} − ${bd.providerFee.toFixed(2)} fee</p>
+                      )}
+                    </>
+                  ); })()}
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     lead.payoutStatus === "completed" ? "bg-emerald-100 text-emerald-700" :
                     lead.payoutStatus === "rejected" ? "bg-red-100 text-red-700" :

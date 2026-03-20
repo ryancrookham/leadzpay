@@ -15,14 +15,9 @@ import {
   checkDuplicateLead,
   hashIdentifier,
   getSmsAlertSettings,
-  getAutoPaySettings,
-  autoApproveLeads,
-  getApprovedLeadsByBuyerId,
-  updateNextAutoPayDate,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
-import { processBatchPayment } from "@/lib/payments";
 import { sendSms } from "@/lib/sinch";
 
 /**
@@ -209,33 +204,6 @@ export async function POST(request: NextRequest) {
       console.error("[LEAD-SMS-ALERT] Non-blocking SMS error:", smsErr?.message);
     }
 
-    // 9. Instant auto-pay — if buyer has instant schedule + 0-day window, fire payment immediately
-    let instantPayResult: { succeeded: number; failed: number } | null = null;
-    try {
-      const autoPaySettings = await getAutoPaySettings(buyer.id);
-      if (
-        autoPaySettings.auto_pay_enabled &&
-        autoPaySettings.auto_pay_schedule === "instant" &&
-        autoPaySettings.review_window_days === 0
-      ) {
-        // Auto-approve the lead we just created (0-day window = approve immediately)
-        await autoApproveLeads(buyer.id, 0);
-        const approvedLeads = await getApprovedLeadsByBuyerId(buyer.id);
-        if (approvedLeads.length > 0) {
-          const result = await processBatchPayment(buyer.id, approvedLeads);
-          const succeeded = result.results.filter(r => r.status === "succeeded").length;
-          const failed = result.results.filter(r => r.status === "failed").length;
-          instantPayResult = { succeeded, failed };
-          // Reset next_auto_pay_date so it stays ready for the next instant run
-          await updateNextAutoPayDate(buyer.id, new Date());
-          console.log(`[INSTANT-PAY] Lead ${lead.id}: ${succeeded} succeeded, ${failed} failed for buyer ${buyer.id}`);
-        }
-      }
-    } catch (payErr: any) {
-      // Payment failure must never block the lead from being recorded
-      console.error("[INSTANT-PAY] Non-blocking payment error after lead submission:", payErr?.message);
-    }
-
     return NextResponse.json({
       success: true,
       leadId: lead.id,
@@ -245,7 +213,6 @@ export async function POST(request: NextRequest) {
         providerNet: fees.providerNet,
         ratePerLead,
       },
-      ...(instantPayResult !== null && { instantPay: instantPayResult }),
     });
   } catch (error) {
     console.error("Lead submission error:", error);

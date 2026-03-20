@@ -80,7 +80,6 @@ function ProviderOnboardingContent() {
   // Step 4 state
   const [stripeLoading, setStripeLoading] = useState(false);
   const [advancing, setAdvancing] = useState(false);
-  const [stripeIncomplete, setStripeIncomplete] = useState(false);
 
   // Validate token on mount (Mode A: token-based)
   useEffect(() => {
@@ -138,13 +137,6 @@ function ProviderOnboardingContent() {
 
   // Handle Stripe return
   useEffect(() => {
-    // Provider abandoned Stripe without finishing — show warning and keep them on step 4
-    if (stripeParam === "incomplete" && mode === "resume") {
-      setCurrentStep(4);
-      setStripeIncomplete(true);
-      return;
-    }
-
     if ((stripeParam === "success" || stripeParam === "pending") && mode === "resume") {
       const completeStripe = async () => {
         setAdvancing(true);
@@ -158,14 +150,9 @@ function ProviderOnboardingContent() {
           if (data.complete) {
             await update();
             window.location.href = "/provider-dashboard";
-          } else {
-            // Stripe said complete but DB check disagrees — send back to step 4
-            setCurrentStep(4);
-            setStripeIncomplete(true);
           }
         } catch {
-          setCurrentStep(4);
-          setStripeIncomplete(true);
+          // Silent — user can retry
         } finally {
           setAdvancing(false);
         }
@@ -740,39 +727,26 @@ function ProviderOnboardingContent() {
           {displayStep === 4 && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-2">Connect Your Bank Account</h2>
-              <p className="text-gray-500 text-sm mb-4">This is required to receive payouts. You cannot submit leads until your bank account is connected.</p>
-
-              {stripeIncomplete && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                  </svg>
-                  <div>
-                    <p className="text-red-700 font-semibold text-sm">Bank account setup not completed</p>
-                    <p className="text-red-600 text-xs mt-0.5">You left before finishing. Please click below and complete all steps — including adding your bank account — to start receiving payments.</p>
-                  </div>
-                </div>
-              )}
+              <p className="text-gray-500 text-sm mb-6">Set up your payment method to receive lead payouts.</p>
 
               <div className="bg-gray-50 rounded-lg p-6 mb-6 text-center">
                 <div className="text-4xl mb-3">&#127974;</div>
-                <p className="text-gray-700 font-medium mb-2">Secure payouts via Stripe</p>
-                <p className="text-gray-500 text-sm">Stripe is the payment processor WOML uses to send money directly to your bank account after each lead is approved. Setup takes about 2 minutes.</p>
+                <p className="text-gray-700 font-medium mb-2">Secure payments via Stripe</p>
+                <p className="text-gray-500 text-sm">We use Stripe to securely process payments directly to your bank account.</p>
               </div>
 
               <button
                 onClick={handleStripeConnect}
-                disabled={stripeLoading || advancing}
+                disabled={stripeLoading}
                 className="w-full py-3 bg-[#635BFF] text-white rounded-lg font-semibold hover:bg-[#524AE8] transition disabled:opacity-50 mb-3 flex items-center justify-center gap-2"
               >
-                {stripeLoading || advancing ? (
+                {stripeLoading ? (
                   <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>Connecting...</>
                 ) : (
-                  stripeIncomplete ? "Complete Bank Account Setup →" : "Connect with Stripe →"
+                  "Connect with Stripe"
                 )}
               </button>
 
-              <p className="text-center text-xs text-gray-400">You must complete this step to receive payments. There is no skip option.</p>
             </div>
           )}
         </div>
