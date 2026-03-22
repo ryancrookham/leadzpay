@@ -118,27 +118,34 @@ export async function processBatchPayment(
     providerGroups.set(lead.provider_id, group);
   }
 
-  // Validate all providers are onboarded
+  // Load provider records (for Stripe account validation)
   const providerIds = Array.from(providerGroups.keys());
   const providers = await getProvidersByIds(providerIds);
   const providerMap = new Map(providers.map(p => [p.id, p]));
 
-  for (const pid of providerIds) {
-    const provider = providerMap.get(pid);
-    if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
-      return {
-        results: [],
-        error: `Provider ${provider?.display_name || provider?.username || pid} has not completed Stripe onboarding.`,
-      };
-    }
-  }
-
   const platformFees = await getPlatformSettings();
   const results: ProviderResult[] = [];
 
-  // Process each provider group
+  // Process each provider group — fail individually, never abort the whole batch
   for (const [providerId, providerLeads] of providerGroups) {
-    const provider = providerMap.get(providerId)!;
+    const provider = providerMap.get(providerId);
+
+    // Skip providers who haven't completed Stripe onboarding — mark their leads as failed
+    if (!provider?.stripe_account_id || !provider.stripe_onboarding_complete) {
+      const providerName = provider?.display_name || provider?.username || providerId;
+      console.warn(`[payments] Skipping provider ${providerName}: Stripe onboarding incomplete`);
+      results.push({
+        providerId,
+        providerName,
+        status: "failed",
+        leadCount: providerLeads.length,
+        amountCents: 0,
+        error: `${providerName} hasn't completed Stripe setup yet — their leads will be retried once they connect.`,
+      });
+      continue;
+    }
+
+    const confirmedProvider = provider!;
     let totalCents = 0;
     let applicationFeeCents = 0;
 
@@ -160,7 +167,7 @@ export async function processBatchPayment(
         confirm: true,
         application_fee_amount: applicationFeeCents,
         transfer_data: {
-          destination: provider.stripe_account_id!,
+          destination: confirmedProvider.stripe_account_id!,
         },
         metadata: {
           lead_ids: providerLeadIds.join(","),
@@ -210,7 +217,7 @@ export async function processBatchPayment(
 
         results.push({
           providerId,
-          providerName: provider.display_name || provider.username || "Provider",
+          providerName: confirmedProvider.display_name || confirmedProvider.username || "Provider",
           status: "succeeded",
           leadCount: claimedLeads.length,
           amountCents: totalCents,
@@ -219,7 +226,7 @@ export async function processBatchPayment(
       } else if (paymentIntent.status === "requires_action") {
         results.push({
           providerId,
-          providerName: provider.display_name || provider.username || "Provider",
+          providerName: confirmedProvider.display_name || confirmedProvider.username || "Provider",
           status: "requires_action",
           leadCount: providerLeads.length,
           amountCents: totalCents,
@@ -229,7 +236,7 @@ export async function processBatchPayment(
       } else {
         results.push({
           providerId,
-          providerName: provider.display_name || provider.username || "Provider",
+          providerName: confirmedProvider.display_name || confirmedProvider.username || "Provider",
           status: "failed",
           leadCount: providerLeads.length,
           amountCents: totalCents,
@@ -251,7 +258,7 @@ export async function processBatchPayment(
         const pi = err.raw.payment_intent;
         results.push({
           providerId,
-          providerName: provider.display_name || provider.username || "Provider",
+          providerName: confirmedProvider.display_name || confirmedProvider.username || "Provider",
           status: "requires_action",
           leadCount: providerLeads.length,
           amountCents: totalCents,
@@ -263,7 +270,7 @@ export async function processBatchPayment(
 
       results.push({
         providerId,
-        providerName: provider.display_name || provider.username || "Provider",
+        providerName: confirmedProvider.display_name || confirmedProvider.username || "Provider",
         status: "failed",
         leadCount: providerLeads.length,
         amountCents: totalCents,
