@@ -1668,7 +1668,7 @@ function BusinessPortalContent() {
             {/* Pending Payments — Provider-Grouped */}
             {payableLeadsAll.length > 0 && (
               <div className="space-y-2">
-                {/* Summary bar — instant mode gets its own banner */}
+                {/* Summary bar — instant mode gets a warning banner, all modes get Pay All button */}
                 {isInstantMode ? (
                   <div className="bg-orange-50 border border-orange-300 rounded-xl px-5 py-4 flex items-start justify-between flex-wrap gap-3">
                     <div className="flex items-start gap-3 min-w-0">
@@ -1676,9 +1676,9 @@ function BusinessPortalContent() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       <div>
-                        <p className="text-orange-800 text-sm font-semibold">Instant mode is on — these leads should have been paid automatically</p>
+                        <p className="text-orange-800 text-sm font-semibold">Instant mode is on — {payableLeadsAll.length} lead{payableLeadsAll.length !== 1 ? "s" : ""} ({`$${amountPending.toFixed(2)}`}) couldn&apos;t be auto-paid</p>
                         <p className="text-orange-700 text-xs mt-0.5">
-                          These {payableLeadsAll.length} lead{payableLeadsAll.length !== 1 ? "s" : ""} ({`$${amountPending.toFixed(2)}`}) were submitted before Instant mode was enabled, or a provider&apos;s Stripe account isn&apos;t fully connected yet. Pay them now to clear the queue — future leads will be instant automatically.
+                          Most common causes: (1) no payment method saved in your Settings, (2) WOML&apos;s Stripe platform account isn&apos;t fully set up yet, or (3) a provider&apos;s Stripe Connect account has an issue. Check Vercel logs for the exact error. Click &quot;Pay Now&quot; to retry manually.
                         </p>
                         {leadsPayNowResult && (
                           <p className={`text-xs mt-2 font-medium ${leadsPayNowResult.startsWith("Error") ? "text-red-600" : "text-emerald-700"}`}>
@@ -1692,7 +1692,11 @@ function BusinessPortalContent() {
                         setLeadsPayNowLoading(true);
                         setLeadsPayNowResult(null);
                         try {
-                          const res = await fetch("/api/business/pay-now", { method: "POST" });
+                          const res = await fetch("/api/business/pay-now", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ manualBatch: true }),
+                          });
                           const data = await res.json();
                           if (res.ok) {
                             setLeadsPayNowResult(data.message || "Payment processed.");
@@ -1717,26 +1721,50 @@ function BusinessPortalContent() {
                   </div>
                 ) : (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
-                    <span className="text-amber-800 text-sm font-medium">
-                      {payableLeadsAll.length} unpaid lead{payableLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {pendingByProvider.length > 1 && (
-                        <button
-                          onClick={() => handleBatchPayment(payableLeadsAll.map(l => l.id))}
-                          disabled={batchMarkingPaid}
-                          className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
-                        >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
-                          {batchMarkingPaid ? "Processing..." : `Pay All Providers ($${amountPending.toFixed(2)})`}
-                        </button>
+                    <div className="min-w-0">
+                      <span className="text-amber-800 text-sm font-medium">
+                        {payableLeadsAll.length} unpaid lead{payableLeadsAll.length !== 1 ? "s" : ""} across {pendingByProvider.length} provider{pendingByProvider.length !== 1 ? "s" : ""} &middot; ${amountPending.toFixed(2)} total
+                      </span>
+                      {leadsPayNowResult && (
+                        <p className={`text-xs mt-1 font-medium ${leadsPayNowResult.startsWith("Error") ? "text-red-600" : "text-emerald-700"}`}>
+                          {leadsPayNowResult}
+                        </p>
                       )}
                     </div>
+                    <button
+                      onClick={async () => {
+                        setLeadsPayNowLoading(true);
+                        setLeadsPayNowResult(null);
+                        try {
+                          const res = await fetch("/api/business/pay-now", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ manualBatch: true }),
+                          });
+                          const data = await res.json();
+                          if (res.ok) {
+                            setLeadsPayNowResult(data.message || "Payment processed.");
+                            await fetchLeads();
+                          } else {
+                            setLeadsPayNowResult(`Error: ${data.error}`);
+                          }
+                        } catch {
+                          setLeadsPayNowResult("Error: Failed to process payment.");
+                        } finally {
+                          setLeadsPayNowLoading(false);
+                        }
+                      }}
+                      disabled={leadsPayNowLoading}
+                      className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                      {leadsPayNowLoading ? "Paying…" : `Pay All Leads ($${amountPending.toFixed(2)})`}
+                    </button>
                   </div>
                 )}
 
-                {/* Per-provider cards — hidden in instant mode (banner handles it) */}
-                {!isInstantMode && pendingByProvider.map(group => (
+                {/* Per-provider payment cards — visible in all modes */}
+                {pendingByProvider.map(group => (
                   <div key={group.providerId} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2 shadow-sm">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-[#E8822A]/10 flex items-center justify-center shrink-0">
@@ -3273,6 +3301,18 @@ function ProvidersTab({
                   />
                   <span className="text-gray-500 text-sm">per qualified lead</span>
                 </div>
+                {editRate > 0 && (() => {
+                  const bd = calculateFeeBreakdown(editRate, feeSettings);
+                  return (
+                    <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl p-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="text-gray-500">You (business) pay:</div>
+                      <div className="font-semibold text-gray-800">${bd.buyerTotal.toFixed(2)} <span className="text-gray-400 font-normal">(${editRate.toFixed(2)} + ${bd.buyerFee.toFixed(2)} fee)</span></div>
+                      <div className="text-gray-500">Provider earns:</div>
+                      <div className="font-semibold text-emerald-700">${bd.providerNet.toFixed(2)} <span className="text-gray-400 font-normal">(${editRate.toFixed(2)} − ${bd.providerFee.toFixed(2)} fee)</span></div>
+                      <div className="col-span-2 text-gray-400 text-[10px] pt-0.5">WOML fee: $0.30 flat + 12.5%, split evenly</div>
+                    </div>
+                  );
+                })()}
               </div>
               {/* Payment Timing */}
               <div>
@@ -5824,6 +5864,7 @@ function ConnectionsTab({
           onSave={handleUpdateTerms}
           onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
           saveButtonText="Update Terms"
+          feeSettings={feeSettings}
         />
       )}
 
@@ -5860,6 +5901,7 @@ function TermsModal({
   onSave,
   onCancel,
   saveButtonText,
+  feeSettings,
 }: {
   title: string;
   ratePerLead: number;
@@ -5888,6 +5930,7 @@ function TermsModal({
   onSave: () => void;
   onCancel: () => void;
   saveButtonText: string;
+  feeSettings?: FeeSettings;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
@@ -5915,6 +5958,19 @@ function TermsModal({
               />
               <span className="text-gray-500">per qualified lead</span>
             </div>
+            {/* Live fee breakdown preview */}
+            {ratePerLead > 0 && (() => {
+              const bd = calculateFeeBreakdown(ratePerLead, feeSettings);
+              return (
+                <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl p-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  <div className="text-gray-500">You (business) pay:</div>
+                  <div className="font-semibold text-gray-800">${bd.buyerTotal.toFixed(2)} <span className="text-gray-400 font-normal">(${ratePerLead.toFixed(2)} + ${bd.buyerFee.toFixed(2)} fee)</span></div>
+                  <div className="text-gray-500">Provider earns:</div>
+                  <div className="font-semibold text-emerald-700">${bd.providerNet.toFixed(2)} <span className="text-gray-400 font-normal">(${ratePerLead.toFixed(2)} − ${bd.providerFee.toFixed(2)} fee)</span></div>
+                  <div className="col-span-2 text-gray-400 text-[10px] pt-0.5">WOML fee: $0.30 flat + 12.5%, split evenly between you and provider</div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Payment Timing */}
