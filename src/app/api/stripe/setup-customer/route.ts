@@ -45,21 +45,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Checkout Session in setup mode to collect payment method.
-    // IMPORTANT: setup_future_usage: "off_session" is required so that the saved card
-    // can be charged in the background (instant mode / cron auto-pay) without the
-    // business being present in the browser. Without this, Stripe only authorizes
+    // IMPORTANT: setup_intent_data.usage = "off_session" is required so that the saved
+    // card/bank can be charged in the background (instant mode / cron auto-pay) without
+    // the business being present in the browser. Without this, Stripe only authorizes
     // on-session charges and rejects background PaymentIntents with authentication_required.
+    // NOTE: payment_method_options.*.setup_future_usage is only valid in "payment" mode,
+    // NOT "setup" mode — use setup_intent_data.usage instead.
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "setup",
       customer: customerId,
       payment_method_types: ["card", "us_bank_account"],
-      payment_method_options: {
-        card: {
-          setup_future_usage: "off_session",
-        },
-        us_bank_account: {
-          setup_future_usage: "off_session",
-        },
+      setup_intent_data: {
+        usage: "off_session",
       },
       success_url: `${APP_URL}/api/stripe/callback?status=success&tab=settings`,
       cancel_url: `${APP_URL}/api/stripe/callback?status=cancel&tab=settings`,
