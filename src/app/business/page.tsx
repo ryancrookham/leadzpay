@@ -6063,8 +6063,8 @@ function TermsModal({
               <input
                 type="number"
                 value={terminationDays}
-                onChange={(e) => setTerminationDays(parseInt(e.target.value) || 1)}
-                min="1"
+                onChange={(e) => setTerminationDays(Math.max(0, parseInt(e.target.value) || 0))}
+                min="0"
                 className="w-20 px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition"
               />
               <span className="text-gray-500">days notice required</span>
