@@ -10,6 +10,7 @@ import {
   updateConnection,
   getPlatformSettings,
   getActiveBusinessCriteria,
+  getCriteriaById,
   getCriteriaFields,
   ensureDuplicateCheckColumns,
   checkDuplicateLead,
@@ -103,19 +104,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Buyer account not found" }, { status: 404 });
     }
 
-    // 2b. Check for active criteria — validate mandatory fields and use criteria rate ONLY as fallback
-    // The per-connection rate_per_lead always takes precedence (it was individually negotiated).
-    // Criteria payout_per_lead is only used if the connection has no rate set (edge case).
-    const activeCriteria = await getActiveBusinessCriteria(connection.buyer_id);
+    // 2b. Validate fields and determine rate.
+    // IMPORTANT: Use the criteria snapshot from when the provider signed up (connection.criteria_id),
+    // NOT the current live criteria. This ensures that if the business later adds new required fields
+    // or changes the deal terms, existing providers are NOT affected — only new signups see the new terms.
+    // Fall back to active criteria only if the connection has no snapshot (older connections).
+    const criteriaForValidation = connection.criteria_id
+      ? await getCriteriaById(connection.criteria_id)
+      : await getActiveBusinessCriteria(connection.buyer_id);
+
     let ratePerLead = Number(connection.rate_per_lead) || 0;
 
-    if (activeCriteria) {
-      // Do NOT override ratePerLead here — connection rate wins. Use criteria rate only if connection has none.
-      if (!ratePerLead) ratePerLead = Number(activeCriteria.payout_per_lead) || 0;
+    if (criteriaForValidation) {
+      // Connection rate always wins — it was individually negotiated at signup.
+      // Criteria payout_per_lead is only used if the connection has no rate set (edge case).
+      if (!ratePerLead) ratePerLead = Number(criteriaForValidation.payout_per_lead) || 0;
 
-      // Validate mandatory criteria fields
+      // Validate mandatory fields against the SNAPSHOT the provider agreed to, not the live criteria.
       if (criteriaFieldsData && Array.isArray(criteriaFieldsData)) {
-        const criteriaFields = await getCriteriaFields(activeCriteria.id);
+        const criteriaFields = await getCriteriaFields(criteriaForValidation.id);
         const mandatoryFields = criteriaFields.filter(f => f.is_mandatory);
         for (const mf of mandatoryFields) {
           const submitted = criteriaFieldsData.find((d: { fieldId?: string }) => d.fieldId === mf.id);

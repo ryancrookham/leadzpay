@@ -1659,17 +1659,18 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
   const sql = getSql();
   const result = await sql`SELECT key, value FROM platform_settings WHERE key LIKE 'fee_%'`;
 
-  // Defaults: 12.5% of lead value, deducted from provider payout (buyer pays face value)
+  // Defaults: hybrid fee — $0.30 flat + 12.5% of lead value, split 50/50 between buyer and provider.
+  // The $0.30 flat component offsets Stripe's per-transaction $0.30 processing fee.
   const settings: PlatformSettings = {
-    fee_total: 2.0,
+    fee_total: 0,
     fee_buyer: 0.0,
     fee_provider: 0.0,
-    fee_type: 'percent',
+    fee_type: 'mixed',
     fee_percent: 12.5,
-    fee_percent_buyer_share: 50,  // 50% from buyer, 50% from provider — even split of 12.5%
-    fee_mixed_flat: 0,
-    fee_mixed_percent: 0,
-    fee_mixed_buyer_share: 0,
+    fee_percent_buyer_share: 50,
+    fee_mixed_flat: 0.30,
+    fee_mixed_percent: 12.5,
+    fee_mixed_buyer_share: 50,  // 50% from buyer, 50% from provider — even split
   };
 
   for (const row of result) {
@@ -2217,6 +2218,18 @@ export async function getActiveBusinessCriteria(businessId: string): Promise<DbB
   const result = await sql`
     SELECT * FROM business_lead_criteria
     WHERE business_id = ${businessId} AND is_active = TRUE
+    LIMIT 1
+  `;
+  return first<DbBusinessLeadCriteria>(result);
+}
+
+// Get a specific criteria snapshot by ID — used to validate leads against
+// the criteria the provider originally agreed to, not the current live criteria.
+export async function getCriteriaById(criteriaId: string): Promise<DbBusinessLeadCriteria | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM business_lead_criteria
+    WHERE id = ${criteriaId}
     LIMIT 1
   `;
   return first<DbBusinessLeadCriteria>(result);
