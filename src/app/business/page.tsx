@@ -1485,18 +1485,30 @@ function BusinessPortalContent() {
                         const days = Math.floor(hrs / 24);
                         return `${days}d ago`;
                       })();
+                      const isRejected = lead.payoutStatus === "rejected";
                       return (
-                        <tr key={lead.id} className="border-b border-gray-100">
+                        <tr key={lead.id} className={`border-b border-gray-100 ${isRejected ? "opacity-60" : ""}`}>
                           <td className="py-3">
-                            <span className="text-gray-800 font-medium">{lead.customerName}</span>
-                            <span className="text-gray-400 text-xs ml-2">{relTime}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-gray-800 font-medium ${isRejected ? "line-through text-gray-400" : ""}`}>{lead.customerName}</span>
+                              {isRejected && (
+                                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-600">Rejected</span>
+                              )}
+                            </div>
+                            <span className="text-gray-400 text-xs">{relTime}</span>
                           </td>
                           <td className="py-3">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${pillStyles[status] || pillStyles.new}`}>
                               {pillLabels[status] || "Lead"}
                             </span>
                           </td>
-                          <td className="py-3 text-gray-800 font-medium">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</td>
+                          <td className="py-3 font-medium">
+                            {isRejected ? (
+                              <span className="line-through text-gray-400">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</span>
+                            ) : (
+                              <span className="text-gray-800">${calculateFeeBreakdown(lead.payoutAmount || 0, feeSettings).buyerTotal.toFixed(2)}</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
