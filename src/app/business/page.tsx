@@ -1731,35 +1731,74 @@ function BusinessPortalContent() {
                         </p>
                       )}
                     </div>
-                    <button
-                      onClick={async () => {
-                        setLeadsPayNowLoading(true);
-                        setLeadsPayNowResult(null);
-                        try {
-                          const res = await fetch("/api/business/pay-now", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ manualBatch: true }),
-                          });
-                          const data = await res.json();
-                          if (res.ok) {
-                            setLeadsPayNowResult(data.message || "Payment processed.");
-                            await fetchLeads();
-                          } else {
-                            setLeadsPayNowResult(`Error: ${data.error}`);
+                    <div className="flex items-center gap-2 shrink-0">
+                      {selectedLeads.size > 0 && (() => {
+                        const selectedTotal = payableLeadsAll
+                          .filter(l => selectedLeads.has(l.id))
+                          .reduce((sum, l) => sum + calculateFeeBreakdown(l.payoutAmount || 0, feeSettings).buyerTotal, 0);
+                        return (
+                          <button
+                            onClick={async () => {
+                              setLeadsPayNowLoading(true);
+                              setLeadsPayNowResult(null);
+                              try {
+                                const res = await fetch("/api/stripe/batch-pay", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ leadIds: Array.from(selectedLeads) }),
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                  setLeadsPayNowResult(`Paid ${selectedLeads.size} selected lead${selectedLeads.size !== 1 ? "s" : ""}.`);
+                                  setSelectedLeads(new Set());
+                                  await fetchLeads();
+                                } else {
+                                  setLeadsPayNowResult(`Error: ${data.error}`);
+                                }
+                              } catch {
+                                setLeadsPayNowResult("Error: Failed to process payment.");
+                              } finally {
+                                setLeadsPayNowLoading(false);
+                              }
+                            }}
+                            disabled={leadsPayNowLoading}
+                            className="inline-flex items-center gap-1.5 text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            {leadsPayNowLoading ? "Paying…" : `Pay Selected (${selectedLeads.size}) · $${selectedTotal.toFixed(2)}`}
+                          </button>
+                        );
+                      })()}
+                      <button
+                        onClick={async () => {
+                          setLeadsPayNowLoading(true);
+                          setLeadsPayNowResult(null);
+                          try {
+                            const res = await fetch("/api/business/pay-now", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ manualBatch: true }),
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setLeadsPayNowResult(data.message || "Payment processed.");
+                              await fetchLeads();
+                            } else {
+                              setLeadsPayNowResult(`Error: ${data.error}`);
+                            }
+                          } catch {
+                            setLeadsPayNowResult("Error: Failed to process payment.");
+                          } finally {
+                            setLeadsPayNowLoading(false);
                           }
-                        } catch {
-                          setLeadsPayNowResult("Error: Failed to process payment.");
-                        } finally {
-                          setLeadsPayNowLoading(false);
-                        }
-                      }}
-                      disabled={leadsPayNowLoading}
-                      className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 shrink-0"
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
-                      {leadsPayNowLoading ? "Paying…" : `Pay All Leads ($${amountPending.toFixed(2)})`}
-                    </button>
+                        }}
+                        disabled={leadsPayNowLoading}
+                        className="inline-flex items-center gap-1.5 text-white bg-[#635BFF] hover:bg-[#5248e5] px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-7.076-2.19l-.897 5.555C5.014 22.77 7.862 24 11.422 24c2.58 0 4.711-.636 6.25-1.872 1.69-1.349 2.498-3.34 2.498-5.777 0-4.116-2.503-5.834-6.194-7.2z"/></svg>
+                        {leadsPayNowLoading ? "Paying…" : `Pay All Leads ($${amountPending.toFixed(2)})`}
+                      </button>
+                    </div>
                   </div>
                 )}
 
