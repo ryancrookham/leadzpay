@@ -2596,7 +2596,7 @@ function ProvidersTab({
 
   const openEditTerms = (connection: ApiConnection) => {
     setEditingConnection(connection);
-    setEditRate(connection.rate_per_lead);
+    setEditRate(Number(connection.rate_per_lead));
     setEditPaymentTiming((connection.payment_timing as typeof editPaymentTiming) || "per_lead");
     setEditEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
     setEditWeeklyLeadCap(connection.weekly_lead_cap || undefined);
@@ -5716,7 +5716,7 @@ function ConnectionsTab({
 
   const openEditTermsModal = (connection: ApiConnection) => {
     setSelectedConnection(connection);
-    setRatePerLead(connection.rate_per_lead);
+    setRatePerLead(Number(connection.rate_per_lead));
     setPaymentTiming(connection.payment_timing as "per_lead" | "weekly" | "biweekly" | "monthly");
     setMinimumPayout(undefined);
     setLeadTypes(["auto"]);
