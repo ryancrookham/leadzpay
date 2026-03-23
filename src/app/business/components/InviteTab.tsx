@@ -73,7 +73,8 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   const [criteriaWeeklyCap, setCriteriaWeeklyCap] = useState(20);
   const [criteriaEnableMonthlyCap, setCriteriaEnableMonthlyCap] = useState(false);
   const [criteriaMonthlyCap, setCriteriaMonthlyCap] = useState(80);
-  const [criteriaPaymentTiming, setCriteriaPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [criteriaPaymentTiming, setCriteriaPaymentTiming] = useState<"instant" | "manual" | "scheduled">("instant");
+  const [criteriaScheduledCadence, setCriteriaScheduledCadence] = useState<"weekly" | "biweekly" | "monthly">("weekly");
   const [criteriaTerminationDays, setCriteriaTerminationDays] = useState(7);
   const [criteriaFields, setCriteriaFields] = useState<CriteriaField[]>([]);
   const [terminateConfirm, setTerminateConfirm] = useState(false);
@@ -141,7 +142,20 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
       setCriteriaWeeklyCap(savedCriteria.weekly_cap || 20);
       setCriteriaEnableMonthlyCap(!!savedCriteria.monthly_cap);
       setCriteriaMonthlyCap(savedCriteria.monthly_cap || 80);
-      setCriteriaPaymentTiming((savedCriteria.payment_timing as typeof criteriaPaymentTiming) || "per_lead");
+      const pt = savedCriteria.payment_timing || "instant";
+      if (pt === "instant" || pt === "manual" || pt === "scheduled") {
+        setCriteriaPaymentTiming(pt);
+      } else if (pt === "per_lead") {
+        setCriteriaPaymentTiming("instant");
+      } else if (pt === "weekly" || pt === "biweekly" || pt === "monthly") {
+        setCriteriaPaymentTiming("scheduled");
+        setCriteriaScheduledCadence(pt as "weekly" | "biweekly" | "monthly");
+      } else if (pt.startsWith("scheduled_")) {
+        setCriteriaPaymentTiming("scheduled");
+        setCriteriaScheduledCadence((pt.replace("scheduled_", "") as "weekly" | "biweekly" | "monthly") || "weekly");
+      } else {
+        setCriteriaPaymentTiming("instant");
+      }
       setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 7);
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
@@ -206,7 +220,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         payoutPerLead: criteriaPayoutPerLead,
         weeklyCap: criteriaEnableWeeklyCap ? criteriaWeeklyCap : null,
         monthlyCap: criteriaEnableMonthlyCap ? criteriaMonthlyCap : null,
-        paymentTiming: criteriaPaymentTiming,
+        paymentTiming: criteriaPaymentTiming === "scheduled" ? `scheduled_${criteriaScheduledCadence}` : criteriaPaymentTiming,
         terminationNoticeDays: criteriaTerminationDays,
         fields: criteriaFields,
       };
@@ -380,7 +394,18 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   };
 
   const activeTokens = tokens.filter(t => t.is_active);
-  const formatTiming = (t: string) => ({ per_lead: "Per Lead", weekly: "Weekly", biweekly: "Bi-weekly", monthly: "Monthly" }[t] || t);
+  const formatTiming = (t: string) => {
+    if (t === "instant" || t === "per_lead") return "Instant";
+    if (t === "manual") return "Manual";
+    if (t === "scheduled") return "Scheduled";
+    if (t === "scheduled_weekly") return "Scheduled · Weekly";
+    if (t === "scheduled_biweekly") return "Scheduled · Bi-weekly";
+    if (t === "scheduled_monthly") return "Scheduled · Monthly";
+    if (t === "weekly") return "Scheduled · Weekly";
+    if (t === "biweekly") return "Scheduled · Bi-weekly";
+    if (t === "monthly") return "Scheduled · Monthly";
+    return t;
+  };
 
   const fieldTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
@@ -432,18 +457,28 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Timing</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
                 <select
                   value={criteriaPaymentTiming}
                   onChange={e => setCriteriaPaymentTiming(e.target.value as typeof criteriaPaymentTiming)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
                 >
-                  <option value="per_lead">Per Lead</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="instant">Instant — paid per lead immediately</option>
+                  <option value="manual">Manual — business pays when ready</option>
+                  <option value="scheduled">Scheduled — paid on a set cadence</option>
                 </select>
+                {criteriaPaymentTiming === "scheduled" && (
+                  <select
+                    value={criteriaScheduledCadence}
+                    onChange={e => setCriteriaScheduledCadence(e.target.value as typeof criteriaScheduledCadence)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Termination Notice (days)</label>
@@ -576,8 +611,8 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                 <p className="text-lg font-bold text-[#E8822A]">${Number(savedCriteria.payout_per_lead).toFixed(2)}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">Payment Timing</p>
-                <p className="text-lg font-bold text-gray-800">{formatTiming(savedCriteria.payment_timing || "per_lead")}</p>
+                <p className="text-xs text-gray-500 mb-1">Payment Mode</p>
+                <p className="text-lg font-bold text-gray-800">{formatTiming(savedCriteria.payment_timing || "instant")}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">Termination Notice</p>
