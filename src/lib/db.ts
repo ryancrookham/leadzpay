@@ -793,7 +793,11 @@ export async function updateSmsAlertSettings(
   const sql = getSql();
 
   await sql`
-    UPDATE users SET sms_alerts_enabled = ${settings.smsAlertsEnabled}, updated_at = NOW()
+    UPDATE users SET
+      sms_alerts_enabled = ${settings.smsAlertsEnabled},
+      sms_alert_phone1 = NULL,
+      sms_alert_phone2 = NULL,
+      updated_at = NOW()
     WHERE id = ${userId}
   `;
 
