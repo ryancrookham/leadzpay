@@ -907,7 +907,7 @@ export default function AdminPanel() {
                               <th className="pb-2 pr-4">This Month</th>
                               <th className="pb-2 pr-4">All Time</th>
                               <th className="pb-2 pr-4">Gross</th>
-                              <th className="pb-2 pr-4">Fees (6.25%)</th>
+                              <th className="pb-2 pr-4">Fees ($0.15 + 6.25%)</th>
                               <th className="pb-2 pr-4">Net Earnings</th>
                               <th className="pb-2 pr-4">Last Submission</th>
                               <th className="pb-2">Status</th>

@@ -5773,7 +5773,7 @@ function ConnectionsTab({
                       <p className="text-gray-500 text-sm">{connection.providerEmail}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-[#E8822A] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
-                        <span className="text-gray-400 text-xs">(incl. $0.30 flat + 6.25% WOML fee)</span>
+                        <span className="text-gray-400 text-xs">(incl. $0.15 flat + 6.25% WOML fee)</span>
                         <span className="text-gray-400">•</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>
