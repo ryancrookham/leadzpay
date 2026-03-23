@@ -169,7 +169,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
       setCriteriaPayoutPerLead(50);
       setCriteriaEnableWeeklyCap(false);
       setCriteriaEnableMonthlyCap(false);
-      setCriteriaPaymentTiming("per_lead");
+      setCriteriaPaymentTiming("instant");
       setCriteriaTerminationDays(7);
       setCriteriaFields([]);
     }
