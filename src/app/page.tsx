@@ -410,7 +410,7 @@ if (!mounted || isLoading) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#E77500]/5 to-transparent pointer-events-none" />
           <FadeIn className="max-w-3xl mx-auto text-center relative z-10">
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
-              Ready to Scale Your <span className="text-[#E77500]">Referrals</span>?
+              Ready to Scale Your <span className="text-[#E77500]">Referrals?</span>
             </h2>
             <p className="text-white/45 text-lg mb-12 leading-relaxed">
               Join businesses using WOML to turn word of mouth into a predictable, automated lead engine.
