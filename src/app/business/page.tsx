@@ -2393,7 +2393,7 @@ function ProvidersTab({
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
-  const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [paymentTiming, setPaymentTiming] = useState<string>("instant");
   const [enableLeadCaps, setEnableLeadCaps] = useState(false);
   const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
@@ -2403,7 +2403,7 @@ function ProvidersTab({
   // Edit terms modal state
   const [editingConnection, setEditingConnection] = useState<ApiConnection | null>(null);
   const [editRate, setEditRate] = useState(50);
-  const [editPaymentTiming, setEditPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [editPaymentTiming, setEditPaymentTiming] = useState<string>("instant");
   const [editEnableLeadCaps, setEditEnableLeadCaps] = useState(false);
   const [editWeeklyLeadCap, setEditWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [editMonthlyLeadCap, setEditMonthlyLeadCap] = useState<number | undefined>(undefined);
@@ -2651,7 +2651,7 @@ function ProvidersTab({
   const openEditTerms = (connection: ApiConnection) => {
     setEditingConnection(connection);
     setEditRate(Number(connection.rate_per_lead));
-    setEditPaymentTiming((connection.payment_timing as typeof editPaymentTiming) || "per_lead");
+    setEditPaymentTiming(connection.payment_timing || "instant");
     setEditEnableLeadCaps(!!(connection.weekly_lead_cap || connection.monthly_lead_cap));
     setEditWeeklyLeadCap(connection.weekly_lead_cap || undefined);
     setEditMonthlyLeadCap(connection.monthly_lead_cap || undefined);
@@ -2991,7 +2991,14 @@ function ProvidersTab({
                           </div>
                           <div>
                             <p className="text-emerald-600 text-xs">Payment</p>
-                            <p className="text-emerald-800 font-medium capitalize">{(connection.payment_timing || "per_lead").replace("_", " ")}</p>
+                            <p className="text-emerald-800 font-medium capitalize">{
+                              connection.payment_timing === "instant" ? "⚡ Instant" :
+                              connection.payment_timing === "manual" ? "🖐️ Manual" :
+                              connection.payment_timing === "scheduled_weekly" || connection.payment_timing === "weekly" ? "📅 Weekly" :
+                              connection.payment_timing === "scheduled_biweekly" || connection.payment_timing === "biweekly" ? "📅 Bi-weekly" :
+                              connection.payment_timing === "scheduled_monthly" || connection.payment_timing === "monthly" ? "📅 Monthly" :
+                              connection.payment_timing || "Manual"
+                            }</p>
                           </div>
                           <div>
                             <p className="text-emerald-600 text-xs">Total Leads</p>
@@ -3082,16 +3089,17 @@ function ProvidersTab({
 
                       {/* Payment Timing */}
                       <div>
-                        <label className="block text-gray-700 text-sm font-medium mb-1">Payment Timing</label>
+                        <label className="block text-gray-700 text-sm font-medium mb-1">Payment Mode</label>
                         <select
                           value={paymentTiming}
-                          onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
+                          onChange={(e) => setPaymentTiming(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                         >
-                          <option value="per_lead">Per Lead (Immediate)</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="biweekly">Bi-weekly</option>
-                          <option value="monthly">Monthly</option>
+                          <option value="instant">⚡ Instant — paid immediately on submission</option>
+                          <option value="scheduled_weekly">📅 Scheduled — Weekly</option>
+                          <option value="scheduled_biweekly">📅 Scheduled — Bi-weekly</option>
+                          <option value="scheduled_monthly">📅 Scheduled — Monthly</option>
+                          <option value="manual">🖐️ Manual — you pay when ready</option>
                         </select>
                       </div>
 
@@ -3370,16 +3378,17 @@ function ProvidersTab({
               </div>
               {/* Payment Timing */}
               <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Mode</label>
                 <select
                   value={editPaymentTiming}
-                  onChange={(e) => setEditPaymentTiming(e.target.value as typeof editPaymentTiming)}
+                  onChange={(e) => setEditPaymentTiming(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                 >
-                  <option value="per_lead">Per Lead (Immediate)</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="instant">⚡ Instant — paid immediately on submission</option>
+                  <option value="scheduled_weekly">📅 Scheduled — Weekly</option>
+                  <option value="scheduled_biweekly">📅 Scheduled — Bi-weekly</option>
+                  <option value="scheduled_monthly">📅 Scheduled — Monthly</option>
+                  <option value="manual">🖐️ Manual — you pay when ready</option>
                 </select>
               </div>
               {/* Lead Caps */}
@@ -5759,7 +5768,7 @@ function ConnectionsTab({
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
-  const [paymentTiming, setPaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [paymentTiming, setPaymentTiming] = useState<string>("instant");
   const [minimumPayout, setMinimumPayout] = useState<number | undefined>(undefined);
   const [leadTypes, setLeadTypes] = useState(["auto"]);
   const [exclusivity, setExclusivity] = useState(false);
@@ -5773,7 +5782,7 @@ function ConnectionsTab({
   const openEditTermsModal = (connection: ApiConnection) => {
     setSelectedConnection(connection);
     setRatePerLead(Number(connection.rate_per_lead));
-    setPaymentTiming(connection.payment_timing as "per_lead" | "weekly" | "biweekly" | "monthly");
+    setPaymentTiming(connection.payment_timing || "instant");
     setMinimumPayout(undefined);
     setLeadTypes(["auto"]);
     setExclusivity(false);
@@ -6031,21 +6040,22 @@ function TermsModal({
 
           {/* Payment Timing */}
           <div>
-            <label className="block text-gray-700 text-sm font-medium mb-2">Payment Schedule</label>
+            <label className="block text-gray-700 text-sm font-medium mb-2">Payment Mode</label>
             <select
               value={paymentTiming}
-              onChange={(e) => setPaymentTiming(e.target.value as typeof paymentTiming)}
+              onChange={(e) => setPaymentTiming(e.target.value)}
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:border-[#E8822A] focus:outline-none transition bg-white"
             >
-              <option value="per_lead">Per Lead (Immediate)</option>
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Bi-weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="instant">⚡ Instant — paid immediately on submission</option>
+              <option value="scheduled_weekly">📅 Scheduled — Weekly</option>
+              <option value="scheduled_biweekly">📅 Scheduled — Bi-weekly</option>
+              <option value="scheduled_monthly">📅 Scheduled — Monthly</option>
+              <option value="manual">🖐️ Manual — you pay when ready</option>
             </select>
           </div>
 
           {/* Minimum Payout */}
-          {paymentTiming !== "per_lead" && (
+          {paymentTiming !== "instant" && (
             <div>
               <label className="block text-gray-700 text-sm font-medium mb-2">
                 Minimum Payout Threshold <span className="text-gray-400">(optional)</span>
