@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         payment_timing: terms?.paymentTiming || "instant",
         weekly_lead_cap: terms?.weeklyLeadCap,
         monthly_lead_cap: terms?.monthlyLeadCap,
-        termination_notice_days: terms?.terminationNoticeDays || 7,
+        termination_notice_days: terms?.terminationNoticeDays ?? 0,
       });
 
       return NextResponse.json({ success: true, connection });

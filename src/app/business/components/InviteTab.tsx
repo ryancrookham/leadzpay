@@ -157,7 +157,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
       } else {
         setCriteriaPaymentTiming("instant");
       }
-      setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 7);
+      setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 0);
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,
@@ -295,7 +295,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
           monthlyCap: savedCriteria.monthly_cap,
           expiresAt: enableExpiry ? new Date(expiryDate).toISOString() : null,
           maxUses: enableMaxUses ? maxUses : null,
-          terminationNoticeDays: savedCriteria.termination_notice_days ?? 7,
+          terminationNoticeDays: savedCriteria.termination_notice_days ?? 0,
         }),
       });
       const data = await res.json();

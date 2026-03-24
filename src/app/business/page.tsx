@@ -2524,7 +2524,7 @@ function ProvidersTab({
         setInviteEnableLeadCaps(false);
         setInviteWeeklyLeadCap(undefined);
         setInviteMonthlyLeadCap(undefined);
-        setInviteTerminationDays(7);
+        setInviteTerminationDays(0);
         // Refresh invites list
         await loadInvites();
       } else {
@@ -2644,7 +2644,7 @@ function ProvidersTab({
     setEnableLeadCaps(false);
     setWeeklyLeadCap(undefined);
     setMonthlyLeadCap(undefined);
-    setTerminationDays(7);
+    setTerminationDays(0);
     setInviteMessage("");
   };
 

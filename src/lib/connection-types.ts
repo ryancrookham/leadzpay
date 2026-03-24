@@ -138,7 +138,7 @@ export function getDefaultContractTerms(licensedStates: string[] = []): Contract
     paymentTerms: getDefaultPaymentTerms(),
     leadTypes: ["auto"],
     exclusivity: false,
-    terminationNoticeDays: 7,
+    terminationNoticeDays: 0,
     licensedStates,
     complianceAcknowledged: false,
     agreementVersion: COMPLIANCE.currentAgreementVersion,

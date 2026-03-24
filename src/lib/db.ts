@@ -423,7 +423,7 @@ export async function createConnection(data: {
       ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap ?? null},
       ${data.monthly_lead_cap ?? null},
-      ${data.termination_notice_days || 7},
+      ${data.termination_notice_days ?? 0},
       ${data.invite_token_id || null},
       ${data.required_fields ? JSON.stringify(data.required_fields) : null},
       ${data.criteria_id || null}
@@ -1486,7 +1486,7 @@ export async function createInviteToken(data: {
       ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap ?? null},
       ${data.monthly_lead_cap ?? null},
-      ${data.termination_notice_days ?? 7}
+      ${data.termination_notice_days ?? 0}
     )
     RETURNING *
   `;
@@ -2159,10 +2159,10 @@ export async function createInvite(data: {
       ${data.provider_phone || null},
       ${data.provider_name || null},
       ${data.rate_per_lead || 50},
-      ${data.payment_timing || 'per_lead'},
+      ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap || null},
       ${data.monthly_lead_cap || null},
-      ${data.termination_notice_days || 7},
+      ${data.termination_notice_days ?? 0},
       ${data.message || null}
     )
     RETURNING *

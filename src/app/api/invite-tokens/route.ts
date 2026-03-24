@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       payment_timing: paymentTiming || "instant",
       weekly_lead_cap: weeklyCap ?? null,
       monthly_lead_cap: monthlyCap ?? null,
-      termination_notice_days: terminationNoticeDays ?? 7,
+      termination_notice_days: terminationNoticeDays ?? 0,
       max_uses: maxUses || null,
       expires_at: expiresAt || null,
     });

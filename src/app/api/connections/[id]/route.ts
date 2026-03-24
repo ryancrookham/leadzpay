@@ -63,7 +63,7 @@ export async function PATCH(
             payment_timing: paymentTiming || connection.payment_timing,
             weekly_lead_cap: weeklyLeadCap,
             monthly_lead_cap: monthlyLeadCap,
-            termination_notice_days: terminationNoticeDays || 7,
+            termination_notice_days: terminationNoticeDays ?? 0,
           };
           console.log("[CONNECTIONS] Calling updateConnection with:", updateData);
 
