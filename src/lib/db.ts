@@ -681,11 +681,16 @@ export async function ensurePaymentMethodColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payment_method_set_at TIMESTAMPTZ`;
 }
 
-// Drop the old payment_timing check constraint so new values (instant, manual, scheduled_*) are allowed.
+// Drop the old payment_timing check constraints so new values (instant, manual, scheduled_*) are allowed.
 export async function ensurePaymentTimingConstraintDropped(): Promise<void> {
   const sql = getSql();
   try {
     await sql`ALTER TABLE connections DROP CONSTRAINT IF EXISTS connections_payment_timing_check`;
+  } catch {
+    // Constraint may not exist — safe to ignore
+  }
+  try {
+    await sql`ALTER TABLE invite_tokens DROP CONSTRAINT IF EXISTS invite_tokens_payment_timing_check`;
   } catch {
     // Constraint may not exist — safe to ignore
   }
@@ -1463,6 +1468,7 @@ export async function createInviteToken(data: {
   termination_notice_days?: number;
 }): Promise<DbInviteToken> {
   const sql = getSql();
+  await ensurePaymentTimingConstraintDropped();
   const result = await sql`
     INSERT INTO invite_tokens (
       buyer_id, token, label, channel_name, channel_description,
@@ -1477,7 +1483,7 @@ export async function createInviteToken(data: {
       ${data.max_uses || null},
       ${data.expires_at || null},
       ${data.rate_per_lead},
-      ${data.payment_timing || 'per_lead'},
+      ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap ?? null},
       ${data.monthly_lead_cap ?? null},
       ${data.termination_notice_days ?? 7}
