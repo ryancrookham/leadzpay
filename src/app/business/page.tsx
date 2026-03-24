@@ -2316,7 +2316,7 @@ function BusinessPortalContent() {
         {/* Settings Tab */}
         {activeTab === "settings" && (
           <TabErrorBoundary tabName="Settings">
-            <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} onPayoutModeChange={setIsInstantMode} />
+            <SettingsTab currentBuyer={currentBuyer} feeSettings={feeSettings} onPayoutModeChange={setIsInstantMode} onDefaultPaymentModeChange={setDefaultPaymentMode} />
           </TabErrorBoundary>
         )}
 
@@ -4676,7 +4676,7 @@ Reply to this email or call me at [Your Number] when you get a chance. Looking f
 }
 
 // Settings Tab
-function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings; onPayoutModeChange?: (isInstant: boolean) => void }) {
+function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultPaymentModeChange }: { currentBuyer: import("@/lib/auth-types").LeadBuyer | null; feeSettings?: FeeSettings; onPayoutModeChange?: (isInstant: boolean) => void; onDefaultPaymentModeChange?: (mode: string) => void }) {
   const { updateUser } = useAuth();
   const [email, setEmail] = useState(currentBuyer?.email || "");
   const [businessName, setBusinessName] = useState(currentBuyer?.businessName || "");
@@ -5138,8 +5138,8 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange }: { curren
 
         {/* ── Payout Settings ─────────────────────────────────────────── */}
         <div className="border-t border-gray-200 pt-6 mt-2">
-          <h4 className="text-sm font-semibold text-gray-800 mb-1">Payout Mode</h4>
-          <p className="text-gray-500 text-xs mb-4">Choose how and when your providers get paid. WOML charges a platform fee of <span className="font-semibold text-gray-700">$0.30 flat + 12.5%</span> per lead, split evenly between you and your provider — you pay half (added to your rate), they give up half (deducted from their payout).</p>
+          <h4 className="text-sm font-semibold text-gray-800 mb-1">Default Payout Mode</h4>
+          <p className="text-gray-500 text-xs mb-4">Sets the default payment mode pre-filled when you create a new invite link. Each deal can still be customized individually — this is just your starting point. WOML charges a platform fee of <span className="font-semibold text-gray-700">$0.30 flat + 12.5%</span> per lead, split evenly between you and your provider.</p>
 
           {/* 3-mode selector */}
           <div className="grid grid-cols-3 gap-3 mb-4">
@@ -5250,8 +5250,10 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange }: { curren
                   setAutoPaySaved(true);
                   setTimeout(() => setAutoPaySaved(false), 3000);
 
-                  // Notify parent so the Leads tab banner updates immediately
+                  // Notify parent so the Leads tab banner and InviteTab default update immediately
                   onPayoutModeChange?.(autoPayEnabled && autoPaySchedule === "instant");
+                  const derivedMode = !autoPayEnabled ? "manual" : (autoPaySchedule || "instant");
+                  onDefaultPaymentModeChange?.(derivedMode);
 
                   // If instant mode was just saved, immediately pay any leads already in the queue
                   if (autoPaySchedule === "instant" && autoPayEnabled) {
