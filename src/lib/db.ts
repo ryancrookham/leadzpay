@@ -71,7 +71,7 @@ export interface DbConnection {
   buyer_id: string;
   status: ConnectionStatus;
   rate_per_lead: number;
-  payment_timing: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
+  payment_timing: string;
   weekly_lead_cap: number | null;
   monthly_lead_cap: number | null;
   total_leads: number;
@@ -396,7 +396,7 @@ export async function createConnection(data: {
   status?: ConnectionStatus;
   accepted_at?: string;
   rate_per_lead?: number;
-  payment_timing?: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
+  payment_timing?: string;
   weekly_lead_cap?: number | null;
   monthly_lead_cap?: number | null;
   termination_notice_days?: number;
@@ -405,6 +405,7 @@ export async function createConnection(data: {
   criteria_id?: string;
 }): Promise<DbConnection> {
   const sql = getSql();
+  await ensurePaymentTimingConstraintDropped();
   const status = data.status || (data.initiator === 'provider' ? 'pending_buyer_review' : 'pending_provider_accept');
   const result = await sql`
     INSERT INTO connections (
@@ -419,7 +420,7 @@ export async function createConnection(data: {
       ${status},
       ${data.accepted_at || null},
       ${data.rate_per_lead || 50},
-      ${data.payment_timing || 'per_lead'},
+      ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap ?? null},
       ${data.monthly_lead_cap ?? null},
       ${data.termination_notice_days || 7},
@@ -435,7 +436,7 @@ export async function createConnection(data: {
 export async function updateConnection(id: string, updates: {
   status?: ConnectionStatus;
   rate_per_lead?: number;
-  payment_timing?: 'per_lead' | 'weekly' | 'biweekly' | 'monthly';
+  payment_timing?: string;
   weekly_lead_cap?: number | null;
   monthly_lead_cap?: number | null;
   termination_notice_days?: number;
@@ -678,6 +679,16 @@ export async function ensurePaymentMethodColumns(): Promise<void> {
   const sql = getSql();
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_default_payment_method VARCHAR(255)`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payment_method_set_at TIMESTAMPTZ`;
+}
+
+// Drop the old payment_timing check constraint so new values (instant, manual, scheduled_*) are allowed.
+export async function ensurePaymentTimingConstraintDropped(): Promise<void> {
+  const sql = getSql();
+  try {
+    await sql`ALTER TABLE connections DROP CONSTRAINT IF EXISTS connections_payment_timing_check`;
+  } catch {
+    // Constraint may not exist — safe to ignore
+  }
 }
 
 export async function updatePaymentMethodId(userId: string, paymentMethodId: string): Promise<void> {
