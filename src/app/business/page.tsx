@@ -2416,7 +2416,7 @@ function ProvidersTab({
   const [invitePhone, setInvitePhone] = useState("");
   const [invitePersonalMessage, setInvitePersonalMessage] = useState("");
   const [inviteRate, setInviteRate] = useState(50);
-  const [invitePaymentTiming, setInvitePaymentTiming] = useState<"per_lead" | "weekly" | "biweekly" | "monthly">("per_lead");
+  const [invitePaymentTiming, setInvitePaymentTiming] = useState<string>("instant");
   const [inviteEnableLeadCaps, setInviteEnableLeadCaps] = useState(false);
   const [inviteWeeklyLeadCap, setInviteWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [inviteMonthlyLeadCap, setInviteMonthlyLeadCap] = useState<number | undefined>(undefined);
@@ -5971,8 +5971,8 @@ function TermsModal({
   title: string;
   ratePerLead: number;
   setRatePerLead: (v: number) => void;
-  paymentTiming: "per_lead" | "weekly" | "biweekly" | "monthly";
-  setPaymentTiming: (v: "per_lead" | "weekly" | "biweekly" | "monthly") => void;
+  paymentTiming: string;
+  setPaymentTiming: (v: string) => void;
   minimumPayout: number | undefined;
   setMinimumPayout: (v: number | undefined) => void;
   leadTypes: string[];
