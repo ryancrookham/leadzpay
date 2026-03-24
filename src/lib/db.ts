@@ -1988,27 +1988,59 @@ export async function rejectLead(leadId: string, buyerId: string, reason: string
 // Auto-pay functions
 // ============================================
 
-export async function autoApproveLeads(buyerId: string, reviewWindowDays: number): Promise<string[]> {
+export async function autoApproveLeads(
+  buyerId: string,
+  reviewWindowDays: number,
+  connectionIds?: string[]  // If provided, only approve leads from these connections
+): Promise<string[]> {
   const sql = getSql();
-  const result = await sql`
-    UPDATE leads SET payout_status = 'approved'
-    WHERE buyer_id = ${buyerId}
-      AND payout_status = 'pending'
-      AND submitted_at < NOW() - (${reviewWindowDays} || ' days')::interval
-    RETURNING id
-  `;
+  let result;
+  if (connectionIds && connectionIds.length > 0) {
+    result = await sql`
+      UPDATE leads SET payout_status = 'approved'
+      WHERE buyer_id = ${buyerId}
+        AND payout_status = 'pending'
+        AND connection_id = ANY(${connectionIds}::uuid[])
+        AND submitted_at < NOW() - (${reviewWindowDays} || ' days')::interval
+      RETURNING id
+    `;
+  } else {
+    result = await sql`
+      UPDATE leads SET payout_status = 'approved'
+      WHERE buyer_id = ${buyerId}
+        AND payout_status = 'pending'
+        AND submitted_at < NOW() - (${reviewWindowDays} || ' days')::interval
+      RETURNING id
+    `;
+  }
   return result.map((r: any) => r.id as string);
 }
 
-export async function getApprovedLeadsByBuyerId(buyerId: string): Promise<DbLead[]> {
+export async function getApprovedLeadsByBuyerId(
+  buyerId: string,
+  connectionIds?: string[]  // If provided, only return leads from these connections
+): Promise<DbLead[]> {
   const sql = getSql();
-  const result = await sql`
-    SELECT l.*, u.display_name as provider_name, u.email as provider_email, u.phone as provider_phone
-    FROM leads l
-    LEFT JOIN users u ON l.provider_id = u.id
-    WHERE l.buyer_id = ${buyerId} AND l.payout_status = 'approved'
-    ORDER BY l.submitted_at DESC
-  `;
+  let result;
+  if (connectionIds && connectionIds.length > 0) {
+    result = await sql`
+      SELECT l.*, u.display_name as provider_name, u.email as provider_email, u.phone as provider_phone
+      FROM leads l
+      LEFT JOIN users u ON l.provider_id = u.id
+      WHERE l.buyer_id = ${buyerId}
+        AND l.payout_status = 'approved'
+        AND l.connection_id = ANY(${connectionIds}::uuid[])
+      ORDER BY l.submitted_at DESC
+    `;
+  } else {
+    result = await sql`
+      SELECT l.*, u.display_name as provider_name, u.email as provider_email, u.phone as provider_phone
+      FROM leads l
+      LEFT JOIN users u ON l.provider_id = u.id
+      WHERE l.buyer_id = ${buyerId} AND l.payout_status = 'approved'
+      ORDER BY l.submitted_at DESC
+    `;
+  }
   return result as unknown as DbLead[];
 }
 

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import {
   getUserById,
   getConnectionById,
+  getConnectionsByUserId,
   createLead,
   getLeadsByProviderId,
   getLeadsByBuyerId,
@@ -218,13 +219,21 @@ export async function POST(request: NextRequest) {
       console.error("[LEAD-SMS-ALERT] Non-blocking SMS error:", smsErr?.message);
     }
 
-    // 9. Instant auto-pay — if this connection's payment_timing is instant, fire payment immediately
+    // 9. Instant auto-pay — if this connection's payment_timing is instant, fire payment immediately.
+    // IMPORTANT: scope auto-approve and payment to ONLY instant connections for this buyer.
+    // This prevents accidentally paying providers on biweekly/monthly schedules early.
     let instantPayResult: { succeeded: number; failed: number; error?: string } | null = null;
     try {
       if (connection.payment_timing === "instant") {
-        // Auto-approve the lead we just created (0-day window = approve immediately)
-        await autoApproveLeads(buyer.id, 0);
-        const approvedLeads = await getApprovedLeadsByBuyerId(buyer.id);
+        // Find all instant connections for this buyer so we scope the payment batch correctly
+        const allBuyerConnections = await getConnectionsByUserId(buyer.id, 'buyer');
+        const instantConnectionIds = allBuyerConnections
+          .filter(c => c.status === 'active' && c.payment_timing === 'instant')
+          .map(c => c.id);
+
+        // Auto-approve only leads from instant connections (0-day window = approve immediately)
+        await autoApproveLeads(buyer.id, 0, instantConnectionIds);
+        const approvedLeads = await getApprovedLeadsByBuyerId(buyer.id, instantConnectionIds);
         if (approvedLeads.length > 0) {
           const result = await processBatchPayment(buyer.id, approvedLeads);
 
