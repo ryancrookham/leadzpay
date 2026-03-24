@@ -279,7 +279,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         body: JSON.stringify({
           label: label || null,
           ratePerLead: Number(savedCriteria.payout_per_lead),
-          paymentTiming: savedCriteria.payment_timing || "instant",
+          paymentTiming: savedCriteria.payment_timing || "per_lead",
           weeklyCap: savedCriteria.weekly_cap,
           monthlyCap: savedCriteria.monthly_cap,
           expiresAt: enableExpiry ? new Date(expiryDate).toISOString() : null,
