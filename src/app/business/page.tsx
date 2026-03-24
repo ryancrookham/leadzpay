@@ -190,6 +190,7 @@ function BusinessPortalContent() {
 
   // Payout mode — loaded at top level so Leads tab can show instant-mode banner
   const [isInstantMode, setIsInstantMode] = useState(false);
+  const [defaultPaymentMode, setDefaultPaymentMode] = useState("instant");
   const [leadsPayNowLoading, setLeadsPayNowLoading] = useState(false);
   const [leadsPayNowResult, setLeadsPayNowResult] = useState<string | null>(null);
 
@@ -272,6 +273,7 @@ function BusinessPortalContent() {
       .then(data => {
         const s = data.settings ?? data;
         setIsInstantMode(s.autoPayEnabled === true && s.autoPaySchedule === "instant");
+        setDefaultPaymentMode(s.autoPayEnabled ? (s.autoPaySchedule || "instant") : "manual");
       })
       .catch(() => {});
   }, [currentUser]);
@@ -2326,6 +2328,7 @@ function BusinessPortalContent() {
               initialTokens={inviteTokens}
               initialCriteria={savedCriteria}
               initialFields={savedFields}
+              defaultPaymentMode={defaultPaymentMode}
             />
           </TabErrorBoundary>
         )}

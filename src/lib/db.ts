@@ -681,11 +681,16 @@ export async function ensurePaymentMethodColumns(): Promise<void> {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_payment_method_set_at TIMESTAMPTZ`;
 }
 
-// Drop the old payment_timing check constraint so new values (instant, manual, scheduled_*) are allowed.
+// Drop the old payment_timing check constraints so new values (instant, manual, scheduled_*) are allowed.
 export async function ensurePaymentTimingConstraintDropped(): Promise<void> {
   const sql = getSql();
   try {
     await sql`ALTER TABLE connections DROP CONSTRAINT IF EXISTS connections_payment_timing_check`;
+  } catch {
+    // Constraint may not exist — safe to ignore
+  }
+  try {
+    await sql`ALTER TABLE invite_tokens DROP CONSTRAINT IF EXISTS invite_tokens_payment_timing_check`;
   } catch {
     // Constraint may not exist — safe to ignore
   }
@@ -1463,6 +1468,7 @@ export async function createInviteToken(data: {
   termination_notice_days?: number;
 }): Promise<DbInviteToken> {
   const sql = getSql();
+  await ensurePaymentTimingConstraintDropped();
   const result = await sql`
     INSERT INTO invite_tokens (
       buyer_id, token, label, channel_name, channel_description,
@@ -1477,7 +1483,7 @@ export async function createInviteToken(data: {
       ${data.max_uses || null},
       ${data.expires_at || null},
       ${data.rate_per_lead},
-      ${data.payment_timing || 'per_lead'},
+      ${data.payment_timing || 'instant'},
       ${data.weekly_lead_cap ?? null},
       ${data.monthly_lead_cap ?? null},
       ${data.termination_notice_days ?? 7}
@@ -2012,6 +2018,26 @@ export async function getAutoPayBuyers(): Promise<Array<{id: string; auto_pay_sc
     SELECT id, auto_pay_schedule, review_window_days, next_auto_pay_date::text
     FROM users
     WHERE role = 'buyer' AND auto_pay_enabled = TRUE AND next_auto_pay_date <= NOW()
+  `;
+  return result as any[];
+}
+
+// Returns distinct buyers who have at least one active connection with a scheduled payment_timing
+// that is due (next_auto_pay_date <= NOW()), along with their review window.
+export async function getScheduledPaymentBuyers(): Promise<Array<{
+  id: string;
+  review_window_days: number;
+  next_auto_pay_date: string | null;
+}>> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT DISTINCT u.id, u.review_window_days, u.next_auto_pay_date::text
+    FROM users u
+    INNER JOIN connections c ON c.buyer_id = u.id AND c.status = 'active'
+    WHERE u.role = 'buyer'
+      AND c.payment_timing IN ('scheduled_weekly', 'scheduled_biweekly', 'scheduled_monthly',
+                               'weekly', 'biweekly', 'monthly')
+      AND (u.next_auto_pay_date IS NULL OR u.next_auto_pay_date <= NOW())
   `;
   return result as any[];
 }

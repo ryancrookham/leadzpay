@@ -16,7 +16,6 @@ import {
   checkDuplicateLead,
   hashIdentifier,
   getSmsAlertSettings,
-  getAutoPaySettings,
   autoApproveLeads,
   getApprovedLeadsByBuyerId,
   updateNextAutoPayDate,
@@ -219,15 +218,10 @@ export async function POST(request: NextRequest) {
       console.error("[LEAD-SMS-ALERT] Non-blocking SMS error:", smsErr?.message);
     }
 
-    // 9. Instant auto-pay — if buyer has instant schedule + 0-day window, fire payment immediately
+    // 9. Instant auto-pay — if this connection's payment_timing is instant, fire payment immediately
     let instantPayResult: { succeeded: number; failed: number; error?: string } | null = null;
     try {
-      const autoPaySettings = await getAutoPaySettings(buyer.id);
-      if (
-        autoPaySettings.auto_pay_enabled &&
-        autoPaySettings.auto_pay_schedule === "instant" &&
-        autoPaySettings.review_window_days === 0
-      ) {
+      if (connection.payment_timing === "instant") {
         // Auto-approve the lead we just created (0-day window = approve immediately)
         await autoApproveLeads(buyer.id, 0);
         const approvedLeads = await getApprovedLeadsByBuyerId(buyer.id);

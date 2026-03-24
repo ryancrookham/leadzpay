@@ -54,11 +54,12 @@ interface InviteTabProps {
   initialTokens: InviteToken[];
   initialCriteria: SavedCriteria | null;
   initialFields: SavedField[];
+  defaultPaymentMode?: string; // From Settings — pre-fills new deal payment mode
 }
 
 const BASE_URL = "https://www.womleads.com";
 
-export default function InviteTab({ businessName, initialTokens, initialCriteria, initialFields }: InviteTabProps) {
+export default function InviteTab({ businessName, initialTokens, initialCriteria, initialFields, defaultPaymentMode }: InviteTabProps) {
   const [tokens, setTokens] = useState<InviteToken[]>(initialTokens);
   const [dataLoaded] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,10 +167,20 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         sortOrder: f.sort_order,
       })));
     } else {
+      // New deal — pre-fill payment mode from Settings default
       setCriteriaPayoutPerLead(50);
       setCriteriaEnableWeeklyCap(false);
       setCriteriaEnableMonthlyCap(false);
-      setCriteriaPaymentTiming("instant");
+      const def = defaultPaymentMode || "instant";
+      if (def === "instant" || def === "manual") {
+        setCriteriaPaymentTiming(def);
+      } else if (def === "weekly" || def === "biweekly" || def === "monthly" || def.startsWith("scheduled_")) {
+        setCriteriaPaymentTiming("scheduled");
+        const cadence = def.replace("scheduled_", "") as "weekly" | "biweekly" | "monthly";
+        setCriteriaScheduledCadence(cadence || "monthly");
+      } else {
+        setCriteriaPaymentTiming("instant");
+      }
       setCriteriaTerminationDays(7);
       setCriteriaFields([]);
     }
@@ -279,7 +290,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         body: JSON.stringify({
           label: label || null,
           ratePerLead: Number(savedCriteria.payout_per_lead),
-          paymentTiming: savedCriteria.payment_timing || "per_lead",
+          paymentTiming: savedCriteria.payment_timing || "instant",
           weeklyCap: savedCriteria.weekly_cap,
           monthlyCap: savedCriteria.monthly_cap,
           expiresAt: enableExpiry ? new Date(expiryDate).toISOString() : null,

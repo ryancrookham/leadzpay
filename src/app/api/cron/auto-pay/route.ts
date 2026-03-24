@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getAutoPayBuyers,
+  getScheduledPaymentBuyers,
+  getConnectionsByUserId,
   autoApproveLeads,
   getApprovedLeadsByBuyerId,
   updateNextAutoPayDate,
@@ -42,8 +43,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const buyers = await getAutoPayBuyers();
-    console.log(`[auto-pay cron] Processing ${buyers.length} buyer(s)`);
+    const buyers = await getScheduledPaymentBuyers();
+    console.log(`[auto-pay cron] Processing ${buyers.length} buyer(s) with scheduled connections`);
 
     const summary: Array<{
       buyerId: string;
@@ -57,16 +58,34 @@ export async function GET(request: NextRequest) {
 
     for (const buyer of buyers) {
       try {
-        // Step 1: Auto-approve leads past the review window
-        const approvedIds = await autoApproveLeads(buyer.id, buyer.review_window_days);
-        console.log(`[auto-pay cron] Buyer ${buyer.id}: auto-approved ${approvedIds.length} leads`);
+        // Derive the cadence from the buyer's active scheduled connections
+        // Use the most frequent cadence if mixed (weekly beats biweekly beats monthly)
+        const connections = await getConnectionsByUserId(buyer.id, 'buyer');
+        const scheduledConnections = connections.filter(c =>
+          c.status === 'active' &&
+          ['scheduled_weekly','scheduled_biweekly','scheduled_monthly','weekly','biweekly','monthly'].includes(c.payment_timing)
+        );
+        const hasCadence = (c: string) => scheduledConnections.some(sc =>
+          sc.payment_timing === c || sc.payment_timing === c.replace('scheduled_', '')
+        );
+        const derivedSchedule = hasCadence('scheduled_weekly') ? 'weekly'
+          : hasCadence('scheduled_biweekly') ? 'biweekly'
+          : 'monthly';
 
-        // Step 2: Get all approved leads
-        const approvedLeads = await getApprovedLeadsByBuyerId(buyer.id);
+        // Step 1: Auto-approve leads past the review window
+        const approvedIds = await autoApproveLeads(buyer.id, buyer.review_window_days ?? 3);
+        console.log(`[auto-pay cron] Buyer ${buyer.id}: auto-approved ${approvedIds.length} leads (schedule: ${derivedSchedule})`);
+
+        // Step 2: Get approved leads — only for providers on a scheduled connection
+        const allApproved = await getApprovedLeadsByBuyerId(buyer.id);
+        const approvedLeads = allApproved.filter(lead => {
+          const conn = scheduledConnections.find(c => c.provider_id === lead.provider_id);
+          return !!conn;
+        });
 
         if (approvedLeads.length === 0) {
           // No leads to pay — still advance the schedule
-          const nextDate = calculateNextAutoPayDate(buyer.auto_pay_schedule);
+          const nextDate = calculateNextAutoPayDate(derivedSchedule);
           await updateNextAutoPayDate(buyer.id, nextDate);
           summary.push({
             buyerId: buyer.id,
@@ -84,7 +103,7 @@ export async function GET(request: NextRequest) {
 
         if (result.needsSetup) {
           console.warn(`[auto-pay cron] Buyer ${buyer.id}: no payment method, skipping`);
-          const nextDate = calculateNextAutoPayDate(buyer.auto_pay_schedule);
+          const nextDate = calculateNextAutoPayDate(derivedSchedule);
           await updateNextAutoPayDate(buyer.id, nextDate);
           summary.push({
             buyerId: buyer.id,
@@ -107,7 +126,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Step 4: Advance schedule
-        const nextDate = calculateNextAutoPayDate(buyer.auto_pay_schedule);
+        const nextDate = calculateNextAutoPayDate(derivedSchedule);
         await updateNextAutoPayDate(buyer.id, nextDate);
 
         summary.push({
@@ -124,7 +143,7 @@ export async function GET(request: NextRequest) {
         console.error(`[auto-pay cron] Buyer ${buyer.id} error:`, err?.message);
         // Still advance schedule to avoid stuck retries
         try {
-          const nextDate = calculateNextAutoPayDate(buyer.auto_pay_schedule);
+          const nextDate = calculateNextAutoPayDate('biweekly');
           await updateNextAutoPayDate(buyer.id, nextDate);
         } catch {}
         summary.push({
