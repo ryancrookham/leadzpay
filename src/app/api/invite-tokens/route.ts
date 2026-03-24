@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       channel_name: channelName || null,
       channel_description: channelDescription || null,
       rate_per_lead: rate,
-      payment_timing: paymentTiming || "instant",
+      payment_timing: paymentTiming || "per_lead",
       weekly_lead_cap: weeklyCap ?? null,
       monthly_lead_cap: monthlyCap ?? null,
       termination_notice_days: terminationNoticeDays ?? 7,
