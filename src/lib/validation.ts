@@ -121,7 +121,7 @@ export const connectionRequestSchema = z.object({
 
 export const connectionTermsSchema = z.object({
   ratePerLead: z.number().min(5, "Minimum $5 per lead").max(500, "Maximum $500 per lead"),
-  paymentTiming: z.enum(["per_lead", "weekly", "biweekly", "monthly"]),
+  paymentTiming: z.enum(["instant", "manual", "scheduled_weekly", "scheduled_biweekly", "scheduled_monthly", "weekly", "biweekly", "monthly"]),
   weeklyLeadCap: z.number().int().min(1).max(1000).optional(),
   monthlyLeadCap: z.number().int().min(1).max(10000).optional(),
   capStrategy: z.enum(["pause", "reject"]).optional(),

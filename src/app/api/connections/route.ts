@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         message,
         status: "pending_provider_accept",
         rate_per_lead: terms?.ratePerLead || 50,
-        payment_timing: terms?.paymentTiming || "per_lead",
+        payment_timing: terms?.paymentTiming || "instant",
         weekly_lead_cap: terms?.weeklyLeadCap,
         monthly_lead_cap: terms?.monthlyLeadCap,
         termination_notice_days: terms?.terminationNoticeDays || 7,

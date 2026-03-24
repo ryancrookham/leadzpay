@@ -2520,7 +2520,7 @@ function ProvidersTab({
         setInvitePhone("");
         setInvitePersonalMessage("");
         setInviteRate(50);
-        setInvitePaymentTiming("per_lead");
+        setInvitePaymentTiming("instant");
         setInviteEnableLeadCaps(false);
         setInviteWeeklyLeadCap(undefined);
         setInviteMonthlyLeadCap(undefined);
@@ -2640,7 +2640,7 @@ function ProvidersTab({
 
   const resetTermsForm = () => {
     setRatePerLead(50);
-    setPaymentTiming("per_lead");
+    setPaymentTiming("instant");
     setEnableLeadCaps(false);
     setWeeklyLeadCap(undefined);
     setMonthlyLeadCap(undefined);
@@ -3270,16 +3270,17 @@ function ProvidersTab({
               </div>
               {/* Payment Timing */}
               <div>
-                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Timing</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Payment Mode</label>
                 <select
                   value={invitePaymentTiming}
-                  onChange={(e) => setInvitePaymentTiming(e.target.value as typeof invitePaymentTiming)}
+                  onChange={(e) => setInvitePaymentTiming(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E8822A]/20 focus:border-[#E8822A] bg-white"
                 >
-                  <option value="per_lead">Per Lead (pay as leads come in)</option>
-                  <option value="weekly">Weekly Batch</option>
-                  <option value="biweekly">Bi-weekly Batch</option>
-                  <option value="monthly">Monthly Batch</option>
+                  <option value="instant">⚡ Instant — paid immediately on submission</option>
+                  <option value="scheduled_weekly">📅 Scheduled — Weekly</option>
+                  <option value="scheduled_biweekly">📅 Scheduled — Bi-weekly</option>
+                  <option value="scheduled_monthly">📅 Scheduled — Monthly</option>
+                  <option value="manual">🖐️ Manual — you pay when ready</option>
                 </select>
               </div>
               {/* Termination */}
