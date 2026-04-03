@@ -44,7 +44,7 @@ export async function PATCH(
       isMandatory: boolean;
       sortOrder: number;
     }, i: number) => ({
-      field_type: f.fieldType as 'PHOTO' | 'TEXT' | 'BINARY',
+      field_type: f.fieldType as 'PHOTO' | 'TEXT' | 'BINARY' | 'PHONE_CALL',
       label: f.label,
       option_a: f.optionA || null,
       option_b: f.optionB || null,

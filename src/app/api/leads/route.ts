@@ -137,8 +137,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2c. Validate verified call if required by criteria
-    if (criteriaForValidation?.require_verified_call) {
+    // 2c. Validate verified call if required by criteria (either via flag or PHONE_CALL field type)
+    const criteriaFieldsForCallCheck = criteriaForValidation ? await getCriteriaFields(criteriaForValidation.id) : [];
+    const requiresCallByFieldType = criteriaFieldsForCallCheck.some(f => f.field_type === 'PHONE_CALL');
+    if (criteriaForValidation?.require_verified_call || requiresCallByFieldType) {
       if (!callSessionId) {
         return NextResponse.json(
           { error: "A verified call with the business is required before submitting a lead." },

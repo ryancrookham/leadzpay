@@ -204,7 +204,7 @@ export interface DbCallSession {
 export interface DbLeadCriteriaField {
   id: string;
   criteria_id: string;
-  field_type: 'PHOTO' | 'TEXT' | 'BINARY';
+  field_type: 'PHOTO' | 'TEXT' | 'BINARY' | 'PHONE_CALL';
   label: string;
   option_a: string | null;
   option_b: string | null;
@@ -2395,7 +2395,7 @@ export async function getCriteriaFields(criteriaId: string): Promise<DbLeadCrite
 }
 
 export async function setCriteriaFields(criteriaId: string, fields: {
-  field_type: 'PHOTO' | 'TEXT' | 'BINARY';
+  field_type: 'PHOTO' | 'TEXT' | 'BINARY' | 'PHONE_CALL';
   label: string;
   option_a?: string | null;
   option_b?: string | null;

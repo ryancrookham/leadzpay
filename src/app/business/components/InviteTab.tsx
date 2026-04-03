@@ -21,7 +21,7 @@ export interface InviteToken {
 }
 
 interface CriteriaField {
-  fieldType: "PHOTO" | "TEXT" | "BINARY";
+  fieldType: "PHOTO" | "TEXT" | "BINARY" | "PHONE_CALL";
   label: string;
   optionA?: string;
   optionB?: string;
@@ -42,7 +42,7 @@ export interface SavedCriteria {
 
 export interface SavedField {
   id: string;
-  field_type: "PHOTO" | "TEXT" | "BINARY";
+  field_type: "PHOTO" | "TEXT" | "BINARY" | "PHONE_CALL";
   label: string;
   option_a: string | null;
   option_b: string | null;
@@ -78,7 +78,6 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   const [criteriaPaymentTiming, setCriteriaPaymentTiming] = useState<"instant" | "manual" | "scheduled">("instant");
   const [criteriaScheduledCadence, setCriteriaScheduledCadence] = useState<"weekly" | "biweekly" | "monthly">("weekly");
   const [criteriaTerminationDays, setCriteriaTerminationDays] = useState(7);
-  const [criteriaRequireVerifiedCall, setCriteriaRequireVerifiedCall] = useState(false);
   const [criteriaFields, setCriteriaFields] = useState<CriteriaField[]>([]);
   const [terminateConfirm, setTerminateConfirm] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
@@ -160,7 +159,6 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 0);
-      setCriteriaRequireVerifiedCall(savedCriteria.require_verified_call ?? false);
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,
@@ -185,16 +183,15 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(7);
-      setCriteriaRequireVerifiedCall(false);
       setCriteriaFields([]);
     }
     setCriteriaEditing(true);
   };
 
-  const addCriteriaField = (type: "PHOTO" | "TEXT" | "BINARY") => {
+  const addCriteriaField = (type: "PHOTO" | "TEXT" | "BINARY" | "PHONE_CALL") => {
     setCriteriaFields(prev => [...prev, {
       fieldType: type,
-      label: "",
+      label: type === "PHONE_CALL" ? "Verified Phone Call" : "",
       optionA: type === "BINARY" ? "Yes" : undefined,
       optionB: type === "BINARY" ? "No" : undefined,
       isMandatory: true,
@@ -237,7 +234,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         monthlyCap: criteriaEnableMonthlyCap ? criteriaMonthlyCap : null,
         paymentTiming: criteriaPaymentTiming === "scheduled" ? `scheduled_${criteriaScheduledCadence}` : criteriaPaymentTiming,
         terminationNoticeDays: criteriaTerminationDays,
-        requireVerifiedCall: criteriaRequireVerifiedCall,
+        requireVerifiedCall: criteriaFields.some(f => f.fieldType === "PHONE_CALL"),
         fields: criteriaFields,
       };
 
@@ -424,12 +421,14 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   };
 
   const fieldTypeBadge = (type: string) => {
-    const colors: Record<string, string> = {
-      PHOTO: "bg-purple-100 text-purple-700",
-      TEXT: "bg-blue-100 text-blue-700",
-      BINARY: "bg-amber-100 text-amber-700",
+    const config: Record<string, { color: string; label: string }> = {
+      PHOTO: { color: "bg-purple-100 text-purple-700", label: "Photo" },
+      TEXT: { color: "bg-blue-100 text-blue-700", label: "Text" },
+      BINARY: { color: "bg-amber-100 text-amber-700", label: "Yes/No" },
+      PHONE_CALL: { color: "bg-green-100 text-green-700", label: "📞 Call" },
     };
-    return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[type] || "bg-gray-100 text-gray-600"}`}>{type}</span>;
+    const { color, label } = config[type] || { color: "bg-gray-100 text-gray-600", label: type };
+    return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{label}</span>;
   };
 
   if (!dataLoaded) {
@@ -528,24 +527,6 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               </div>
             </div>
 
-            {/* Verified Call Requirement */}
-            <div className="border border-blue-200 bg-blue-50 rounded-xl p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={criteriaRequireVerifiedCall}
-                  onChange={e => setCriteriaRequireVerifiedCall(e.target.checked)}
-                  className="mt-0.5 rounded"
-                />
-                <div>
-                  <span className="text-sm font-semibold text-blue-800">🔒 Require Verified Call</span>
-                  <p className="text-xs text-blue-600 mt-0.5">
-                    Provider must complete a phone call with you (via WOML) before submitting a lead. Our system calls both phones and verifies the conversation lasted at least 30 seconds.
-                  </p>
-                </div>
-              </label>
-            </div>
-
             {/* Dynamic Fields */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -554,6 +535,17 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                   <button onClick={() => addCriteriaField("PHOTO")} className="text-xs px-3 py-1 border border-purple-200 text-purple-600 rounded-lg hover:bg-purple-50 transition">+ Photo</button>
                   <button onClick={() => addCriteriaField("TEXT")} className="text-xs px-3 py-1 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition">+ Text</button>
                   <button onClick={() => addCriteriaField("BINARY")} className="text-xs px-3 py-1 border border-amber-200 text-amber-600 rounded-lg hover:bg-amber-50 transition">+ Yes/No</button>
+                  <button
+                    onClick={() => {
+                      if (!criteriaFields.some(f => f.fieldType === "PHONE_CALL")) {
+                        addCriteriaField("PHONE_CALL");
+                      }
+                    }}
+                    disabled={criteriaFields.some(f => f.fieldType === "PHONE_CALL")}
+                    className="text-xs px-3 py-1 border border-green-200 text-green-600 rounded-lg hover:bg-green-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    📞 Phone Call
+                  </button>
                 </div>
               </div>
 
@@ -580,41 +572,54 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               ) : (
                 <div className="space-y-3">
                   {criteriaFields.map((field, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      {fieldTypeBadge(field.fieldType)}
-                      <input
-                        type="text"
-                        value={field.label}
-                        onChange={e => updateCriteriaField(i, { label: e.target.value })}
-                        placeholder="Field label (e.g. Driver's License Photo)"
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
-                      />
-                      {field.fieldType === "BINARY" && (
-                        <>
-                          <input
-                            type="text"
-                            value={field.optionA || ""}
-                            onChange={e => updateCriteriaField(i, { optionA: e.target.value })}
-                            placeholder="Option A"
-                            className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                          />
-                          <input
-                            type="text"
-                            value={field.optionB || ""}
-                            onChange={e => updateCriteriaField(i, { optionB: e.target.value })}
-                            placeholder="Option B"
-                            className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                          />
-                        </>
-                      )}
-                      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer whitespace-nowrap">
-                        <input type="checkbox" checked={field.isMandatory} onChange={e => updateCriteriaField(i, { isMandatory: e.target.checked })} className="rounded" />
-                        Required
-                      </label>
-                      <button onClick={() => moveCriteriaField(i, "up")} disabled={i === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm">&#9650;</button>
-                      <button onClick={() => moveCriteriaField(i, "down")} disabled={i === criteriaFields.length - 1} className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm">&#9660;</button>
-                      <button onClick={() => removeCriteriaField(i)} className="text-red-400 hover:text-red-600 text-sm">&#10005;</button>
-                    </div>
+                    field.fieldType === "PHONE_CALL" ? (
+                      /* Special card for Phone Call — no label editing, always required */
+                      <div key={i} className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        {fieldTypeBadge(field.fieldType)}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-green-800">Verified Phone Call</p>
+                          <p className="text-xs text-green-600">Provider must call the business and speak for 30+ seconds before submitting — always required, always first</p>
+                        </div>
+                        <span className="text-xs text-green-600 font-medium whitespace-nowrap">Always Required</span>
+                        <button onClick={() => removeCriteriaField(i)} className="text-red-400 hover:text-red-600 text-sm">&#10005;</button>
+                      </div>
+                    ) : (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        {fieldTypeBadge(field.fieldType)}
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={e => updateCriteriaField(i, { label: e.target.value })}
+                          placeholder="Field label (e.g. Driver's License Photo)"
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30"
+                        />
+                        {field.fieldType === "BINARY" && (
+                          <>
+                            <input
+                              type="text"
+                              value={field.optionA || ""}
+                              onChange={e => updateCriteriaField(i, { optionA: e.target.value })}
+                              placeholder="Option A"
+                              className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                            />
+                            <input
+                              type="text"
+                              value={field.optionB || ""}
+                              onChange={e => updateCriteriaField(i, { optionB: e.target.value })}
+                              placeholder="Option B"
+                              className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                            />
+                          </>
+                        )}
+                        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer whitespace-nowrap">
+                          <input type="checkbox" checked={field.isMandatory} onChange={e => updateCriteriaField(i, { isMandatory: e.target.checked })} className="rounded" />
+                          Required
+                        </label>
+                        <button onClick={() => moveCriteriaField(i, "up")} disabled={i === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm">&#9650;</button>
+                        <button onClick={() => moveCriteriaField(i, "down")} disabled={i === criteriaFields.length - 1} className="text-gray-400 hover:text-gray-600 disabled:opacity-30 text-sm">&#9660;</button>
+                        <button onClick={() => removeCriteriaField(i)} className="text-red-400 hover:text-red-600 text-sm">&#10005;</button>
+                      </div>
+                    )
                   ))}
                 </div>
               )}
@@ -662,11 +667,11 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               </div>
             </div>
 
-            {savedCriteria.require_verified_call && (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
-                <span>🔒</span>
-                <span className="font-medium">Verified Call Required</span>
-                <span className="text-blue-500 text-xs">— Providers must complete a phone call with you before submitting a lead</span>
+            {(savedCriteria.require_verified_call || savedFields.some(f => f.field_type === "PHONE_CALL")) && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
+                <span>📞</span>
+                <span className="font-medium">Verified Phone Call Required</span>
+                <span className="text-green-600 text-xs">— Providers must call and speak with you for 30+ seconds before submitting a lead</span>
               </div>
             )}
 
@@ -684,13 +689,21 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                   </div>
                 ))}
                 {savedFields.map(f => (
-                  <div key={f.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg text-sm">
-                    {fieldTypeBadge(f.field_type)}
-                    <span className="text-gray-800">{f.label}</span>
-                    {f.field_type === "BINARY" && <span className="text-gray-500 text-xs">({f.option_a} / {f.option_b})</span>}
-                    {f.is_mandatory && <span className="text-red-500 text-xs font-medium">Required</span>}
-                    {!f.is_mandatory && <span className="text-gray-400 text-xs">Optional</span>}
-                  </div>
+                  f.field_type === "PHONE_CALL" ? (
+                    <div key={f.id} className="flex items-center gap-3 p-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+                      {fieldTypeBadge(f.field_type)}
+                      <span className="text-green-800 font-medium">Verified Phone Call</span>
+                      <span className="text-green-600 text-xs">Always required — happens before form</span>
+                    </div>
+                  ) : (
+                    <div key={f.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg text-sm">
+                      {fieldTypeBadge(f.field_type)}
+                      <span className="text-gray-800">{f.label}</span>
+                      {f.field_type === "BINARY" && <span className="text-gray-500 text-xs">({f.option_a} / {f.option_b})</span>}
+                      {f.is_mandatory && <span className="text-red-500 text-xs font-medium">Required</span>}
+                      {!f.is_mandatory && <span className="text-gray-400 text-xs">Optional</span>}
+                    </div>
+                  )
                 ))}
               </div>
             </div>

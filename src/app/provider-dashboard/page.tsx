@@ -736,11 +736,17 @@ function ConnectionTab({
         const buyerId = activeConnection.buyer_id || (activeConnection as any).buyerId;
         const res = await fetch(`/api/business-criteria/by-business/${buyerId}`);
         const data = await res.json();
-        if (data.fields && data.fields.length > 0) {
-          setCriteriaFields(data.fields);
-        }
-        if (data.criteria?.require_verified_call) {
-          setRequireVerifiedCall(true);
+        if (data.fields && Array.isArray(data.fields)) {
+          // Detect PHONE_CALL field — it triggers the call gate (not shown in the form)
+          const hasCallField = data.fields.some((f: { field_type: string }) => f.field_type === 'PHONE_CALL');
+          if (hasCallField || data.criteria?.require_verified_call) {
+            setRequireVerifiedCall(true);
+          }
+          // Only pass regular fields to the form (PHONE_CALL handled by call gate)
+          const regularFields = data.fields.filter((f: { field_type: string }) => f.field_type !== 'PHONE_CALL');
+          if (regularFields.length > 0) {
+            setCriteriaFields(regularFields);
+          }
         }
       } catch {
         // silently fail
