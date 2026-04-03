@@ -37,6 +37,7 @@ export interface SavedCriteria {
   payment_timing: string | null;
   termination_notice_days: number | null;
   is_active: boolean;
+  require_verified_call: boolean;
 }
 
 export interface SavedField {
@@ -77,6 +78,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   const [criteriaPaymentTiming, setCriteriaPaymentTiming] = useState<"instant" | "manual" | "scheduled">("instant");
   const [criteriaScheduledCadence, setCriteriaScheduledCadence] = useState<"weekly" | "biweekly" | "monthly">("weekly");
   const [criteriaTerminationDays, setCriteriaTerminationDays] = useState(7);
+  const [criteriaRequireVerifiedCall, setCriteriaRequireVerifiedCall] = useState(false);
   const [criteriaFields, setCriteriaFields] = useState<CriteriaField[]>([]);
   const [terminateConfirm, setTerminateConfirm] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
@@ -158,6 +160,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 0);
+      setCriteriaRequireVerifiedCall(savedCriteria.require_verified_call ?? false);
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,
@@ -182,6 +185,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(7);
+      setCriteriaRequireVerifiedCall(false);
       setCriteriaFields([]);
     }
     setCriteriaEditing(true);
@@ -233,6 +237,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         monthlyCap: criteriaEnableMonthlyCap ? criteriaMonthlyCap : null,
         paymentTiming: criteriaPaymentTiming === "scheduled" ? `scheduled_${criteriaScheduledCadence}` : criteriaPaymentTiming,
         terminationNoticeDays: criteriaTerminationDays,
+        requireVerifiedCall: criteriaRequireVerifiedCall,
         fields: criteriaFields,
       };
 
@@ -523,6 +528,24 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
               </div>
             </div>
 
+            {/* Verified Call Requirement */}
+            <div className="border border-blue-200 bg-blue-50 rounded-xl p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={criteriaRequireVerifiedCall}
+                  onChange={e => setCriteriaRequireVerifiedCall(e.target.checked)}
+                  className="mt-0.5 rounded"
+                />
+                <div>
+                  <span className="text-sm font-semibold text-blue-800">🔒 Require Verified Call</span>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    Provider must complete a phone call with you (via WOML) before submitting a lead. Our system calls both phones and verifies the conversation lasted at least 30 seconds.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             {/* Dynamic Fields */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -638,6 +661,14 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                 <p className="text-lg font-bold text-gray-800">{savedCriteria.monthly_cap ?? "None"}</p>
               </div>
             </div>
+
+            {savedCriteria.require_verified_call && (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+                <span>🔒</span>
+                <span className="font-medium">Verified Call Required</span>
+                <span className="text-blue-500 text-xs">— Providers must complete a phone call with you before submitting a lead</span>
+              </div>
+            )}
 
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Required Fields ({3 + savedFields.length})</p>

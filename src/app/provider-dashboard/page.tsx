@@ -705,6 +705,14 @@ function ConnectionTab({
   }[]>([]);
   const [criteriaFieldValues, setCriteriaFieldValues] = useState<Record<string, string>>({});
   const [criteriaLoaded, setCriteriaLoaded] = useState(false);
+  const [requireVerifiedCall, setRequireVerifiedCall] = useState(false);
+
+  // Verified call state
+  type CallGateStatus = "idle" | "initiating" | "calling" | "verified" | "failed";
+  const [callGateStatus, setCallGateStatus] = useState<CallGateStatus>("idle");
+  const [callSessionId, setCallSessionId] = useState<string | null>(null);
+  const [callGateError, setCallGateError] = useState<string | null>(null);
+  const pollIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch buyers from API
   type DiscoveryBuyer = {
@@ -730,6 +738,9 @@ function ConnectionTab({
         const data = await res.json();
         if (data.fields && data.fields.length > 0) {
           setCriteriaFields(data.fields);
+        }
+        if (data.criteria?.require_verified_call) {
+          setRequireVerifiedCall(true);
         }
       } catch {
         // silently fail
@@ -778,6 +789,62 @@ function ConnectionTab({
     });
     setCriteriaFieldValues({});
     setLeadSubmitted(false);
+    // Clear call gate state
+    setCallGateStatus("idle");
+    setCallSessionId(null);
+    setCallGateError(null);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  // Initiate verified call
+  const handleStartVerifiedCall = async () => {
+    if (!activeConnection) return;
+    setCallGateStatus("initiating");
+    setCallGateError(null);
+    try {
+      const res = await fetch("/api/sinch-voice/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId: (effectiveConnection || activeConnection).id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.callSessionId) {
+        setCallGateStatus("failed");
+        setCallGateError(data.error || "Failed to initiate call. Please try again.");
+        return;
+      }
+      setCallSessionId(data.callSessionId);
+      setCallGateStatus("calling");
+      // Poll every 5 seconds until verified or failed
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/sinch-voice/status/${data.callSessionId}`);
+          const statusData = await statusRes.json();
+          if (statusData.verified) {
+            setCallGateStatus("verified");
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+          } else if (statusData.status === "failed") {
+            setCallGateStatus("failed");
+            setCallGateError("Call failed. Please try again.");
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+          }
+        } catch {
+          // Polling error — keep trying
+        }
+      }, 5000);
+    } catch {
+      setCallGateStatus("failed");
+      setCallGateError("Network error. Please try again.");
+    }
   };
 
   // Handle lead submission
@@ -822,6 +889,7 @@ function ConnectionTab({
             notes: formData.notes || undefined,
           },
           criteriaFieldsData,
+          callSessionId: callSessionId || undefined,
         }),
       });
       const apiData = await apiRes.json();
@@ -1066,8 +1134,91 @@ function ConnectionTab({
           </div>
         )}
 
-        {/* Lead Submission Form */}
-        {showLeadForm && formStep !== "success" && formStep !== "duplicate" && (
+        {/* Call Gate — shown before lead form when require_verified_call is true */}
+        {showLeadForm && requireVerifiedCall && callGateStatus !== "verified" && formStep !== "success" && formStep !== "duplicate" && (
+          <div className="bg-white rounded-xl border-2 border-blue-300 p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-800">Verified Call Required</h3>
+                  <p className="text-blue-600 text-sm">{activeConnection?.buyerBusinessName} requires a phone call before you can submit a lead</p>
+                </div>
+              </div>
+              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {callGateStatus === "idle" && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
+                  <p className="font-semibold mb-1">How it works:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-600">
+                    <li>Click &quot;Start Verified Call&quot; below</li>
+                    <li>WOML will call your phone — answer it</li>
+                    <li>You&apos;ll be connected to {activeConnection?.buyerBusinessName}</li>
+                    <li>Speak for at least 30 seconds</li>
+                    <li>Return here to submit your lead</li>
+                  </ol>
+                </div>
+                <button
+                  onClick={handleStartVerifiedCall}
+                  className="w-full py-4 rounded-xl font-semibold text-lg bg-blue-600 hover:bg-blue-700 text-white transition flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Start Verified Call
+                </button>
+              </div>
+            )}
+
+            {callGateStatus === "initiating" && (
+              <div className="text-center py-6">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-blue-700 font-medium">Setting up your call...</p>
+              </div>
+            )}
+
+            {callGateStatus === "calling" && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <div className="h-3 w-3 bg-blue-500 rounded-full animate-pulse"></div>
+                    <p className="text-blue-700 font-semibold">Call in progress</p>
+                  </div>
+                  <p className="text-blue-600 text-sm">WOML is calling your phone. Answer and speak with {activeConnection?.buyerBusinessName} for at least 30 seconds, then come back here.</p>
+                </div>
+                <p className="text-gray-500 text-xs text-center">Checking call status automatically every 5 seconds...</p>
+              </div>
+            )}
+
+            {callGateStatus === "failed" && (
+              <div className="space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                  <p className="font-semibold mb-1">Call failed</p>
+                  <p>{callGateError || "Something went wrong. Please try again."}</p>
+                </div>
+                <button
+                  onClick={() => { setCallGateStatus("idle"); setCallGateError(null); }}
+                  className="w-full py-3 rounded-xl font-semibold bg-blue-600 hover:bg-blue-700 text-white transition"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Lead Submission Form — only show when call gate is satisfied */}
+        {showLeadForm && (!requireVerifiedCall || callGateStatus === "verified") && formStep !== "success" && formStep !== "duplicate" && (
           <div className="bg-white rounded-xl border-2 border-[#E8822A] p-6 shadow-lg">
             {/* Header with close button */}
             <div className="flex items-center justify-between mb-6">
@@ -1080,6 +1231,16 @@ function ConnectionTab({
             </div>
 
             <div className="space-y-4">
+              {/* Call Verified Banner */}
+              {requireVerifiedCall && callGateStatus === "verified" && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center gap-2 text-emerald-700 text-sm">
+                  <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span><strong>Call verified.</strong> You spoke with {activeConnection?.buyerBusinessName}. You may now submit your lead.</span>
+                </div>
+              )}
+
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
                 {(() => { const bd = calculateFeeBreakdown(activeConnection.rate_per_lead || 0, feeSettings); return (
                   <div className="flex items-center justify-between">

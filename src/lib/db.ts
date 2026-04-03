@@ -182,8 +182,23 @@ export interface DbBusinessLeadCriteria {
   payment_timing: string | null;
   termination_notice_days: number | null;
   is_active: boolean;
+  require_verified_call: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface DbCallSession {
+  id: string;
+  provider_id: string;
+  buyer_id: string;
+  connection_id: string;
+  sinch_call_id_provider: string | null;
+  sinch_call_id_buyer: string | null;
+  status: string;
+  duration_seconds: number | null;
+  initiated_at: string;
+  completed_at: string | null;
+  verified: boolean;
 }
 
 export interface DbLeadCriteriaField {
@@ -951,6 +966,7 @@ export async function createLead(data: {
   payout_amount: number;
   stripe_payment_id?: string;
   criteria_fields_data?: Record<string, unknown>[];
+  call_session_id?: string | null;
 }): Promise<DbLead> {
   const sql = getSql();
   const result = await sql`
@@ -959,7 +975,7 @@ export async function createLead(data: {
       customer_data_encrypted, customer_data_iv,
       customer_email_hash, customer_phone_hash,
       customer_state, vehicle_year, vehicle_make, vehicle_model,
-      payout_amount, stripe_payment_id, criteria_fields_data
+      payout_amount, stripe_payment_id, criteria_fields_data, call_session_id
     ) VALUES (
       ${data.provider_id}, ${data.buyer_id}, ${data.connection_id},
       ${data.customer_data_encrypted}, ${data.customer_data_iv},
@@ -967,7 +983,8 @@ export async function createLead(data: {
       ${data.customer_state || null}, ${data.vehicle_year || null},
       ${data.vehicle_make || null}, ${data.vehicle_model || null},
       ${data.payout_amount}, ${data.stripe_payment_id || null},
-      ${data.criteria_fields_data ? JSON.stringify(data.criteria_fields_data) : null}
+      ${data.criteria_fields_data ? JSON.stringify(data.criteria_fields_data) : null},
+      ${data.call_session_id || null}
     )
     RETURNING *
   `;
@@ -2315,6 +2332,7 @@ export async function createBusinessCriteria(data: {
   monthly_cap?: number | null;
   payment_timing?: string | null;
   termination_notice_days?: number | null;
+  require_verified_call?: boolean;
 }): Promise<DbBusinessLeadCriteria> {
   const sql = getSql();
   // Deactivate any existing active criteria first
@@ -2323,8 +2341,8 @@ export async function createBusinessCriteria(data: {
     WHERE business_id = ${data.business_id} AND is_active = TRUE
   `;
   const result = await sql`
-    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap, payment_timing, termination_notice_days)
-    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null}, ${data.payment_timing ?? null}, ${data.termination_notice_days ?? null})
+    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap, payment_timing, termination_notice_days, require_verified_call)
+    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null}, ${data.payment_timing ?? null}, ${data.termination_notice_days ?? null}, ${data.require_verified_call ?? false})
     RETURNING *
   `;
   return first<DbBusinessLeadCriteria>(result)!;
@@ -2336,6 +2354,7 @@ export async function updateBusinessCriteria(id: string, businessId: string, upd
   monthly_cap?: number | null;
   payment_timing?: string | null;
   termination_notice_days?: number | null;
+  require_verified_call?: boolean;
 }): Promise<DbBusinessLeadCriteria | null> {
   const sql = getSql();
   const result = await sql`
@@ -2345,6 +2364,7 @@ export async function updateBusinessCriteria(id: string, businessId: string, upd
       monthly_cap = CASE WHEN ${updates.monthly_cap !== undefined} THEN ${updates.monthly_cap ?? null} ELSE monthly_cap END,
       payment_timing = CASE WHEN ${updates.payment_timing !== undefined} THEN ${updates.payment_timing ?? null} ELSE payment_timing END,
       termination_notice_days = CASE WHEN ${updates.termination_notice_days !== undefined} THEN ${updates.termination_notice_days ?? null} ELSE termination_notice_days END,
+      require_verified_call = CASE WHEN ${updates.require_verified_call !== undefined} THEN ${updates.require_verified_call ?? false} ELSE require_verified_call END,
       updated_at = NOW()
     WHERE id = ${id} AND business_id = ${businessId}
     RETURNING *
@@ -2625,5 +2645,65 @@ export async function getUserForDeletion(userId: string): Promise<{
     FROM users WHERE id = ${userId} LIMIT 1
   `;
   return (rows[0] as { id: string; email: string; role: string; stripe_account_id: string | null; stripe_customer_id: string | null; } | undefined) ?? null;
+}
+
+// ============================================
+// Call Sessions (Sinch Voice Verified Calls)
+// ============================================
+
+export async function createCallSession(data: {
+  provider_id: string;
+  buyer_id: string;
+  connection_id: string;
+}): Promise<DbCallSession> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO call_sessions (provider_id, buyer_id, connection_id)
+    VALUES (${data.provider_id}, ${data.buyer_id}, ${data.connection_id})
+    RETURNING *
+  `;
+  return first<DbCallSession>(result)!;
+}
+
+export async function updateCallSession(id: string, updates: {
+  sinch_call_id_provider?: string | null;
+  sinch_call_id_buyer?: string | null;
+  status?: string;
+  duration_seconds?: number | null;
+  completed_at?: string | null;
+  verified?: boolean;
+}): Promise<DbCallSession | null> {
+  const sql = getSql();
+  const result = await sql`
+    UPDATE call_sessions SET
+      sinch_call_id_provider = CASE WHEN ${updates.sinch_call_id_provider !== undefined} THEN ${updates.sinch_call_id_provider ?? null} ELSE sinch_call_id_provider END,
+      sinch_call_id_buyer = CASE WHEN ${updates.sinch_call_id_buyer !== undefined} THEN ${updates.sinch_call_id_buyer ?? null} ELSE sinch_call_id_buyer END,
+      status = CASE WHEN ${updates.status !== undefined} THEN ${updates.status ?? 'initiated'} ELSE status END,
+      duration_seconds = CASE WHEN ${updates.duration_seconds !== undefined} THEN ${updates.duration_seconds ?? null} ELSE duration_seconds END,
+      completed_at = CASE WHEN ${updates.completed_at !== undefined} THEN ${updates.completed_at ?? null} ELSE completed_at END,
+      verified = CASE WHEN ${updates.verified !== undefined} THEN ${updates.verified ?? false} ELSE verified END
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return first<DbCallSession>(result);
+}
+
+export async function getCallSession(id: string): Promise<DbCallSession | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM call_sessions WHERE id = ${id} LIMIT 1
+  `;
+  return first<DbCallSession>(result);
+}
+
+export async function getCallSessionBySinchId(sinchCallId: string): Promise<DbCallSession | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM call_sessions
+    WHERE sinch_call_id_provider = ${sinchCallId}
+       OR sinch_call_id_buyer = ${sinchCallId}
+    LIMIT 1
+  `;
+  return first<DbCallSession>(result);
 }
 

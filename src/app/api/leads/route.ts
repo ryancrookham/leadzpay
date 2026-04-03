@@ -20,6 +20,7 @@ import {
   autoApproveLeads,
   getApprovedLeadsByBuyerId,
   updateNextAutoPayDate,
+  getCallSession,
 } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { calculateFeeBreakdown } from "@/lib/platform-fees";
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { connectionId, customerData, vehicleData, criteriaFieldsData } = body;
+    const { connectionId, customerData, vehicleData, criteriaFieldsData, callSessionId } = body;
 
     if (!connectionId || !customerData) {
       return NextResponse.json(
@@ -136,6 +137,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 2c. Validate verified call if required by criteria
+    if (criteriaForValidation?.require_verified_call) {
+      if (!callSessionId) {
+        return NextResponse.json(
+          { error: "A verified call with the business is required before submitting a lead." },
+          { status: 400 }
+        );
+      }
+      const callSession = await getCallSession(callSessionId);
+      if (!callSession) {
+        return NextResponse.json(
+          { error: "Call session not found. Please complete a verified call first." },
+          { status: 400 }
+        );
+      }
+      if (callSession.provider_id !== session.user.id) {
+        return NextResponse.json(
+          { error: "Invalid call session." },
+          { status: 403 }
+        );
+      }
+      if (!callSession.verified) {
+        return NextResponse.json(
+          { error: "Your call has not been verified yet. Please complete the 30-second call with the business first." },
+          { status: 400 }
+        );
+      }
+    }
+
     // 3. Calculate fees (from DB settings)
     const platformFees = await getPlatformSettings();
     const fees = calculateFeeBreakdown(ratePerLead, platformFees);
@@ -158,6 +188,7 @@ export async function POST(request: NextRequest) {
       vehicle_model: vehicleData?.model || null,
       payout_amount: ratePerLead,
       criteria_fields_data: criteriaFieldsData || undefined,
+      call_session_id: callSessionId || null,
     });
 
     // 6. Record transactions (all pending until business marks as paid)
