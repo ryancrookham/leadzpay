@@ -141,6 +141,23 @@ CREATE INDEX IF NOT EXISTS idx_call_sessions_provider ON call_sessions(provider_
 CREATE INDEX IF NOT EXISTS idx_call_sessions_buyer ON call_sessions(buyer_id);
 
 -- ===========================================
+-- CONNECTION TERM PROPOSALS TABLE
+-- ===========================================
+CREATE TABLE IF NOT EXISTS connection_term_proposals (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  connection_id         UUID NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+  proposed_criteria_id  UUID NOT NULL REFERENCES business_lead_criteria(id),
+  proposed_by           UUID NOT NULL REFERENCES users(id),
+  proposed_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  status                VARCHAR(20) NOT NULL DEFAULT 'pending',
+  responded_at          TIMESTAMP WITH TIME ZONE,
+  provider_note         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_term_proposals_connection ON connection_term_proposals(connection_id);
+CREATE INDEX IF NOT EXISTS idx_term_proposals_status ON connection_term_proposals(status);
+
+-- ===========================================
 -- LEADS TABLE
 -- ===========================================
 CREATE TABLE IF NOT EXISTS leads (

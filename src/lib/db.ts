@@ -202,6 +202,17 @@ export interface DbCallSession {
   verified: boolean;
 }
 
+export interface DbTermProposal {
+  id: string;
+  connection_id: string;
+  proposed_criteria_id: string;
+  proposed_by: string;
+  proposed_at: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'rescinded';
+  responded_at: string | null;
+  provider_note: string | null;
+}
+
 export interface DbLeadCriteriaField {
   id: string;
   criteria_id: string;
@@ -2709,5 +2720,142 @@ export async function getCallSessionBySinchId(sinchCallId: string): Promise<DbCa
     LIMIT 1
   `;
   return first<DbCallSession>(result);
+}
+
+// ── Term Proposals ──────────────────────────────────────────────
+
+export async function createCriteriaSnapshot(data: {
+  business_id: string;
+  payout_per_lead: number;
+  weekly_cap?: number | null;
+  monthly_cap?: number | null;
+  payment_timing?: string | null;
+  termination_notice_days?: number | null;
+  require_verified_call?: boolean;
+  call_phone_number?: string | null;
+}): Promise<DbBusinessLeadCriteria> {
+  const sql = getSql();
+  const result = await sql`
+    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap, payment_timing, termination_notice_days, require_verified_call, call_phone_number, is_active)
+    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null}, ${data.payment_timing ?? null}, ${data.termination_notice_days ?? null}, ${data.require_verified_call ?? false}, ${data.call_phone_number ?? null}, FALSE)
+    RETURNING *
+  `;
+  return first<DbBusinessLeadCriteria>(result)!;
+}
+
+export async function getPendingProposal(connectionId: string): Promise<DbTermProposal | null> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connection_term_proposals
+    WHERE connection_id = ${connectionId} AND status = 'pending'
+    ORDER BY proposed_at DESC LIMIT 1
+  `;
+  return first<DbTermProposal>(result);
+}
+
+export async function getProposalsByConnection(connectionId: string): Promise<DbTermProposal[]> {
+  const sql = getSql();
+  const result = await sql`
+    SELECT * FROM connection_term_proposals
+    WHERE connection_id = ${connectionId}
+    ORDER BY proposed_at DESC
+  `;
+  return result as unknown as DbTermProposal[];
+}
+
+export async function createTermProposal(params: {
+  connectionId: string;
+  proposedBy: string;
+  criteria: {
+    business_id: string;
+    payout_per_lead: number;
+    weekly_cap: number | null;
+    monthly_cap: number | null;
+    payment_timing: string | null;
+    termination_notice_days: number | null;
+    require_verified_call: boolean;
+    call_phone_number: string | null;
+  };
+  fields: Array<{
+    field_type: 'PHOTO' | 'TEXT' | 'BINARY' | 'PHONE_CALL';
+    label: string;
+    option_a: string | null;
+    option_b: string | null;
+    is_mandatory: boolean;
+    sort_order: number;
+  }>;
+}): Promise<{ proposal: DbTermProposal; criteria: DbBusinessLeadCriteria; fields: DbLeadCriteriaField[] }> {
+  const sql = getSql();
+  // Auto-rescind any existing pending proposal
+  await sql`
+    UPDATE connection_term_proposals SET status = 'rescinded', responded_at = NOW()
+    WHERE connection_id = ${params.connectionId} AND status = 'pending'
+  `;
+  // Create inert criteria snapshot
+  const criteria = await createCriteriaSnapshot(params.criteria);
+  // Create fields
+  const fields = params.fields.length > 0
+    ? await setCriteriaFields(criteria.id, params.fields)
+    : [];
+  // Create proposal row
+  const result = await sql`
+    INSERT INTO connection_term_proposals (connection_id, proposed_criteria_id, proposed_by)
+    VALUES (${params.connectionId}, ${criteria.id}, ${params.proposedBy})
+    RETURNING *
+  `;
+  return { proposal: first<DbTermProposal>(result)!, criteria, fields };
+}
+
+export async function acceptTermProposal(proposalId: string, providerId: string): Promise<DbTermProposal | null> {
+  const sql = getSql();
+  // Get proposal and validate
+  const proposalResult = await sql`SELECT * FROM connection_term_proposals WHERE id = ${proposalId} AND status = 'pending' LIMIT 1`;
+  const proposal = first<DbTermProposal>(proposalResult);
+  if (!proposal) return null;
+  // Validate provider owns the connection
+  const connResult = await sql`SELECT * FROM connections WHERE id = ${proposal.connection_id} AND provider_id = ${providerId} LIMIT 1`;
+  const conn = first<DbConnection>(connResult);
+  if (!conn) return null;
+  // Get proposed criteria for syncing connection fields
+  const criteriaResult = await sql`SELECT * FROM business_lead_criteria WHERE id = ${proposal.proposed_criteria_id} LIMIT 1`;
+  const criteria = first<DbBusinessLeadCriteria>(criteriaResult);
+  if (!criteria) return null;
+  // Update proposal status
+  await sql`UPDATE connection_term_proposals SET status = 'accepted', responded_at = NOW() WHERE id = ${proposalId}`;
+  // Update connection: swap criteria_id and sync fields
+  await sql`
+    UPDATE connections SET
+      criteria_id = ${proposal.proposed_criteria_id},
+      rate_per_lead = ${criteria.payout_per_lead},
+      weekly_lead_cap = ${criteria.weekly_cap ?? null},
+      monthly_lead_cap = ${criteria.monthly_cap ?? null},
+      payment_timing = COALESCE(${criteria.payment_timing}, payment_timing),
+      termination_notice_days = COALESCE(${criteria.termination_notice_days}, termination_notice_days),
+      terms_updated_at = NOW()
+    WHERE id = ${proposal.connection_id}
+  `;
+  return { ...proposal, status: 'accepted' } as DbTermProposal;
+}
+
+export async function rejectTermProposal(proposalId: string, providerId: string, note?: string): Promise<DbTermProposal | null> {
+  const sql = getSql();
+  const proposalResult = await sql`SELECT * FROM connection_term_proposals WHERE id = ${proposalId} AND status = 'pending' LIMIT 1`;
+  const proposal = first<DbTermProposal>(proposalResult);
+  if (!proposal) return null;
+  const connResult = await sql`SELECT * FROM connections WHERE id = ${proposal.connection_id} AND provider_id = ${providerId} LIMIT 1`;
+  if (!first<DbConnection>(connResult)) return null;
+  await sql`UPDATE connection_term_proposals SET status = 'rejected', responded_at = NOW(), provider_note = ${note ?? null} WHERE id = ${proposalId}`;
+  return { ...proposal, status: 'rejected' } as DbTermProposal;
+}
+
+export async function rescindTermProposal(proposalId: string, buyerId: string): Promise<DbTermProposal | null> {
+  const sql = getSql();
+  const proposalResult = await sql`SELECT * FROM connection_term_proposals WHERE id = ${proposalId} AND status = 'pending' LIMIT 1`;
+  const proposal = first<DbTermProposal>(proposalResult);
+  if (!proposal) return null;
+  const connResult = await sql`SELECT * FROM connections WHERE id = ${proposal.connection_id} AND buyer_id = ${buyerId} LIMIT 1`;
+  if (!first<DbConnection>(connResult)) return null;
+  await sql`UPDATE connection_term_proposals SET status = 'rescinded', responded_at = NOW() WHERE id = ${proposalId}`;
+  return { ...proposal, status: 'rescinded' } as DbTermProposal;
 }
 

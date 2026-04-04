@@ -5766,6 +5766,11 @@ function ConnectionsTab({
 }) {
   const [selectedConnection, setSelectedConnection] = useState<ApiConnection | null>(null);
   const [showEditTermsModal, setShowEditTermsModal] = useState(false);
+  const [proposalToast, setProposalToast] = useState<string | null>(null);
+  const [proposing, setProposing] = useState(false);
+
+  // Pending proposals state: connectionId → proposal data or null
+  const [pendingProposals, setPendingProposals] = useState<Record<string, { id: string; proposed_at: string } | null>>({});
 
   // Terms form state
   const [ratePerLead, setRatePerLead] = useState(50);
@@ -5779,6 +5784,23 @@ function ConnectionsTab({
   const [weeklyLeadCap, setWeeklyLeadCap] = useState<number | undefined>(undefined);
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
   const [pauseWhenCapReached, setPauseWhenCapReached] = useState(true);
+
+  const activeConnections = myConnections.filter(c => c.status === "active");
+  const terminatedConnections = myConnections.filter(c => c.status === "terminated");
+
+  // Fetch pending proposals for all active connections
+  useEffect(() => {
+    activeConnections.forEach(async (conn) => {
+      try {
+        const res = await fetch(`/api/connections/${conn.id}/pending-proposal`);
+        if (res.ok) {
+          const data = await res.json();
+          setPendingProposals(prev => ({ ...prev, [conn.id]: data.proposal ? { id: data.proposal.id, proposed_at: data.proposal.proposed_at } : null }));
+        }
+      } catch { /* ignore */ }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myConnections.length]);
 
   const openEditTermsModal = (connection: ApiConnection) => {
     setSelectedConnection(connection);
@@ -5796,18 +5818,52 @@ function ConnectionsTab({
     setShowEditTermsModal(true);
   };
 
-  const handleUpdateTerms = () => {
-    if (!selectedConnection) return;
-    const terms = {
-      ratePerLead,
-      paymentTiming,
-      weeklyLeadCap: enableLeadCaps ? weeklyLeadCap : null,
-      monthlyLeadCap: enableLeadCaps ? monthlyLeadCap : null,
-      terminationNoticeDays: terminationDays,
-    };
-    updateConnectionTerms(selectedConnection.id, terms);
-    setShowEditTermsModal(false);
-    setSelectedConnection(null);
+  const handleProposeTerms = async () => {
+    if (!selectedConnection || proposing) return;
+    setProposing(true);
+    try {
+      const res = await fetch(`/api/connections/${selectedConnection.id}/propose-terms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payoutPerLead: ratePerLead,
+          weeklyCap: enableLeadCaps ? weeklyLeadCap : null,
+          monthlyCap: enableLeadCaps ? monthlyLeadCap : null,
+          paymentTiming,
+          terminationNoticeDays: terminationDays,
+          requireVerifiedCall: false,
+          callPhoneNumber: null,
+          fields: [],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingProposals(prev => ({ ...prev, [selectedConnection.id]: { id: data.proposalId, proposed_at: new Date().toISOString() } }));
+        setProposalToast("Terms proposed — provider will be notified by SMS");
+        setTimeout(() => setProposalToast(null), 4000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to propose terms");
+      }
+    } catch {
+      alert("Failed to propose terms");
+    } finally {
+      setProposing(false);
+      setShowEditTermsModal(false);
+      setSelectedConnection(null);
+    }
+  };
+
+  const handleRescind = async (connectionId: string) => {
+    if (!confirm("Rescind this proposal? The provider will no longer see it.")) return;
+    try {
+      const res = await fetch(`/api/connections/${connectionId}/propose-terms`, { method: "DELETE" });
+      if (res.ok) {
+        setPendingProposals(prev => ({ ...prev, [connectionId]: null }));
+        setProposalToast("Proposal rescinded");
+        setTimeout(() => setProposalToast(null), 3000);
+      }
+    } catch { /* ignore */ }
   };
 
   const handleTerminate = (connectionId: string, providerName: string) => {
@@ -5816,18 +5872,25 @@ function ConnectionsTab({
     }
   };
 
-  const activeConnections = myConnections.filter(c => c.status === "active");
-  const terminatedConnections = myConnections.filter(c => c.status === "terminated");
-
   return (
     <div className="space-y-6">
+      {/* Toast */}
+      {proposalToast && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 text-emerald-700 text-sm font-medium flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          {proposalToast}
+        </div>
+      )}
+
       {/* Active Connections */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-[#E8822A] mb-6">Active Connections ({activeConnections.length})</h3>
 
         {activeConnections.length > 0 ? (
           <div className="space-y-4">
-            {activeConnections.map((connection) => (
+            {activeConnections.map((connection) => {
+              const hasPending = !!pendingProposals[connection.id];
+              return (
               <div key={connection.id} className="border border-gray-200 rounded-xl p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
@@ -5840,19 +5903,34 @@ function ConnectionsTab({
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-[#E8822A] font-medium">${calculateFeeBreakdown(connection.rate_per_lead || 0, feeSettings).buyerTotal.toFixed(2)}/lead</span>
                         <span className="text-gray-400 text-xs">(incl. $0.15 flat + 6.25% WOML fee)</span>
-                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-400">&bull;</span>
                         <span className="text-gray-500 text-sm">{formatPaymentTiming(connection.payment_timing as any)}</span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="flex gap-2 mb-2">
-                      <button
-                        onClick={() => openEditTermsModal(connection)}
-                        className="text-[#E8822A] hover:bg-[#E8822A]/10 px-3 py-1 rounded-lg font-medium transition text-sm"
-                      >
-                        Edit Terms
-                      </button>
+                    <div className="flex gap-2 mb-2 items-center">
+                      {hasPending ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            Proposal Pending
+                          </span>
+                          <button
+                            onClick={() => handleRescind(connection.id)}
+                            className="text-gray-400 hover:text-red-600 px-2 py-1 rounded-lg text-xs font-medium transition"
+                          >
+                            Rescind
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => openEditTermsModal(connection)}
+                          className="text-[#E8822A] hover:bg-[#E8822A]/10 px-3 py-1 rounded-lg font-medium transition text-sm"
+                        >
+                          Edit Terms
+                        </button>
+                      )}
                       <button
                         onClick={() => handleTerminate(connection.id, connection.providerName)}
                         className="text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg font-medium transition text-sm"
@@ -5863,6 +5941,9 @@ function ConnectionsTab({
                     <p className="text-gray-400 text-xs">
                       Connected since {new Date(connection.accepted_at || connection.created_at).toLocaleDateString()}
                     </p>
+                    {hasPending && (
+                      <p className="text-amber-500 text-xs mt-1">Waiting for provider response</p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
@@ -5876,7 +5957,8 @@ function ConnectionsTab({
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-center text-gray-400 py-8">No active connections yet — invite providers from the Invite tab</p>
@@ -5901,37 +5983,40 @@ function ConnectionsTab({
         </div>
       )}
 
-      {/* Edit Terms Modal */}
+      {/* Propose Terms Modal */}
       {showEditTermsModal && selectedConnection && (
-        <TermsModal
-          title={`Edit Terms for ${selectedConnection.providerName}`}
-          ratePerLead={ratePerLead}
-          setRatePerLead={setRatePerLead}
-          paymentTiming={paymentTiming}
-          setPaymentTiming={setPaymentTiming}
-          minimumPayout={minimumPayout}
-          setMinimumPayout={setMinimumPayout}
-          leadTypes={leadTypes}
-          setLeadTypes={setLeadTypes}
-          exclusivity={exclusivity}
-          setExclusivity={setExclusivity}
-          terminationDays={terminationDays}
-          setTerminationDays={setTerminationDays}
-          notes={notes}
-          setNotes={setNotes}
-          enableLeadCaps={enableLeadCaps}
-          setEnableLeadCaps={setEnableLeadCaps}
-          weeklyLeadCap={weeklyLeadCap}
-          setWeeklyLeadCap={setWeeklyLeadCap}
-          monthlyLeadCap={monthlyLeadCap}
-          setMonthlyLeadCap={setMonthlyLeadCap}
-          pauseWhenCapReached={pauseWhenCapReached}
-          setPauseWhenCapReached={setPauseWhenCapReached}
-          onSave={handleUpdateTerms}
-          onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
-          saveButtonText="Update Terms"
-          feeSettings={feeSettings}
-        />
+        <>
+          <TermsModal
+            title={`Propose New Terms for ${selectedConnection.providerName}`}
+            ratePerLead={ratePerLead}
+            setRatePerLead={setRatePerLead}
+            paymentTiming={paymentTiming}
+            setPaymentTiming={setPaymentTiming}
+            minimumPayout={minimumPayout}
+            setMinimumPayout={setMinimumPayout}
+            leadTypes={leadTypes}
+            setLeadTypes={setLeadTypes}
+            exclusivity={exclusivity}
+            setExclusivity={setExclusivity}
+            terminationDays={terminationDays}
+            setTerminationDays={setTerminationDays}
+            notes={notes}
+            setNotes={setNotes}
+            enableLeadCaps={enableLeadCaps}
+            setEnableLeadCaps={setEnableLeadCaps}
+            weeklyLeadCap={weeklyLeadCap}
+            setWeeklyLeadCap={setWeeklyLeadCap}
+            monthlyLeadCap={monthlyLeadCap}
+            setMonthlyLeadCap={setMonthlyLeadCap}
+            pauseWhenCapReached={pauseWhenCapReached}
+            setPauseWhenCapReached={setPauseWhenCapReached}
+            onSave={handleProposeTerms}
+            onCancel={() => { setShowEditTermsModal(false); setSelectedConnection(null); }}
+            saveButtonText={proposing ? "Proposing..." : "Propose New Terms"}
+            feeSettings={feeSettings}
+            warningBanner="The provider will be notified by SMS and must accept before new terms take effect. Current terms remain in force until then."
+          />
+        </>
       )}
 
     </div>
@@ -5968,6 +6053,7 @@ function TermsModal({
   onCancel,
   saveButtonText,
   feeSettings,
+  warningBanner,
 }: {
   title: string;
   ratePerLead: number;
@@ -5997,6 +6083,7 @@ function TermsModal({
   onCancel: () => void;
   saveButtonText: string;
   feeSettings?: FeeSettings;
+  warningBanner?: string;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
@@ -6006,6 +6093,12 @@ function TermsModal({
       >
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-xl font-bold text-[#E8822A]">{title}</h3>
+          {warningBanner && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-amber-700 text-xs flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+              <span>{warningBanner}</span>
+            </div>
+          )}
           <p className="text-gray-500 text-sm mt-1">Set the terms for this provider relationship. They must accept these terms before they can submit leads.</p>
         </div>
 

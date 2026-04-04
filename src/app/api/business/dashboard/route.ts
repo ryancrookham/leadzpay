@@ -56,6 +56,19 @@ async function ensureMigrations() {
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_pay_schedule VARCHAR(20) DEFAULT 'biweekly'`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS review_window_days INTEGER DEFAULT 3`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS next_auto_pay_date TIMESTAMPTZ`;
+  // Term proposals table
+  await sql`CREATE TABLE IF NOT EXISTS connection_term_proposals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    connection_id UUID NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+    proposed_criteria_id UUID NOT NULL REFERENCES business_lead_criteria(id),
+    proposed_by UUID NOT NULL REFERENCES users(id),
+    proposed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    responded_at TIMESTAMP WITH TIME ZONE,
+    provider_note TEXT
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_term_proposals_connection ON connection_term_proposals(connection_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_term_proposals_status ON connection_term_proposals(status)`;
   migrationRan = true;
 }
 

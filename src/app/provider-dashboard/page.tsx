@@ -693,6 +693,17 @@ function ConnectionTab({
     notes: "",
   });
 
+  // Term proposal state
+  const [pendingTermProposal, setPendingTermProposal] = useState<{
+    proposal: { id: string; proposed_at: string };
+    proposedCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean };
+    currentCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean } | null;
+  } | null>(null);
+  const [showProposalModal, setShowProposalModal] = useState(false);
+  const [proposalResponding, setProposalResponding] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+  const [showRejectInput, setShowRejectInput] = useState(false);
+
   // Criteria fields state
   const [criteriaFields, setCriteriaFields] = useState<{
     id: string;
@@ -728,7 +739,7 @@ function ConnectionTab({
   const [buyers, setBuyers] = useState<DiscoveryBuyer[]>([]);
   const [loadingBuyers, setLoadingBuyers] = useState(true);
 
-  // Fetch criteria fields when connection exists
+  // Fetch criteria fields + pending proposal when connection exists
   useEffect(() => {
     if (!activeConnection) return;
     const fetchCriteria = async () => {
@@ -737,12 +748,10 @@ function ConnectionTab({
         const res = await fetch(`/api/business-criteria/by-business/${buyerId}`);
         const data = await res.json();
         if (data.fields && Array.isArray(data.fields)) {
-          // Detect PHONE_CALL field — it triggers the call gate (not shown in the form)
           const hasCallField = data.fields.some((f: { field_type: string }) => f.field_type === 'PHONE_CALL');
           if (hasCallField || data.criteria?.require_verified_call) {
             setRequireVerifiedCall(true);
           }
-          // Only pass regular fields to the form (PHONE_CALL handled by call gate)
           const regularFields = data.fields.filter((f: { field_type: string }) => f.field_type !== 'PHONE_CALL');
           if (regularFields.length > 0) {
             setCriteriaFields(regularFields);
@@ -754,7 +763,25 @@ function ConnectionTab({
         setCriteriaLoaded(true);
       }
     };
+    const fetchProposal = async () => {
+      try {
+        const res = await fetch(`/api/connections/${activeConnection.id}/pending-proposal`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.proposal) {
+            setPendingTermProposal({
+              proposal: data.proposal,
+              proposedCriteria: data.proposedCriteria,
+              currentCriteria: data.currentCriteria,
+            });
+          } else {
+            setPendingTermProposal(null);
+          }
+        }
+      } catch { /* ignore */ }
+    };
     fetchCriteria();
+    fetchProposal();
   }, [activeConnection]);
 
   useEffect(() => {
@@ -967,6 +994,191 @@ function ConnectionTab({
                   <p className="text-sm text-gray-500">${Number(conn.rate_per_lead).toFixed(2)}/lead</p>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Pending Term Proposal Banner */}
+        {pendingTermProposal && (
+          <div
+            className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 cursor-pointer hover:bg-amber-100 transition"
+            onClick={() => setShowProposalModal(true)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-full bg-amber-200 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                </div>
+                <div>
+                  <p className="text-amber-800 font-semibold text-sm">{activeConnection.buyerBusinessName || "Your business"} has proposed new contract terms</p>
+                  <p className="text-amber-600 text-xs mt-0.5">Review and respond to continue submitting leads under updated terms</p>
+                </div>
+              </div>
+              <span className="text-amber-700 text-sm font-medium shrink-0">Review &rarr;</span>
+            </div>
+          </div>
+        )}
+
+        {/* Proposal Review Modal */}
+        {showProposalModal && pendingTermProposal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowProposalModal(false); setShowRejectInput(false); setRejectNote(""); }}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-gray-800">Proposed Term Changes</h3>
+                <p className="text-gray-500 text-sm mt-1">{activeConnection.buyerBusinessName || "Business"} wants to update your agreement</p>
+              </div>
+              <div className="p-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Current Terms */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Current Terms</h4>
+                    <div className="space-y-3 bg-gray-50 rounded-xl p-4">
+                      <div>
+                        <p className="text-gray-400 text-xs">Rate per Lead</p>
+                        <p className="text-lg font-bold text-gray-800">${Number(activeConnection.rate_per_lead || 0).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">Payment</p>
+                        <p className="text-sm text-gray-700">{formatPaymentTiming(activeConnection.payment_timing as PaymentTiming)}</p>
+                      </div>
+                      {(activeConnection.weekly_lead_cap || activeConnection.monthly_lead_cap) && (
+                        <div>
+                          <p className="text-gray-400 text-xs">Caps</p>
+                          {activeConnection.weekly_lead_cap && <p className="text-sm text-gray-700">{activeConnection.weekly_lead_cap}/week</p>}
+                          {activeConnection.monthly_lead_cap && <p className="text-sm text-gray-700">{activeConnection.monthly_lead_cap}/month</p>}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-gray-400 text-xs">Termination Notice</p>
+                        <p className="text-sm text-gray-700">{activeConnection.termination_notice_days ?? 0} days</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Proposed Terms */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-amber-600 uppercase tracking-wide mb-3">Proposed Terms</h4>
+                    <div className="space-y-3 bg-amber-50 rounded-xl p-4 border border-amber-200">
+                      <div>
+                        <p className="text-amber-500 text-xs">Rate per Lead</p>
+                        <p className={`text-lg font-bold ${Number(pendingTermProposal.proposedCriteria.payout_per_lead) !== Number(activeConnection.rate_per_lead) ? "text-amber-700" : "text-gray-800"}`}>
+                          ${Number(pendingTermProposal.proposedCriteria.payout_per_lead).toFixed(2)}
+                          {Number(pendingTermProposal.proposedCriteria.payout_per_lead) !== Number(activeConnection.rate_per_lead) && (
+                            <span className="text-xs ml-1">(was ${Number(activeConnection.rate_per_lead).toFixed(2)})</span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-amber-500 text-xs">Payment</p>
+                        <p className={`text-sm ${pendingTermProposal.proposedCriteria.payment_timing !== activeConnection.payment_timing ? "text-amber-700 font-medium" : "text-gray-700"}`}>
+                          {formatPaymentTiming((pendingTermProposal.proposedCriteria.payment_timing || "instant") as PaymentTiming)}
+                        </p>
+                      </div>
+                      {(pendingTermProposal.proposedCriteria.weekly_cap || pendingTermProposal.proposedCriteria.monthly_cap) && (
+                        <div>
+                          <p className="text-amber-500 text-xs">Caps</p>
+                          {pendingTermProposal.proposedCriteria.weekly_cap && <p className="text-sm text-amber-700">{pendingTermProposal.proposedCriteria.weekly_cap}/week</p>}
+                          {pendingTermProposal.proposedCriteria.monthly_cap && <p className="text-sm text-amber-700">{pendingTermProposal.proposedCriteria.monthly_cap}/month</p>}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-amber-500 text-xs">Termination Notice</p>
+                        <p className={`text-sm ${(pendingTermProposal.proposedCriteria.termination_notice_days ?? 0) !== (activeConnection.termination_notice_days ?? 0) ? "text-amber-700 font-medium" : "text-gray-700"}`}>
+                          {pendingTermProposal.proposedCriteria.termination_notice_days ?? 0} days
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reject note input */}
+                {showRejectInput && (
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-600 mb-1">Reason for declining (optional)</label>
+                    <textarea
+                      value={rejectNote}
+                      onChange={e => setRejectNote(e.target.value)}
+                      placeholder="Let them know why you're declining..."
+                      className="w-full border border-gray-300 rounded-lg p-2.5 text-sm resize-none focus:ring-2 focus:ring-red-300 focus:border-transparent"
+                      rows={2}
+                    />
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 mt-6">
+                  {!showRejectInput ? (
+                    <>
+                      <button
+                        onClick={async () => {
+                          setProposalResponding(true);
+                          try {
+                            const res = await fetch(`/api/connections/${activeConnection.id}/respond-terms`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ proposalId: pendingTermProposal.proposal.id, action: "accept" }),
+                            });
+                            if (res.ok) {
+                              setPendingTermProposal(null);
+                              setShowProposalModal(false);
+                              // Reload to get updated terms
+                              window.location.reload();
+                            } else {
+                              const data = await res.json();
+                              alert(data.error || "Failed to accept");
+                            }
+                          } catch { alert("Failed to accept terms"); }
+                          finally { setProposalResponding(false); }
+                        }}
+                        disabled={proposalResponding}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                      >
+                        {proposalResponding ? "Processing..." : "Accept New Terms"}
+                      </button>
+                      <button
+                        onClick={() => setShowRejectInput(true)}
+                        className="flex-1 border border-red-300 text-red-600 hover:bg-red-50 py-3 rounded-lg font-semibold transition"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={async () => {
+                          setProposalResponding(true);
+                          try {
+                            const res = await fetch(`/api/connections/${activeConnection.id}/respond-terms`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ proposalId: pendingTermProposal.proposal.id, action: "reject", note: rejectNote.trim() || undefined }),
+                            });
+                            if (res.ok) {
+                              setPendingTermProposal(null);
+                              setShowProposalModal(false);
+                              setShowRejectInput(false);
+                              setRejectNote("");
+                            } else {
+                              const data = await res.json();
+                              alert(data.error || "Failed to reject");
+                            }
+                          } catch { alert("Failed to reject terms"); }
+                          finally { setProposalResponding(false); }
+                        }}
+                        disabled={proposalResponding}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-semibold transition disabled:opacity-50"
+                      >
+                        {proposalResponding ? "Processing..." : "Confirm Reject"}
+                      </button>
+                      <button
+                        onClick={() => { setShowRejectInput(false); setRejectNote(""); }}
+                        className="flex-1 border border-gray-300 text-gray-600 hover:bg-gray-50 py-3 rounded-lg font-semibold transition"
+                      >
+                        Back
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
