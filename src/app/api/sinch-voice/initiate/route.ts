@@ -5,6 +5,8 @@ import {
   getUserById,
   createCallSession,
   updateCallSession,
+  getActiveBusinessCriteria,
+  getCriteriaById,
 } from '@/lib/db';
 import { initiateConferenceLeg, normalizePhone } from '@/lib/sinch-voice';
 
@@ -57,20 +59,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get buyer's phone number
+    // Get buyer's phone number — prefer criteria call_phone_number, fall back to user profile phone
     const buyer = await getUserById(connection.buyer_id);
     if (!buyer) {
       return NextResponse.json({ error: 'Business not found' }, { status: 404 });
     }
-    if (!buyer.phone) {
+
+    // Look up the criteria call number (set by the business in Lead Criteria)
+    const criteria = connection.criteria_id
+      ? await getCriteriaById(connection.criteria_id)
+      : await getActiveBusinessCriteria(connection.buyer_id);
+    const rawBuyerPhone = criteria?.call_phone_number || buyer.phone;
+
+    if (!rawBuyerPhone) {
       return NextResponse.json({
-        error: 'The business has not set up a phone number. Please contact them directly.',
+        error: 'The business has not set up a call number. Ask them to add one in their Lead Criteria settings.',
       }, { status: 400 });
     }
-    const buyerPhone = normalizePhone(buyer.phone);
+    const buyerPhone = normalizePhone(rawBuyerPhone);
     if (!buyerPhone) {
       return NextResponse.json({
-        error: 'The business phone number is invalid. Please contact them directly.',
+        error: 'The business call number is invalid. Ask them to update it in their Lead Criteria settings.',
       }, { status: 400 });
     }
 

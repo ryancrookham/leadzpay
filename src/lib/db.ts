@@ -183,6 +183,7 @@ export interface DbBusinessLeadCriteria {
   termination_notice_days: number | null;
   is_active: boolean;
   require_verified_call: boolean;
+  call_phone_number: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2333,6 +2334,7 @@ export async function createBusinessCriteria(data: {
   payment_timing?: string | null;
   termination_notice_days?: number | null;
   require_verified_call?: boolean;
+  call_phone_number?: string | null;
 }): Promise<DbBusinessLeadCriteria> {
   const sql = getSql();
   // Deactivate any existing active criteria first
@@ -2341,8 +2343,8 @@ export async function createBusinessCriteria(data: {
     WHERE business_id = ${data.business_id} AND is_active = TRUE
   `;
   const result = await sql`
-    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap, payment_timing, termination_notice_days, require_verified_call)
-    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null}, ${data.payment_timing ?? null}, ${data.termination_notice_days ?? null}, ${data.require_verified_call ?? false})
+    INSERT INTO business_lead_criteria (business_id, payout_per_lead, weekly_cap, monthly_cap, payment_timing, termination_notice_days, require_verified_call, call_phone_number)
+    VALUES (${data.business_id}, ${data.payout_per_lead}, ${data.weekly_cap ?? null}, ${data.monthly_cap ?? null}, ${data.payment_timing ?? null}, ${data.termination_notice_days ?? null}, ${data.require_verified_call ?? false}, ${data.call_phone_number ?? null})
     RETURNING *
   `;
   return first<DbBusinessLeadCriteria>(result)!;
@@ -2355,6 +2357,7 @@ export async function updateBusinessCriteria(id: string, businessId: string, upd
   payment_timing?: string | null;
   termination_notice_days?: number | null;
   require_verified_call?: boolean;
+  call_phone_number?: string | null;
 }): Promise<DbBusinessLeadCriteria | null> {
   const sql = getSql();
   const result = await sql`
@@ -2365,6 +2368,7 @@ export async function updateBusinessCriteria(id: string, businessId: string, upd
       payment_timing = CASE WHEN ${updates.payment_timing !== undefined} THEN ${updates.payment_timing ?? null} ELSE payment_timing END,
       termination_notice_days = CASE WHEN ${updates.termination_notice_days !== undefined} THEN ${updates.termination_notice_days ?? null} ELSE termination_notice_days END,
       require_verified_call = CASE WHEN ${updates.require_verified_call !== undefined} THEN ${updates.require_verified_call ?? false} ELSE require_verified_call END,
+      call_phone_number = CASE WHEN ${updates.call_phone_number !== undefined} THEN ${updates.call_phone_number ?? null} ELSE call_phone_number END,
       updated_at = NOW()
     WHERE id = ${id} AND business_id = ${businessId}
     RETURNING *

@@ -38,6 +38,7 @@ export interface SavedCriteria {
   termination_notice_days: number | null;
   is_active: boolean;
   require_verified_call: boolean;
+  call_phone_number: string | null;
 }
 
 export interface SavedField {
@@ -56,11 +57,12 @@ interface InviteTabProps {
   initialCriteria: SavedCriteria | null;
   initialFields: SavedField[];
   defaultPaymentMode?: string; // From Settings — pre-fills new deal payment mode
+  businessPhone?: string | null; // From user profile — pre-fills call phone number
 }
 
 const BASE_URL = "https://www.womleads.com";
 
-export default function InviteTab({ businessName, initialTokens, initialCriteria, initialFields, defaultPaymentMode }: InviteTabProps) {
+export default function InviteTab({ businessName, initialTokens, initialCriteria, initialFields, defaultPaymentMode, businessPhone }: InviteTabProps) {
   const [tokens, setTokens] = useState<InviteToken[]>(initialTokens);
   const [dataLoaded] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
   const [criteriaScheduledCadence, setCriteriaScheduledCadence] = useState<"weekly" | "biweekly" | "monthly">("weekly");
   const [criteriaTerminationDays, setCriteriaTerminationDays] = useState(7);
   const [criteriaFields, setCriteriaFields] = useState<CriteriaField[]>([]);
+  const [criteriaCallPhone, setCriteriaCallPhone] = useState<string>("");
   const [terminateConfirm, setTerminateConfirm] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
 
@@ -159,6 +162,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 0);
+      setCriteriaCallPhone(savedCriteria.call_phone_number || businessPhone || "");
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,
@@ -183,6 +187,7 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(7);
+      setCriteriaCallPhone(businessPhone || "");
       setCriteriaFields([]);
     }
     setCriteriaEditing(true);
@@ -228,13 +233,15 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
     }
     setCriteriaSaving(true);
     try {
+      const hasPhoneCall = criteriaFields.some(f => f.fieldType === "PHONE_CALL");
       const payload = {
         payoutPerLead: criteriaPayoutPerLead,
         weeklyCap: criteriaEnableWeeklyCap ? criteriaWeeklyCap : null,
         monthlyCap: criteriaEnableMonthlyCap ? criteriaMonthlyCap : null,
         paymentTiming: criteriaPaymentTiming === "scheduled" ? `scheduled_${criteriaScheduledCadence}` : criteriaPaymentTiming,
         terminationNoticeDays: criteriaTerminationDays,
-        requireVerifiedCall: criteriaFields.some(f => f.fieldType === "PHONE_CALL"),
+        requireVerifiedCall: hasPhoneCall,
+        callPhoneNumber: hasPhoneCall ? (criteriaCallPhone.trim() || null) : null,
         fields: criteriaFields,
       };
 
@@ -574,14 +581,27 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
                   {criteriaFields.map((field, i) => (
                     field.fieldType === "PHONE_CALL" ? (
                       /* Special card for Phone Call — no label editing, always required */
-                      <div key={i} className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        {fieldTypeBadge(field.fieldType)}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-green-800">Verified Phone Call</p>
-                          <p className="text-xs text-green-600">Provider must call the business and speak for 30+ seconds before submitting — always required, always first</p>
+                      <div key={i} className="space-y-2">
+                        <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          {fieldTypeBadge(field.fieldType)}
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-green-800">Verified Phone Call</p>
+                            <p className="text-xs text-green-600">Provider must call the business and speak for 30+ seconds before submitting — always required, always first</p>
+                          </div>
+                          <span className="text-xs text-green-600 font-medium whitespace-nowrap">Always Required</span>
+                          <button onClick={() => removeCriteriaField(i)} className="text-red-400 hover:text-red-600 text-sm">&#10005;</button>
                         </div>
-                        <span className="text-xs text-green-600 font-medium whitespace-nowrap">Always Required</span>
-                        <button onClick={() => removeCriteriaField(i)} className="text-red-400 hover:text-red-600 text-sm">&#10005;</button>
+                        <div className="ml-1 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <label className="block text-xs font-medium text-green-800 mb-1">📞 Call this number when a provider starts a verified call</label>
+                          <input
+                            type="tel"
+                            value={criteriaCallPhone}
+                            onChange={e => setCriteriaCallPhone(e.target.value)}
+                            placeholder="e.g. (267) 393-5417"
+                            className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400/30 bg-white"
+                          />
+                          <p className="text-xs text-green-600 mt-1">This is the number Sinch will dial — use whichever location or direct line you want to receive these calls.</p>
+                        </div>
                       </div>
                     ) : (
                       <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
@@ -668,10 +688,18 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
             </div>
 
             {(savedCriteria.require_verified_call || savedFields.some(f => f.field_type === "PHONE_CALL")) && (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
-                <span>📞</span>
-                <span className="font-medium">Verified Phone Call Required</span>
-                <span className="text-green-600 text-xs">— Providers must call and speak with you for 30+ seconds before submitting a lead</span>
+              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
+                <div className="flex items-center gap-2">
+                  <span>📞</span>
+                  <span className="font-medium">Verified Phone Call Required</span>
+                  <span className="text-green-600 text-xs">— Providers must call and speak with you for 30+ seconds before submitting a lead</span>
+                </div>
+                {savedCriteria.call_phone_number && (
+                  <p className="text-xs text-green-600 mt-1 ml-6">Calls directed to: <span className="font-medium text-green-800">{savedCriteria.call_phone_number}</span></p>
+                )}
+                {!savedCriteria.call_phone_number && (
+                  <p className="text-xs text-amber-600 mt-1 ml-6">⚠ No call number set — edit your criteria to add a phone number providers will call.</p>
+                )}
               </div>
             )}
 
