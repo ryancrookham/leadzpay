@@ -24,16 +24,7 @@ export async function GET(
       return NextResponse.json({ error: "Not authorized for this connection" }, { status: 403 });
     }
 
-    const proposal = await getPendingProposal(id);
-    if (!proposal) {
-      return NextResponse.json({ proposal: null });
-    }
-
-    // Fetch proposed criteria + fields
-    const proposedCriteria = await getCriteriaById(proposal.proposed_criteria_id);
-    const proposedFields = proposedCriteria ? await getCriteriaFields(proposedCriteria.id) : [];
-
-    // Fetch current criteria + fields for diff comparison
+    // Always fetch current criteria + fields (needed for modal pre-population)
     let currentCriteria = null;
     let currentFields: Awaited<ReturnType<typeof getCriteriaFields>> = [];
     if (connection.criteria_id) {
@@ -42,6 +33,15 @@ export async function GET(
         currentFields = await getCriteriaFields(currentCriteria.id);
       }
     }
+
+    const proposal = await getPendingProposal(id);
+    if (!proposal) {
+      return NextResponse.json({ proposal: null, currentCriteria, currentFields });
+    }
+
+    // Fetch proposed criteria + fields
+    const proposedCriteria = await getCriteriaById(proposal.proposed_criteria_id);
+    const proposedFields = proposedCriteria ? await getCriteriaFields(proposedCriteria.id) : [];
 
     return NextResponse.json({
       proposal,
