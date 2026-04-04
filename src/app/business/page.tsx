@@ -14,6 +14,7 @@ import { calculateFeeBreakdown, type FeeSettings } from "@/lib/platform-fees";
 import dynamic from "next/dynamic";
 import { loadStripe } from "@stripe/stripe-js";
 import InviteTab, { type InviteToken, type SavedCriteria, type SavedField } from "./components/InviteTab";
+import CriteriaFieldBuilder from "./components/CriteriaFieldBuilder";
 
 const DashboardChart = dynamic(() => import("./components/DashboardChart"), { ssr: false });
 
@@ -5785,6 +5786,10 @@ function ConnectionsTab({
   const [monthlyLeadCap, setMonthlyLeadCap] = useState<number | undefined>(undefined);
   const [pauseWhenCapReached, setPauseWhenCapReached] = useState(true);
 
+  // Criteria fields state for proposals
+  const [proposalFields, setProposalFields] = useState<import("./components/CriteriaFieldBuilder").CriteriaField[]>([]);
+  const [proposalCallPhone, setProposalCallPhone] = useState("");
+
   const activeConnections = myConnections.filter(c => c.status === "active");
   const terminatedConnections = myConnections.filter(c => c.status === "terminated");
 
@@ -5815,7 +5820,28 @@ function ConnectionsTab({
     setWeeklyLeadCap(connection.weekly_lead_cap || undefined);
     setMonthlyLeadCap(connection.monthly_lead_cap || undefined);
     setPauseWhenCapReached(true);
+    setProposalFields([]);
+    setProposalCallPhone("");
     setShowEditTermsModal(true);
+    // Fetch current criteria fields for this connection
+    fetch(`/api/connections/${connection.id}/pending-proposal`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.currentFields && Array.isArray(data.currentFields)) {
+          setProposalFields(data.currentFields.map((f: any) => ({
+            fieldType: f.field_type,
+            label: f.label,
+            optionA: f.option_a || undefined,
+            optionB: f.option_b || undefined,
+            isMandatory: f.is_mandatory,
+            sortOrder: f.sort_order,
+          })));
+        }
+        if (data.currentCriteria?.call_phone_number) {
+          setProposalCallPhone(data.currentCriteria.call_phone_number);
+        }
+      })
+      .catch(() => {});
   };
 
   const handleProposeTerms = async () => {
@@ -5831,9 +5857,9 @@ function ConnectionsTab({
           monthlyCap: enableLeadCaps ? monthlyLeadCap : null,
           paymentTiming,
           terminationNoticeDays: terminationDays,
-          requireVerifiedCall: false,
-          callPhoneNumber: null,
-          fields: [],
+          requireVerifiedCall: proposalFields.some(f => f.fieldType === "PHONE_CALL"),
+          callPhoneNumber: proposalFields.some(f => f.fieldType === "PHONE_CALL") ? (proposalCallPhone.trim() || null) : null,
+          fields: proposalFields,
         }),
       });
       if (res.ok) {
@@ -6015,6 +6041,10 @@ function ConnectionsTab({
             saveButtonText={proposing ? "Proposing..." : "Propose New Terms"}
             feeSettings={feeSettings}
             warningBanner="The provider will be notified by SMS and must accept before new terms take effect. Current terms remain in force until then."
+            criteriaFields={proposalFields}
+            setCriteriaFields={setProposalFields}
+            callPhone={proposalCallPhone}
+            setCallPhone={setProposalCallPhone}
           />
         </>
       )}
@@ -6054,6 +6084,10 @@ function TermsModal({
   saveButtonText,
   feeSettings,
   warningBanner,
+  criteriaFields,
+  setCriteriaFields,
+  callPhone,
+  setCallPhone,
 }: {
   title: string;
   ratePerLead: number;
@@ -6084,6 +6118,10 @@ function TermsModal({
   saveButtonText: string;
   feeSettings?: FeeSettings;
   warningBanner?: string;
+  criteriaFields?: import("./components/CriteriaFieldBuilder").CriteriaField[];
+  setCriteriaFields?: (fields: import("./components/CriteriaFieldBuilder").CriteriaField[]) => void;
+  callPhone?: string;
+  setCallPhone?: (v: string) => void;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
@@ -6327,6 +6365,18 @@ function TermsModal({
               </div>
             )}
           </div>
+
+          {/* Criteria Fields */}
+          {criteriaFields && setCriteriaFields && callPhone !== undefined && setCallPhone && (
+            <div className="border-t border-gray-200 pt-4">
+              <CriteriaFieldBuilder
+                fields={criteriaFields}
+                setFields={setCriteriaFields}
+                callPhone={callPhone}
+                setCallPhone={setCallPhone}
+              />
+            </div>
+          )}
 
           {/* Notes */}
           <div>
