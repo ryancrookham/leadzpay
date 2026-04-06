@@ -694,10 +694,13 @@ function ConnectionTab({
   });
 
   // Term proposal state
+  type ProposalField = { field_type: string; label: string; option_a: string | null; option_b: string | null; is_mandatory: boolean };
   const [pendingTermProposal, setPendingTermProposal] = useState<{
     proposal: { id: string; proposed_at: string };
-    proposedCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean };
-    currentCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean } | null;
+    proposedCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean; call_phone_number: string | null };
+    currentCriteria: { payout_per_lead: number; weekly_cap: number | null; monthly_cap: number | null; payment_timing: string | null; termination_notice_days: number | null; require_verified_call: boolean; call_phone_number: string | null } | null;
+    proposedFields: ProposalField[];
+    currentFields: ProposalField[];
   } | null>(null);
   const [showProposalModal, setShowProposalModal] = useState(false);
   const [proposalResponding, setProposalResponding] = useState(false);
@@ -773,6 +776,8 @@ function ConnectionTab({
               proposal: data.proposal,
               proposedCriteria: data.proposedCriteria,
               currentCriteria: data.currentCriteria,
+              proposedFields: data.proposedFields || [],
+              currentFields: data.currentFields || [],
             });
           } else {
             setPendingTermProposal(null);
@@ -1089,6 +1094,81 @@ function ConnectionTab({
                     </div>
                   </div>
                 </div>
+
+                {/* Required Fields Comparison */}
+                {(pendingTermProposal.currentFields.length > 0 || pendingTermProposal.proposedFields.length > 0) && (() => {
+                  const fieldKey = (f: ProposalField) => `${f.field_type}:${f.label}`;
+                  const currentKeys = new Set(pendingTermProposal.currentFields.map(fieldKey));
+                  const proposedKeys = new Set(pendingTermProposal.proposedFields.map(fieldKey));
+                  const badge = (type: string) => {
+                    const cfg: Record<string, { color: string; label: string }> = {
+                      PHOTO: { color: "bg-purple-100 text-purple-700", label: "Photo" },
+                      TEXT: { color: "bg-blue-100 text-blue-700", label: "Text" },
+                      BINARY: { color: "bg-amber-100 text-amber-700", label: "Yes/No" },
+                      PHONE_CALL: { color: "bg-green-100 text-green-700", label: "📞 Call" },
+                    };
+                    const { color, label } = cfg[type] || { color: "bg-gray-100 text-gray-600", label: type };
+                    return <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>{label}</span>;
+                  };
+                  // Removed fields = in current but not in proposed
+                  const removedFields = pendingTermProposal.currentFields.filter(f => !proposedKeys.has(fieldKey(f)));
+                  return (
+                    <div className="grid md:grid-cols-2 gap-6 mt-4 pt-4 border-t border-gray-200">
+                      {/* Current Fields */}
+                      <div>
+                        <p className="text-gray-400 text-xs mb-2">Required Fields</p>
+                        {pendingTermProposal.currentFields.length === 0 ? (
+                          <p className="text-gray-300 text-xs italic">None</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {pendingTermProposal.currentFields.map((f, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                {badge(f.field_type)}
+                                <span className="text-sm text-gray-700">{f.label}</span>
+                                {f.field_type === "BINARY" && f.option_a && (
+                                  <span className="text-[10px] text-gray-400">({f.option_a}/{f.option_b})</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* Proposed Fields */}
+                      <div>
+                        <p className="text-amber-500 text-xs mb-2">Required Fields</p>
+                        {pendingTermProposal.proposedFields.length === 0 && removedFields.length === 0 ? (
+                          <p className="text-gray-300 text-xs italic">None</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {pendingTermProposal.proposedFields.map((f, i) => {
+                              const isNew = !currentKeys.has(fieldKey(f));
+                              return (
+                                <div key={i} className={`flex items-center gap-2 ${isNew ? "bg-emerald-50 rounded px-1.5 py-0.5 -mx-1.5" : ""}`}>
+                                  {badge(f.field_type)}
+                                  <span className={`text-sm ${isNew ? "text-emerald-700 font-medium" : "text-gray-700"}`}>{f.label}</span>
+                                  {f.field_type === "BINARY" && f.option_a && (
+                                    <span className="text-[10px] text-gray-400">({f.option_a}/{f.option_b})</span>
+                                  )}
+                                  {isNew && <span className="text-[10px] text-emerald-600 font-medium">NEW</span>}
+                                </div>
+                              );
+                            })}
+                            {removedFields.map((f, i) => (
+                              <div key={`rm-${i}`} className="flex items-center gap-2 bg-red-50 rounded px-1.5 py-0.5 -mx-1.5">
+                                {badge(f.field_type)}
+                                <span className="text-sm text-red-400 line-through">{f.label}</span>
+                                <span className="text-[10px] text-red-500 font-medium">REMOVED</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {pendingTermProposal.proposedFields.some(f => f.field_type === "PHONE_CALL") && pendingTermProposal.proposedCriteria.call_phone_number && (
+                          <p className="text-xs text-green-600 mt-2">Calls directed to: {pendingTermProposal.proposedCriteria.call_phone_number}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Reject note input */}
                 {showRejectInput && (
