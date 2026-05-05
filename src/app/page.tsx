@@ -185,7 +185,7 @@ if (!mounted || isLoading) {
               <span className="w-1.5 h-1.5 rounded-full bg-[#E77500] animate-pulse" />
               Facilitating 3,000+ leads monthly
             </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-[1.05] mb-8 tracking-tight" style={{ fontFamily: "var(--font-instrument-serif)" }}>
+            <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-[1.05] mb-8 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif", fontWeight: 700 }}>
               Word of Mouth is Your
               <br />
               Best Lead Source.
