@@ -4724,6 +4724,81 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
   const [pinError, setPinError] = useState("");
   const [pinSuccess, setPinSuccess] = useState(false);
 
+  // Verified Call Routing (per-business Sinch destination)
+  const [vcpValue, setVcpValue] = useState("");
+  const [vcpSaved, setVcpSaved] = useState<string | null>(null);
+  const [vcpAccountPhone, setVcpAccountPhone] = useState<string | null>(null);
+  const [vcpResolved, setVcpResolved] = useState<string | null>(null);
+  const [vcpResolvedSource, setVcpResolvedSource] = useState<"verified_call_phone" | "account_phone" | null>(null);
+  const [vcpSaving, setVcpSaving] = useState(false);
+  const [vcpTesting, setVcpTesting] = useState(false);
+  const [vcpMessage, setVcpMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  async function loadVerifiedCallPhone() {
+    try {
+      const res = await fetch("/api/business/verified-call-phone");
+      const data = await res.json();
+      if (!data.success) return;
+      setVcpSaved(data.verifiedCallPhone);
+      setVcpValue(data.verifiedCallPhone || "");
+      setVcpAccountPhone(data.accountPhone);
+      setVcpResolved(data.resolved);
+      setVcpResolvedSource(data.resolvedSource);
+    } catch { /* non-blocking */ }
+  }
+  useEffect(() => { loadVerifiedCallPhone(); }, []);
+
+  async function saveVerifiedCallPhone() {
+    setVcpSaving(true);
+    setVcpMessage(null);
+    try {
+      const res = await fetch("/api/business/verified-call-phone", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: vcpValue.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setVcpSaved(data.verifiedCallPhone);
+      setVcpValue(data.verifiedCallPhone || "");
+      setVcpMessage({
+        kind: "success",
+        text: data.verifiedCallPhone
+          ? `Saved. Verified calls will ring ${data.verifiedCallPhone}.`
+          : "Cleared. Verified calls will fall back to your account phone.",
+      });
+      await loadVerifiedCallPhone();
+    } catch (err) {
+      setVcpMessage({ kind: "error", text: err instanceof Error ? err.message : "Save failed" });
+    } finally {
+      setVcpSaving(false);
+    }
+  }
+
+  async function testVerifiedCallPhone() {
+    const phone = vcpValue.trim() || vcpSaved || vcpAccountPhone;
+    if (!phone) {
+      setVcpMessage({ kind: "error", text: "No phone number to test. Enter one first." });
+      return;
+    }
+    setVcpTesting(true);
+    setVcpMessage(null);
+    try {
+      const res = await fetch("/api/business/verified-call-phone/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Test call failed");
+      setVcpMessage({ kind: "success", text: data.message || "Test call placed." });
+    } catch (err) {
+      setVcpMessage({ kind: "error", text: err instanceof Error ? err.message : "Test call failed" });
+    } finally {
+      setVcpTesting(false);
+    }
+  }
+
   // Fetch full profile on mount
   useEffect(() => {
     async function loadProfile() {
@@ -5145,6 +5220,67 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
           >
             {smsSaving ? "Saving\u2026" : "Save Alert Settings"}
           </button>
+        </div>
+
+        {/* Verified Call Routing */}
+        <div className="border-t border-gray-200 pt-6 mt-2">
+          <h4 className="text-sm font-semibold text-gray-800 mb-1">Verified Call Routing</h4>
+          <p className="text-gray-500 text-xs mb-4">
+            When a lead deal requires a verified phone call (a <span className="font-medium">PHONE_CALL</span> criterion in your Lead Criteria), Sinch bridges the provider to <span className="font-medium">this number</span>. Set it to your office line, an on-call queue, or wherever the qualifying call should ring \u2014 separate from your account/SMS phone.
+          </p>
+
+          {vcpResolved ? (
+            <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
+              <strong>Verified calls currently ring:</strong> {vcpResolved}
+              <span className="text-blue-700 ml-1">
+                ({vcpResolvedSource === "verified_call_phone" ? "using this Setting" : "falling back to your account phone \u2014 set a dedicated number below"})
+              </span>
+            </div>
+          ) : (
+            <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+              No number set. Verified-call features will error until you configure one here or in your Lead Criteria.
+            </div>
+          )}
+
+          <label className="block text-gray-700 text-sm font-medium mb-1">Business Call Number</label>
+          <input
+            type="tel"
+            value={vcpValue}
+            onChange={(e) => setVcpValue(e.target.value)}
+            placeholder="(610) 817-7845"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+          <p className="text-[11px] text-gray-500 mt-1">
+            US number, 10 digits. Leave blank to fall back to your account phone
+            {vcpAccountPhone ? ` (${vcpAccountPhone})` : " (not set)"}.
+          </p>
+
+          {vcpMessage && (
+            <div className={`mt-3 rounded-lg p-3 text-xs ${
+              vcpMessage.kind === "success"
+                ? "bg-green-50 border border-green-200 text-green-800"
+                : "bg-red-50 border border-red-200 text-red-800"
+            }`}>
+              {vcpMessage.text}
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={saveVerifiedCallPhone}
+              disabled={vcpSaving}
+              className="bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+            >
+              {vcpSaving ? "Saving\u2026" : "Save Number"}
+            </button>
+            <button
+              onClick={testVerifiedCallPhone}
+              disabled={vcpTesting || (!vcpValue.trim() && !vcpSaved && !vcpAccountPhone)}
+              className="bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg"
+            >
+              {vcpTesting ? "Calling\u2026" : "Send Test Call"}
+            </button>
+          </div>
         </div>
 
         {/* ── Payout Settings ─────────────────────────────────────────── */}

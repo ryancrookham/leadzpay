@@ -65,11 +65,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Business not found' }, { status: 404 });
     }
 
-    // Look up the criteria call number (set by the business in Lead Criteria)
+    // Look up the criteria call number (set by the business in Lead Criteria).
+    // Priority chain:
+    //   1. criteria.call_phone_number   — per-deal override
+    //   2. buyer.verified_call_phone    — business-level default (Settings tab)
+    //   3. buyer.phone                  — legacy fallback (account/SMS phone)
     const criteria = connection.criteria_id
       ? await getCriteriaById(connection.criteria_id)
       : await getActiveBusinessCriteria(connection.buyer_id);
-    const rawBuyerPhone = criteria?.call_phone_number || buyer.phone;
+    const buyerVerifiedCallPhone = (buyer as { verified_call_phone?: string | null }).verified_call_phone || null;
+    const rawBuyerPhone = criteria?.call_phone_number || buyerVerifiedCallPhone || buyer.phone;
 
     if (!rawBuyerPhone) {
       return NextResponse.json({
