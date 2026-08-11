@@ -5,7 +5,12 @@
  */
 
 const SINCH_BASE_URL = 'https://calling.api.sinch.com/calling/v1';
-export const MIN_CALL_DURATION = parseInt(process.env.SINCH_VOICE_MIN_DURATION || '30', 10);
+// Minimum duration EACH leg must sustain (in seconds) before the session is
+// considered a verified conversation. Raised from 30 → 60 because the greeting
+// TTS on each leg burns ~8-10s of the call before any real talk begins, so 30s
+// left only ~20s of true conversation — too easy to farm passively. Override
+// via SINCH_VOICE_MIN_DURATION env var if experimentation warrants a change.
+export const MIN_CALL_DURATION = parseInt(process.env.SINCH_VOICE_MIN_DURATION || '60', 10);
 
 function getSinchAuth(): string {
   const appKey = process.env.SINCH_APP_KEY;

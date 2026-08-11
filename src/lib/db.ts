@@ -2687,6 +2687,10 @@ export async function updateCallSession(id: string, updates: {
   duration_seconds?: number | null;
   completed_at?: string | null;
   verified?: boolean;
+  provider_answered?: boolean | null;
+  provider_duration_seconds?: number | null;
+  buyer_answered?: boolean | null;
+  buyer_duration_seconds?: number | null;
 }): Promise<DbCallSession | null> {
   const sql = getSql();
   const result = await sql`
@@ -2696,7 +2700,11 @@ export async function updateCallSession(id: string, updates: {
       status = CASE WHEN ${updates.status !== undefined} THEN ${updates.status ?? 'initiated'} ELSE status END,
       duration_seconds = CASE WHEN ${updates.duration_seconds !== undefined} THEN ${updates.duration_seconds ?? null} ELSE duration_seconds END,
       completed_at = CASE WHEN ${updates.completed_at !== undefined} THEN ${updates.completed_at ?? null} ELSE completed_at END,
-      verified = CASE WHEN ${updates.verified !== undefined} THEN ${updates.verified ?? false} ELSE verified END
+      verified = CASE WHEN ${updates.verified !== undefined} THEN ${updates.verified ?? false} ELSE verified END,
+      provider_answered = CASE WHEN ${updates.provider_answered !== undefined} THEN ${updates.provider_answered ?? null} ELSE provider_answered END,
+      provider_duration_seconds = CASE WHEN ${updates.provider_duration_seconds !== undefined} THEN ${updates.provider_duration_seconds ?? null} ELSE provider_duration_seconds END,
+      buyer_answered = CASE WHEN ${updates.buyer_answered !== undefined} THEN ${updates.buyer_answered ?? null} ELSE buyer_answered END,
+      buyer_duration_seconds = CASE WHEN ${updates.buyer_duration_seconds !== undefined} THEN ${updates.buyer_duration_seconds ?? null} ELSE buyer_duration_seconds END
     WHERE id = ${id}
     RETURNING *
   `;
