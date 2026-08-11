@@ -27,25 +27,17 @@ export async function GET() {
   if ("error" in authResult) return authResult.error;
 
   const rows = await sql`
-    SELECT phone, verified_call_phone FROM users WHERE id = ${authResult.userId} LIMIT 1
+    SELECT verified_call_phone FROM users WHERE id = ${authResult.userId} LIMIT 1
   `;
   const row = rows[0] || {};
   const verifiedCallPhone = row.verified_call_phone as string | null;
-  const accountPhone = row.phone as string | null;
-
-  const resolved = verifiedCallPhone || accountPhone || null;
-  const resolvedSource = verifiedCallPhone
-    ? "verified_call_phone"
-    : accountPhone
-    ? "account_phone"
-    : null;
 
   return NextResponse.json({
     success: true,
     verifiedCallPhone,
-    accountPhone,
-    resolved,
-    resolvedSource,
+    // No fallback to account phone by policy. If not set, verified calls will
+    // hard-error until the business explicitly configures a number.
+    resolved: verifiedCallPhone,
   });
 }
 

@@ -155,7 +155,10 @@ export default function InviteTab({ businessName, initialTokens, initialCriteria
         setCriteriaPaymentTiming("instant");
       }
       setCriteriaTerminationDays(savedCriteria.termination_notice_days ?? 0);
-      setCriteriaCallPhone(savedCriteria.call_phone_number || businessPhone || "");
+      // Do NOT pre-fill from the account phone — every business must explicitly
+      // set a per-criteria override OR use the Settings-tab Verified Call Routing.
+      // Silently inheriting users.phone caused providers to reach personal cells.
+      setCriteriaCallPhone(savedCriteria.call_phone_number || "");
       setCriteriaFields(savedFields.map(f => ({
         fieldType: f.field_type,
         label: f.label,

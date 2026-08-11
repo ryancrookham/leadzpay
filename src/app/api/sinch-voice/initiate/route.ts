@@ -59,32 +59,38 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get buyer's phone number — prefer criteria call_phone_number, fall back to user profile phone
+    // Get buyer's business record.
     const buyer = await getUserById(connection.buyer_id);
     if (!buyer) {
       return NextResponse.json({ error: 'Business not found' }, { status: 404 });
     }
 
-    // Look up the criteria call number (set by the business in Lead Criteria).
-    // Priority chain:
-    //   1. criteria.call_phone_number   — per-deal override
+    // Resolve which phone Sinch should dial.
+    // Priority chain (NO fallback to users.phone — see below):
+    //   1. criteria.call_phone_number   — per-deal override (Lead Criteria)
     //   2. buyer.verified_call_phone    — business-level default (Settings tab)
-    //   3. buyer.phone                  — legacy fallback (account/SMS phone)
+    //   3. hard error                    — force business to set an explicit number
+    //
+    // Why no users.phone fallback: users.phone is the business owner's account/SMS
+    // phone (often a personal cell). Silently routing verified calls to it produced
+    // real-world incidents where providers reached a personal voicemail instead of
+    // the business. Every business must intentionally configure a dedicated
+    // verified-call number — no defaults, no reversion.
     const criteria = connection.criteria_id
       ? await getCriteriaById(connection.criteria_id)
       : await getActiveBusinessCriteria(connection.buyer_id);
     const buyerVerifiedCallPhone = (buyer as { verified_call_phone?: string | null }).verified_call_phone || null;
-    const rawBuyerPhone = criteria?.call_phone_number || buyerVerifiedCallPhone || buyer.phone;
+    const rawBuyerPhone = criteria?.call_phone_number || buyerVerifiedCallPhone;
 
     if (!rawBuyerPhone) {
       return NextResponse.json({
-        error: 'The business has not set up a call number. Ask them to add one in their Lead Criteria settings.',
+        error: 'The business has not configured a verified-call number yet. Ask them to set one in Settings → Verified Call Routing.',
       }, { status: 400 });
     }
     const buyerPhone = normalizePhone(rawBuyerPhone);
     if (!buyerPhone) {
       return NextResponse.json({
-        error: 'The business call number is invalid. Ask them to update it in their Lead Criteria settings.',
+        error: 'The business verified-call number is invalid. Ask them to update it in Settings → Verified Call Routing.',
       }, { status: 400 });
     }
 

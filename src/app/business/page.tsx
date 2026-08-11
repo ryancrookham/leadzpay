@@ -4724,12 +4724,9 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
   const [pinError, setPinError] = useState("");
   const [pinSuccess, setPinSuccess] = useState(false);
 
-  // Verified Call Routing (per-business Sinch destination)
+  // Verified Call Routing (per-business Sinch destination — no fallback to account phone)
   const [vcpValue, setVcpValue] = useState("");
   const [vcpSaved, setVcpSaved] = useState<string | null>(null);
-  const [vcpAccountPhone, setVcpAccountPhone] = useState<string | null>(null);
-  const [vcpResolved, setVcpResolved] = useState<string | null>(null);
-  const [vcpResolvedSource, setVcpResolvedSource] = useState<"verified_call_phone" | "account_phone" | null>(null);
   const [vcpSaving, setVcpSaving] = useState(false);
   const [vcpTesting, setVcpTesting] = useState(false);
   const [vcpMessage, setVcpMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -4741,9 +4738,6 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
       if (!data.success) return;
       setVcpSaved(data.verifiedCallPhone);
       setVcpValue(data.verifiedCallPhone || "");
-      setVcpAccountPhone(data.accountPhone);
-      setVcpResolved(data.resolved);
-      setVcpResolvedSource(data.resolvedSource);
     } catch { /* non-blocking */ }
   }
   useEffect(() => { loadVerifiedCallPhone(); }, []);
@@ -4776,9 +4770,9 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
   }
 
   async function testVerifiedCallPhone() {
-    const phone = vcpValue.trim() || vcpSaved || vcpAccountPhone;
+    const phone = vcpValue.trim() || vcpSaved;
     if (!phone) {
-      setVcpMessage({ kind: "error", text: "No phone number to test. Enter one first." });
+      setVcpMessage({ kind: "error", text: "Enter a number in the field above first, then Send Test Call." });
       return;
     }
     setVcpTesting(true);
@@ -5226,19 +5220,16 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
         <div className="border-t border-gray-200 pt-6 mt-2">
           <h4 className="text-sm font-semibold text-gray-800 mb-1">Verified Call Routing</h4>
           <p className="text-gray-500 text-xs mb-4">
-            When a lead deal requires a verified phone call (a <span className="font-medium">PHONE_CALL</span> criterion in your Lead Criteria), Sinch bridges the provider to <span className="font-medium">this number</span>. Set it to your office line, an on-call queue, or wherever the qualifying call should ring \u2014 separate from your account/SMS phone.
+            When a lead deal requires a verified phone call (a <span className="font-medium">PHONE_CALL</span> criterion in your Lead Criteria), Sinch bridges the provider to <span className="font-medium">this number</span>. Set it to your office line, on-call queue, or wherever the qualifying call should ring \u2014 this is separate from your account/SMS phone, and there is <span className="font-medium">no fallback</span> to any other number.
           </p>
 
-          {vcpResolved ? (
+          {vcpSaved ? (
             <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
-              <strong>Verified calls currently ring:</strong> {vcpResolved}
-              <span className="text-blue-700 ml-1">
-                ({vcpResolvedSource === "verified_call_phone" ? "using this Setting" : "falling back to your account phone \u2014 set a dedicated number below"})
-              </span>
+              <strong>Verified calls currently ring:</strong> {vcpSaved}
             </div>
           ) : (
             <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-              No number set. Verified-call features will error until you configure one here or in your Lead Criteria.
+              <strong>No verified-call number set.</strong> Any provider who tries to make a verified call to your business will see an error until you configure one below.
             </div>
           )}
 
@@ -5251,8 +5242,7 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
           <p className="text-[11px] text-gray-500 mt-1">
-            US number, 10 digits. Leave blank to fall back to your account phone
-            {vcpAccountPhone ? ` (${vcpAccountPhone})` : " (not set)"}.
+            US number, 10 digits. Send a test call before saving to confirm the right device rings. Leave blank + save to clear (verified-call features will then error).
           </p>
 
           {vcpMessage && (
@@ -5275,7 +5265,7 @@ function SettingsTab({ currentBuyer, feeSettings, onPayoutModeChange, onDefaultP
             </button>
             <button
               onClick={testVerifiedCallPhone}
-              disabled={vcpTesting || (!vcpValue.trim() && !vcpSaved && !vcpAccountPhone)}
+              disabled={vcpTesting || (!vcpValue.trim() && !vcpSaved)}
               className="bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg"
             >
               {vcpTesting ? "Calling\u2026" : "Send Test Call"}
