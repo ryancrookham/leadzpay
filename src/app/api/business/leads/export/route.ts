@@ -79,7 +79,8 @@ export async function GET(_request: NextRequest) {
     ws.columns = [
       { header: "DATE",                 key: "date",                width: 12 },
       { header: "Insured/Prospect",     key: "insuredProspect",     width: 26 },
-      { header: "Dealership-Salesman",  key: "dealershipSalesman",  width: 22 },
+      { header: "Dealership",           key: "dealership",          width: 22 },
+      { header: "Salesman (Provider)",  key: "salesman",            width: 22 },
       { header: "QTD BY",               key: "qtdBy",               width: 10 },
       { header: "DATE SOLD",            key: "dateSold",            width: 12 },
       { header: "SOLD BY",              key: "soldBy",              width: 10 },
@@ -147,7 +148,8 @@ export async function GET(_request: NextRequest) {
       ws.addRow({
         date: new Date(r.submitted_at),
         insuredProspect: fullName,
-        dealershipSalesman: r.provider_business_name || r.provider_display_name || "",
+        dealership: r.provider_business_name || "",
+        salesman: r.provider_display_name || "",
         qtdBy: "", dateSold: r.sold_at ? new Date(r.sold_at) : "", soldBy: r.assigned_to || "",
         units: "", pu: "", tds: "", eighty: "",
         dwnPmt: "", payType: "", dep: "", dwp: "", co: "",
