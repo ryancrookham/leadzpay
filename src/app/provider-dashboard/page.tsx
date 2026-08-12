@@ -104,6 +104,49 @@ export default function ProviderDashboard() {
   // Fetch leads from database API (not localStorage)
   const [dbLeads, setDbLeads] = useState<ApiLead[]>([]);
   const [dbLeadsLoading, setDbLeadsLoading] = useState(true);
+
+  // "Who do you represent?" backfill for pre-existing providers who signed up
+  // before the required signup field existed. Hidden banner until we know
+  // whether their profile is missing business_name.
+  const [needsBusinessName, setNeedsBusinessName] = useState(false);
+  const [businessNameInput, setBusinessNameInput] = useState("");
+  const [savingBusinessName, setSavingBusinessName] = useState(false);
+  const [businessNameError, setBusinessNameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !data?.profile) return;
+        if (!data.profile.businessName || String(data.profile.businessName).trim() === "") {
+          setNeedsBusinessName(true);
+        }
+      })
+      .catch(() => { /* non-blocking */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function saveBusinessName() {
+    const val = businessNameInput.trim();
+    if (!val) { setBusinessNameError("Please enter who you represent."); return; }
+    setSavingBusinessName(true);
+    setBusinessNameError(null);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessName: val }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setNeedsBusinessName(false);
+    } catch (err) {
+      setBusinessNameError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSavingBusinessName(false);
+    }
+  }
+
   // Platform fee settings (fetched from API)
   const [feeSettings, setFeeSettings] = useState<FeeSettings | undefined>(undefined);
 
@@ -300,6 +343,41 @@ export default function ProviderDashboard() {
       </header>
 
       <div className="relative z-10 max-w-7xl mx-auto px-8 py-8">
+
+        {/* Complete-your-profile banner: only if business_name is missing */}
+        {needsBusinessName && (
+          <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-5">
+            <div className="flex items-start gap-3 mb-3">
+              <svg className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">Complete your profile</h3>
+                <p className="text-xs text-amber-800 mt-0.5">Tell us who you represent so every lead you submit is attributed correctly. This appears on the business&apos;s tracker for each lead.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={businessNameInput}
+                  onChange={(e) => setBusinessNameInput(e.target.value)}
+                  placeholder="e.g., ABC Motors, Bristol Auto Tags, Smith Insurance Referrals"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-500"
+                />
+                {businessNameError && <p className="text-xs text-red-700 mt-1">{businessNameError}</p>}
+              </div>
+              <button
+                onClick={saveBusinessName}
+                disabled={savingBusinessName || !businessNameInput.trim()}
+                className="bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2 rounded-lg shrink-0"
+              >
+                {savingBusinessName ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Connection Required Banner */}
         {!activeConnection && (
           <div className={`mb-6 p-4 rounded-xl border ${
