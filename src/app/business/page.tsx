@@ -1663,6 +1663,24 @@ function BusinessPortalContent() {
               </div>
             </div>
 
+            {/* Export leads to Excel — Options tracker-shaped .xlsx */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Download leads as Excel</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">One row per lead, one sheet per month, in your tracker&apos;s column layout. Agency-only fields (DWN PMT, PAY TYPE, etc.) are left blank for your staff to fill.</p>
+              </div>
+              <a
+                href="/api/business/leads/export"
+                download
+                className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg inline-flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 12v8m0 0l-4-4m4 4l4-4M4 8h16" />
+                </svg>
+                Download .xlsx
+              </a>
+            </div>
+
             {/* Payment Notice */}
             {paymentNotice && (
               <div className={`rounded-xl border p-4 shadow-sm flex items-center gap-3 ${paymentNotice.includes("successful") ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
