@@ -136,24 +136,18 @@ export async function GET(_request: NextRequest) {
 
       const dl = scanned.dl || {};
 
-      // Prospect / customer name: per-lead. Scanned DL wins; else criteria-typed name.
+      // Prospect / customer name: PER-LEAD. Scanned DL wins; else criteria-typed name.
       const fullName = [dl.firstName, dl.middleName, dl.lastName].filter(Boolean).join(" ")
         || fields["Prospect"] || fields["Prospect Name"]
         || fields["Customer Name"] || fields["Customer"]
         || fields["Full Name"] || fields["Name"] || "";
 
-      // Dealership: PER-LEAD (which shop/dealership this lead came from). Only
-      // fall back to the provider's own business_name if the lead form didn't
-      // capture it — because one provider account can rep multiple lots.
-      const dealership = fields["Dealership"] || fields["Dealership Name"]
-        || fields["Shop"] || fields["Location"]
-        || r.provider_business_name || "";
-
-      // Salesman: PER-LEAD too. If the shop didn't capture the actual person,
-      // fall back to whoever owns the WOML provider account.
-      const salesman = fields["Salesman"] || fields["Salesperson"] || fields["Rep"]
-        || fields["Sales Rep"] || fields["Rep Name"]
-        || r.provider_display_name || "";
+      // Dealership + Salesman: captured ONCE at provider signup via invite link.
+      // provider.business_name = the dealership/tag-shop the salesman represents.
+      // provider.display_name  = the salesman's actual name.
+      // Each lead inherits both because 1 WOML provider account = 1 salesman.
+      const dealership = r.provider_business_name || "";
+      const salesman = r.provider_display_name || "";
 
       const address = [dl.street, dl.city, dl.state, dl.zip].filter(Boolean).join(", ");
       const vehicle = [r.vehicle_year, r.vehicle_make, r.vehicle_model].filter(Boolean).join(" ");
