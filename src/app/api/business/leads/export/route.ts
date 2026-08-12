@@ -135,8 +135,26 @@ export async function GET(_request: NextRequest) {
       } | null) || {};
 
       const dl = scanned.dl || {};
+
+      // Prospect / customer name: per-lead. Scanned DL wins; else criteria-typed name.
       const fullName = [dl.firstName, dl.middleName, dl.lastName].filter(Boolean).join(" ")
-        || fields["Name"] || fields["Full Name"] || fields["Customer Name"] || "";
+        || fields["Prospect"] || fields["Prospect Name"]
+        || fields["Customer Name"] || fields["Customer"]
+        || fields["Full Name"] || fields["Name"] || "";
+
+      // Dealership: PER-LEAD (which shop/dealership this lead came from). Only
+      // fall back to the provider's own business_name if the lead form didn't
+      // capture it — because one provider account can rep multiple lots.
+      const dealership = fields["Dealership"] || fields["Dealership Name"]
+        || fields["Shop"] || fields["Location"]
+        || r.provider_business_name || "";
+
+      // Salesman: PER-LEAD too. If the shop didn't capture the actual person,
+      // fall back to whoever owns the WOML provider account.
+      const salesman = fields["Salesman"] || fields["Salesperson"] || fields["Rep"]
+        || fields["Sales Rep"] || fields["Rep Name"]
+        || r.provider_display_name || "";
+
       const address = [dl.street, dl.city, dl.state, dl.zip].filter(Boolean).join(", ");
       const vehicle = [r.vehicle_year, r.vehicle_make, r.vehicle_model].filter(Boolean).join(" ");
 
@@ -148,8 +166,8 @@ export async function GET(_request: NextRequest) {
       ws.addRow({
         date: new Date(r.submitted_at),
         insuredProspect: fullName,
-        dealership: r.provider_business_name || "",
-        salesman: r.provider_display_name || "",
+        dealership,
+        salesman,
         qtdBy: "", dateSold: r.sold_at ? new Date(r.sold_at) : "", soldBy: r.assigned_to || "",
         units: "", pu: "", tds: "", eighty: "",
         dwnPmt: "", payType: "", dep: "", dwp: "", co: "",
