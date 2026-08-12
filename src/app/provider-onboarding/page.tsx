@@ -70,6 +70,7 @@ function ProviderOnboardingContent() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [businessRepresented, setBusinessRepresented] = useState("");
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState("");
   const [password, setPassword] = useState("");
@@ -235,6 +236,7 @@ function ProviderOnboardingContent() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) { setRegisterError("Please enter a valid email address"); return; }
     if (!displayName.trim()) { setRegisterError("Display name is required"); return; }
+    if (!businessRepresented.trim()) { setRegisterError("Please tell us who you represent (dealership, tag shop, etc.)"); return; }
     if (!password) { setRegisterError("Password is required"); return; }
     if (password.length < 8) { setRegisterError("Password must be at least 8 characters"); return; }
     const hasLetter = /[a-zA-Z]/.test(password);
@@ -254,6 +256,7 @@ function ProviderOnboardingContent() {
           username,
           role: "provider",
           displayName,
+          businessName: businessRepresented.trim(),
           phone: phone || undefined,
           location: location || undefined,
           profilePictureUrl: profilePicture || undefined,
@@ -677,6 +680,18 @@ function ProviderOnboardingContent() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30 focus:border-[#E8822A]"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Who do you represent? *</label>
+                  <input
+                    type="text"
+                    value={businessRepresented}
+                    onChange={e => setBusinessRepresented(e.target.value)}
+                    placeholder="e.g., ABC Motors, Bristol Auto Tags, Smith Insurance Referrals"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8822A]/30 focus:border-[#E8822A]"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">The dealership, tag shop, or business you send leads on behalf of. Attached to every lead you submit.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
